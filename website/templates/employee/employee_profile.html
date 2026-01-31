@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+{% block title %}My Profile | HYG Employee Portal{% endblock %}
+
+{% block extra_head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/employee-profile.css') }}">
+{% endblock %}
+
+{% block page_content %}
+  {% set full_name = employee.first_name ~ (' ' ~ employee.middle_name[:1] ~ '.' if employee.middle_name else '') ~ ' ' ~ employee.last_name ~ (' ' ~ employee.suffix if employee.suffix else '') %}
+  {% set status = employee.employment_status or 'Unknown' %}
+  {% set username = employee.user.username if employee.user and employee.user.username else 'N/A' %}
+
+  <section class="emp-profile-shell">
+    <article class="card emp-profile-hero">
+      <div class="emp-profile-head">
+        <div class="emp-profile-ident">
+          {% if employee.photopath %}
+            <img src="{{ url_for('static', filename=employee.photopath) }}" alt="{{ full_name }}" class="emp-profile-avatar">
+          {% else %}
+            <div class="emp-profile-avatar-placeholder" aria-label="No profile photo">
+              <i class="fa-regular fa-user"></i>
+            </div>
+          {% endif %}
+
+          <div class="emp-profile-name">
+            <h1>{{ full_name }}</h1>
+            <p class="emp-profile-role">
+              <span><i class="fa-solid fa-briefcase"></i> {{ employee.position or 'Position N/A' }}</span>
+              <span><i class="fa-solid fa-sitemap"></i> {{ employee.department or 'Department N/A' }}</span>
+            </p>
+            <div class="emp-profile-tags">
+              <span class="emp-tag emp-status {% if status != 'Active' %}warn{% endif %}">{{ status }}</span>
+              <span class="emp-tag info"><i class="fa-solid fa-user"></i> Username: {{ username }}</span>
+              <span class="emp-tag info"><i class="fa-solid fa-id-badge"></i> ID: {{ employee.employee_no or 'N/A' }}</span>
+              <span class="emp-tag info"><i class="fa-solid fa-fingerprint"></i> BIO: {{ employee.biometric_no or 'N/A' }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="emp-profile-actions">
+          <button class="primary-btn btn-mini" type="button" data-bs-toggle="modal" data-bs-target="#changePasswordModal">
+            <i class="fa-solid fa-key"></i> Change Password
+          </button>
+        </div>
+      </div>
+    </article>
+
+    <section class="emp-profile-layout">
+      <div class="emp-col">
+        <article class="card emp-section">
+          <div class="emp-section-head">
+            <i class="fa-solid fa-user"></i>
+            <h2>Personal Information</h2>
+          </div>
+          <div class="emp-fields">
+            <div class="emp-field">
+              <p class="emp-label">Birth Date</p>
+              <div class="emp-value">{{ employee.birth_date or 'N/A' }}</div>
+            </div>
+            <div class="emp-field">
+              <p class="emp-label">Age</p>
+              <div class="emp-value">{{ (employee.age ~ ' yrs') if employee.age else 'N/A' }}</div>
+            </div>
+            <div class="emp-field">
+              <p class="emp-label">Gender</p>
+              <div class="emp-value">{{ employee.gender or 'N/A' }}</div>
+            </div>
+            <div class="emp-field">
+              <p class="emp-label">Religion</p>
+              <div class="emp-value">{{ employee.religion or 'N/A' }}</div>
+            </div>
+            <div class="emp-field full">
+              <p class="emp-label">Educational Attainment</p>
+              <div class="emp-value">{{ employee.educational_attainment or 'N/A' }}</div>
+            </div>
+          </div>
+        </article>
+
+        <article class="card emp-section">
+          <div class="emp-section-head">
+            <i class="fa-solid fa-address-book"></i>
+            <h2>Contact and Address</h2>
+          </div>
+          <div class="emp-fields">
+            <div class="emp-field full">
+              <p class="emp-label">Email Address</p>
+              <div class="emp-value">{{ employee.email or 'N/A' }}</div>
+            </div>
+            <div class="emp-field">
+              <p class="emp-label">Phone Number</p>
+              <div class="emp-value">{{ employee.phone or 'N/A' }}</div>
+            </div>
+            <div class="emp-field">
+              <p class="emp-label">Facebook</p>
+              <div class="emp-value">
+                {% if employee.facebook %}
+                  <a href="{{ employee.facebook }}" target="_blank" rel="noopener noreferrer">
+                    <i class="fa-solid fa-arrow-up-right-from-square"></i> View Profile
+                  </a>
+                {% else %}
+                  <span class="emp-empty">Not Provided</span>
+                {% endif %}
+              </div>
+            </div>
+            <div class="emp-field full">
+              <p class="emp-label">Present Address</p>
+              <div class="emp-value">{{ employee.present_address or 'N/A' }}</div>
+            </div>
+            <div class="emp-field">
+              <p class="emp-label">Zip Code</p>
+              <div class="emp-value">{{ employee.zipCode or 'N/A' }}</div>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <div class="emp-col">
+        <article class="card emp-section">
+          <div class="emp-section-head">
+            <i class="fa-solid fa-building-user"></i>
+            <h2>Employment Details</h2>
+          </div>
+          <div class="emp-fields">
+            <div class="emp-field full">
+              <p class="emp-label">Company</p>
+              <div class="emp-value">{{ employee.company or 'N/A' }}</div>
+            </div>
+            <div class="emp-field">
+              <p class="emp-label">Employee Type</p>
+              <div class="emp-value">{{ employee.employee_type or 'N/A' }}</div>
+            </div>
+            <div class="emp-field">
+              <p class="emp-label">Username</p>
+              <div class="emp-value">{{ username }}</div>
+            </div>
+            <div class="emp-field">
+              <p class="emp-label">Hired Date</p>
+              <div class="emp-value">{{ employee.hired_date or 'N/A' }}</div>
+            </div>
+            <div class="emp-field">
+              <p class="emp-label">Department</p>
+              <div class="emp-value">{{ employee.department or 'N/A' }}</div>
+            </div>
+            <div class="emp-field">
+              <p class="emp-label">Position</p>
+              <div class="emp-value">{{ employee.position or 'N/A' }}</div>
+            </div>
+          </div>
+        </article>
+
+        <article class="card emp-section">
+          <div class="emp-section-head">
+            <i class="fa-solid fa-id-card-clip"></i>
+            <h2>Government and Bank</h2>
+          </div>
+          <div class="emp-fields">
+            <div class="emp-field">
+              <p class="emp-label">SSS No.</p>
+              <div class="emp-value">{{ employee.sss_no or 'N/A' }}</div>
+            </div>
+            <div class="emp-field">
+              <p class="emp-label">PhilHealth No.</p>
+              <div class="emp-value">{{ employee.philhealth_no or 'N/A' }}</div>
+            </div>
+            <div class="emp-field">
+              <p class="emp-label">Pag-IBIG No.</p>
+              <div class="emp-value">{{ employee.pagibig_no or 'N/A' }}</div>
+            </div>
+            <div class="emp-field">
+              <p class="emp-label">TIN No.</p>
+              <div class="emp-value">{{ employee.tin_no or 'N/A' }}</div>
+            </div>
+            <div class="emp-field">
+              <p class="emp-label">Valid ID No.</p>
+              <div class="emp-value">{{ employee.valid_id_no or 'N/A' }}</div>
+            </div>
+            <div class="emp-field">
+              <p class="emp-label">Bank Account</p>
+              <div class="emp-value">{{ employee.account_no or 'N/A' }}</div>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+  </section>
+
+  <div class="modal fade" id="changePasswordModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title section-title mb-0">Change Password</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="field">
+            <label>Current Password</label>
+            <input type="password" class="form-control" placeholder="Enter current password">
+          </div>
+          <div class="field">
+            <label>New Password</label>
+            <input type="password" class="form-control" placeholder="Enter new password">
+          </div>
+          <div class="field">
+            <label>Confirm Password</label>
+            <input type="password" class="form-control" placeholder="Confirm new password">
+          </div>
+          <div class="emp-modal-actions">
+            <button type="button" class="primary-btn btn-neutral" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" class="primary-btn">Save Changes</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}

@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block title %}Dashboard | HYG Employee Portal{% endblock %}
+
+{% block page_content %}
+  <section class="hero">
+    <h1>Dashboard Overview</h1>
+    <p>Track attendance, leave activity, and team status in one place.</p>
+  </section>
+
+  <section class="grid-4">
+    <article class="card">
+      <div class="stat-head">
+        <div class="stat-icon"><i class="fa-solid fa-users"></i></div>
+        <span class="pill good">+8.2%</span>
+      </div>
+      <h2 class="stat-value">148</h2>
+      <p class="stat-label">Total Employees</p>
+    </article>
+
+    <article class="card">
+      <div class="stat-head">
+        <div class="stat-icon"><i class="fa-solid fa-user-check"></i></div>
+        <span class="pill good">On Track</span>
+      </div>
+      <h2 class="stat-value">132</h2>
+      <p class="stat-label">Present Today</p>
+    </article>
+
+    <article class="card">
+      <div class="stat-head">
+        <div class="stat-icon"><i class="fa-solid fa-plane-departure"></i></div>
+        <span class="pill warn">12 Pending</span>
+      </div>
+      <h2 class="stat-value">21</h2>
+      <p class="stat-label">Leave Requests</p>
+    </article>
+
+    <article class="card">
+      <div class="stat-head">
+        <div class="stat-icon"><i class="fa-solid fa-stopwatch"></i></div>
+        <span class="pill warn">Review</span>
+      </div>
+      <h2 class="stat-value">9</h2>
+      <p class="stat-label">Late Check-ins</p>
+    </article>
+  </section>
+
+  <section class="grid-3">
+    <article class="card span-2">
+      <h2 class="section-title">Weekly Attendance Trend</h2>
+      <div class="chart" aria-label="Weekly attendance trend chart">
+        <div class="bar">
+          <div class="bar-fill" style="height:55%;"></div>
+          <span class="bar-label">Mon</span>
+        </div>
+        <div class="bar">
+          <div class="bar-fill" style="height:72%;"></div>
+          <span class="bar-label">Tue</span>
+        </div>
+        <div class="bar">
+          <div class="bar-fill" style="height:81%;"></div>
+          <span class="bar-label">Wed</span>
+        </div>
+        <div class="bar">
+          <div class="bar-fill" style="height:76%;"></div>
+          <span class="bar-label">Thu</span>
+        </div>
+        <div class="bar">
+          <div class="bar-fill" style="height:88%;"></div>
+          <span class="bar-label">Fri</span>
+        </div>
+        <div class="bar">
+          <div class="bar-fill" style="height:61%;"></div>
+          <span class="bar-label">Sat</span>
+        </div>
+        <div class="bar">
+          <div class="bar-fill" style="height:49%;"></div>
+          <span class="bar-label">Sun</span>
+        </div>
+      </div>
+    </article>
+
+    <article class="card">
+      <h2 class="section-title">Recent Activity</h2>
+      <div class="history">
+        <div class="history-item">
+          <strong>Leave Approved</strong><br>
+          <small>Today, 09:10 AM</small>
+          <div style="margin-top:0.35rem;color:#334155;">Priya Sharma - Annual Leave (2 days)</div>
+        </div>
+        <div class="history-item">
+          <strong>Late Check-in</strong><br>
+          <small>Today, 08:57 AM</small>
+          <div style="margin-top:0.35rem;color:#334155;">Marcus Lee - 27 minutes late</div>
+        </div>
+        <div class="history-item">
+          <strong>New Joiner</strong><br>
+          <small>Yesterday, 04:20 PM</small>
+          <div style="margin-top:0.35rem;color:#334155;">Aisha Khan joined Design Team</div>
+        </div>
+      </div>
+    </article>
+  </section>
+
+  <section class="card">
+    <h2 class="section-title">Team Snapshot</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Employee</th>
+            <th>Department</th>
+            <th>Today</th>
+            <th>Weekly Hours</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <div class="employee-cell">
+                <img src="https://picsum.photos/seed/emp1/60/60" alt="Priya Sharma">
+                <div>
+                  <strong>Priya Sharma</strong><br>
+                  <small style="color:#64748b;">HR Manager</small>
+                </div>
+              </div>
+            </td>
+            <td>Human Resources</td>
+            <td>09:02 AM</td>
+            <td>38h 20m</td>
+            <td><span class="status active">Active</span></td>
+          </tr>
+          <tr>
+            <td>
+              <div class="employee-cell">
+                <img src="https://picsum.photos/seed/emp2/60/60" alt="Marcus Lee">
+                <div>
+                  <strong>Marcus Lee</strong><br>
+                  <small style="color:#64748b;">Software Engineer</small>
+                </div>
+              </div>
+            </td>
+            <td>Engineering</td>
+            <td>09:27 AM</td>
+            <td>35h 05m</td>
+            <td><span class="status pending">Late</span></td>
+          </tr>
+          <tr>
+            <td>
+              <div class="employee-cell">
+                <img src="https://picsum.photos/seed/emp3/60/60" alt="Aisha Khan">
+                <div>
+                  <strong>Aisha Khan</strong><br>
+                  <small style="color:#64748b;">Product Designer</small>
+                </div>
+              </div>
+            </td>
+            <td>Design</td>
+            <td>08:49 AM</td>
+            <td>40h 10m</td>
+            <td><span class="status active">Active</span></td>
+          </tr>
+          <tr>
+            <td>
+              <div class="employee-cell">
+                <img src="https://picsum.photos/seed/emp4/60/60" alt="Daniel Gomez">
+                <div>
+                  <strong>Daniel Gomez</strong><br>
+                  <small style="color:#64748b;">Finance Analyst</small>
+                </div>
+              </div>
+            </td>
+            <td>Finance</td>
+            <td>-</td>
+            <td>29h 40m</td>
+            <td><span class="status leave">On Leave</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}

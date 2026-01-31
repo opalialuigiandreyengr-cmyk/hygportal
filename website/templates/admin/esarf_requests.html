@@ -1,0 +1,333 @@
+{% extends "base.html" %}
+{% block title %}ESARF Requests | HYG Employee Portal{% endblock %}
+
+{% block extra_head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/employee.css') }}">
+{% endblock %}
+
+{% block page_content %}
+  {% set request_items = esarf_requests or [] %}
+  {% set current_role = current_user.role if current_user.is_authenticated else '' %}
+  <section class="hero employees-hero">
+    <div>
+      <h1>ESARF Request Management</h1>
+      <p>View all ESARF requests and open full details using the action button.</p>
+    </div>
+    <button type="button" class="primary-btn btn-mini" disabled>
+      Total Requests: {{ request_items|length }}
+    </button>
+  </section>
+
+  <section class="card">
+    <div class="table-wrap table-responsive">
+      <table class="table align-middle mb-0 companies-table esarf-requests-table">
+        <thead>
+          <tr>
+            <th class="col-request">Request</th>
+            <th class="col-submitted">Submitted By</th>
+            <th class="col-trxn">Trxn</th>
+            <th class="col-period">Period</th>
+            <th class="col-hours">Hours</th>
+            <th class="col-status">Status</th>
+            <th class="col-action text-center">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for req in request_items %}
+          {% set raw_status = req.status if req.status else 'Pending' %}
+          {% set dept_manager_signed = raw_status in ['Dept Mgr Approved', 'Dept Mgr Ops Approved', 'Approved'] %}
+          {% set operation_signed = raw_status in ['Dept Mgr Ops Approved', 'Approved'] %}
+          {% set approval_count = 0 %}
+          {% if raw_status == 'Dept Mgr Approved' %}
+            {% set approval_count = 1 %}
+          {% elif raw_status == 'Dept Mgr Ops Approved' %}
+            {% set approval_count = 2 %}
+          {% elif raw_status == 'Approved' %}
+            {% set approval_count = 3 %}
+          {% endif %}
+          {% set submit_user = req.submitted_by_user %}
+          {% set submit_emp = submit_user.employee if submit_user and submit_user.employee else None %}
+          {% set submit_name = (
+            submit_emp.first_name ~
+            (' ' ~ submit_emp.middle_name[:1] ~ '.' if submit_emp.middle_name else '') ~
+            ' ' ~ submit_emp.last_name ~
+            (' ' ~ submit_emp.suffix if submit_emp.suffix else '')
+          )|trim if submit_emp else (submit_user.username if submit_user and submit_user.username else 'N/A') %}
+          {% set submit_position = submit_emp.position if submit_emp and submit_emp.position else 'N/A' %}
+          <tr>
+            <td>
+              <div class="company-meta">
+                <strong class="company-name-text">#{{ req.id }}</strong>
+                <small class="company-subtext">{{ req.created_at.strftime('%m-%d-%Y') if req.created_at else '-' }}</small>
+              </div>
+            </td>
+            <td>
+              <div class="company-meta">
+                <strong class="company-name-text">{{ submit_name }}</strong>
+                <small class="company-subtext">{{ submit_position }}</small>
+              </div>
+            </td>
+            <td><span class="company-name">{{ req.transaction_types or '-' }}</span></td>
+            <td>
+              <div class="company-meta">
+                <strong class="company-name-text">
+                  From:
+                  {% if req.date_from %}
+                    {{ req.date_from.strftime('%b') }}. {{ req.date_from.day }}, {{ req.date_from.year }}
+                  {% else %}
+                    -
+                  {% endif %}
+                </strong>
+                <small class="company-subtext">
+                  To:
+                  {% if req.date_to %}
+                    {{ req.date_to.strftime('%b') }}. {{ req.date_to.day }}, {{ req.date_to.year }}
+                  {% else %}
+                    -
+                  {% endif %}
+                </small>
+              </div>
+            </td>
+            <td>{{ '%.2f'|format(req.total_hours) if req.total_hours is not none else '-' }}</td>
+            <td>
+              {% if raw_status == 'Pending' %}
+                <span class="status pending">Pending</span>
+              {% elif raw_status == 'Rejected' %}
+                <div class="esarf-approval-steps" aria-label="Request rejected">
+                  {% for _ in range(3) %}
+                    <span class="esarf-approval-step rejected"><i class="fa-solid fa-xmark"></i></span>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <div class="esarf-approval-steps" aria-label="Approval progress">
+                  {% for step in range(1, 4) %}
+                    <span class="esarf-approval-step {% if approval_count >= step %}done{% endif %}">
+                      <i class="fa-solid fa-check"></i>
+                    </span>
+                  {% endfor %}
+                </div>
+              {% endif %}
+            </td>
+            <td class="action-cell">
+              <div class="action-icons">
+                <button type="button" class="edit-btn action-icon-btn" data-bs-toggle="modal" data-bs-target="#esarfRequestModal{{ req.id }}" title="View Request" aria-label="View Request">
+                  <i class="fa-regular fa-eye"></i>
+                </button>
+                {% if current_role == 'dept manager' and not dept_manager_signed and raw_status != 'Rejected' %}
+                <form
+                  action="{{ url_for('admin.update_esarf_status', esarf_id=req.id) }}"
+                  method="POST"
+                  class="d-inline"
+                  data-confirm-action="true"
+                  data-confirm-message="Are you sure you want to approve this as Department Manager?"
+                >
+                  <input type="hidden" name="action" value="dept_manager_approve">
+                  <button type="submit" class="edit-btn action-icon-btn" title="Approve as Department Manager" aria-label="Approve as Department Manager">
+                    <i class="fa-solid fa-check"></i>
+                  </button>
+                </form>
+                {% endif %}
+                {% if current_role == 'operation' and dept_manager_signed and not operation_signed and raw_status != 'Rejected' %}
+                <form
+                  action="{{ url_for('admin.update_esarf_status', esarf_id=req.id) }}"
+                  method="POST"
+                  class="d-inline"
+                  data-confirm-action="true"
+                  data-confirm-message="Are you sure you want to approve this as Operations?"
+                >
+                  <input type="hidden" name="action" value="operation_approve">
+                  <button type="submit" class="edit-btn action-icon-btn" title="Approve as Operations" aria-label="Approve as Operations">
+                    <i class="fa-solid fa-check"></i>
+                  </button>
+                </form>
+                {% endif %}
+                {% if current_role == 'general manager' and raw_status == 'Dept Mgr Ops Approved' %}
+                <form
+                  action="{{ url_for('admin.update_esarf_status', esarf_id=req.id) }}"
+                  method="POST"
+                  class="d-inline"
+                  data-confirm-action="true"
+                  data-confirm-message="Are you sure you want to approve this as General Manager?"
+                >
+                  <input type="hidden" name="action" value="general_manager_approve">
+                  <button type="submit" class="edit-btn action-icon-btn" title="Approve as General Manager" aria-label="Approve as General Manager">
+                    <i class="fa-solid fa-check"></i>
+                  </button>
+                </form>
+                {% endif %}
+                {% if current_role in ['admin', 'timekeeper', 'dept manager'] and raw_status == 'Pending' %}
+                <form
+                  action="{{ url_for('admin.update_esarf_status', esarf_id=req.id) }}"
+                  method="POST"
+                  class="d-inline"
+                  data-confirm-action="true"
+                  data-confirm-message="Are you sure you want to decline this request?"
+                  data-require-reason="true"
+                  data-reason-field="reject_reason"
+                  data-reason-prompt="Please enter reason why:"
+                >
+                  <input type="hidden" name="action" value="reject">
+                  <input type="hidden" name="reject_reason" value="">
+                  <button type="submit" class="edit-btn action-icon-btn" title="Decline Request" aria-label="Decline Request">
+                    <i class="fa-solid fa-xmark"></i>
+                  </button>
+                </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="7">No ESARF requests found.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  {% for req in request_items %}
+  {% set raw_status = req.status if req.status else 'Pending' %}
+  {% set dept_manager_signed = raw_status in ['Dept Mgr Approved', 'Dept Mgr Ops Approved', 'Approved'] %}
+  {% set operation_signed = raw_status in ['Dept Mgr Ops Approved', 'Approved'] %}
+  {% set approval_count = 0 %}
+  {% if raw_status == 'Dept Mgr Approved' %}
+    {% set approval_count = 1 %}
+  {% elif raw_status == 'Dept Mgr Ops Approved' %}
+    {% set approval_count = 2 %}
+  {% elif raw_status == 'Approved' %}
+    {% set approval_count = 3 %}
+  {% endif %}
+  {% set submit_user = req.submitted_by_user %}
+  {% set submit_emp = submit_user.employee if submit_user and submit_user.employee else None %}
+  {% set submit_name = (
+    submit_emp.first_name ~
+    (' ' ~ submit_emp.middle_name[:1] ~ '.' if submit_emp.middle_name else '') ~
+    ' ' ~ submit_emp.last_name ~
+    (' ' ~ submit_emp.suffix if submit_emp.suffix else '')
+  )|trim if submit_emp else (submit_user.username if submit_user and submit_user.username else 'N/A') %}
+  {% set submit_position = submit_emp.position if submit_emp and submit_emp.position else 'N/A' %}
+  {% set submit_company = submit_emp.company if submit_emp and submit_emp.company else 'N/A' %}
+  {% set submit_department = submit_emp.department if submit_emp and submit_emp.department else 'N/A' %}
+  {% set submit_employee_no = submit_emp.employee_no if submit_emp and submit_emp.employee_no else ('User #' ~ (req.submitted_by_user_id or '-')) %}
+  {% set date_filed_display = req.created_at.strftime('%b') ~ '. ' ~ req.created_at.day ~ ', ' ~ req.created_at.year if req.created_at else '-' %}
+  {% set date_from_display = req.date_from.strftime('%b') ~ '. ' ~ req.date_from.day ~ ', ' ~ req.date_from.year if req.date_from else '-' %}
+  {% set date_to_display = req.date_to.strftime('%b') ~ '. ' ~ req.date_to.day ~ ', ' ~ req.date_to.year if req.date_to else '-' %}
+  {% set time_from_display = req.time_from.strftime('%I:%M %p') if req.time_from else '-' %}
+  {% set time_to_display = req.time_to.strftime('%I:%M %p') if req.time_to else '-' %}
+  <div class="modal fade" id="esarfRequestModal{{ req.id }}" tabindex="-1" aria-labelledby="esarfRequestModalTitle{{ req.id }}" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 class="section-title mb-0" id="esarfRequestModalTitle{{ req.id }}">ESARF Request Summary</h3>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <section class="esarf-paper esarf-paper-simple">
+            <div class="esarf-paper-title">
+              <span>ESARF Request #{{ req.id }}</span>
+              {% if raw_status == 'Pending' %}
+                <span class="esarf-status-pill pending">Pending</span>
+              {% elif raw_status == 'Rejected' %}
+                <div class="esarf-approval-steps is-pill" aria-label="Request rejected">
+                  {% for _ in range(3) %}
+                    <span class="esarf-approval-step rejected"><i class="fa-solid fa-xmark"></i></span>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <div class="esarf-approval-steps is-pill" aria-label="Approval progress">
+                  {% for step in range(1, 4) %}
+                    <span class="esarf-approval-step {% if approval_count >= step %}done{% endif %}">
+                      <i class="fa-solid fa-check"></i>
+                    </span>
+                  {% endfor %}
+                </div>
+              {% endif %}
+            </div>
+
+            <div class="esarf-summary-grid">
+              <article class="esarf-summary-item">
+                <p class="esarf-summary-label">Employee</p>
+                <p class="esarf-summary-value">{{ submit_name }}</p>
+              </article>
+              <article class="esarf-summary-item">
+                <p class="esarf-summary-label">Employee No.</p>
+                <p class="esarf-summary-value">{{ submit_employee_no }}</p>
+              </article>
+              <article class="esarf-summary-item">
+                <p class="esarf-summary-label">Date Filed</p>
+                <p class="esarf-summary-value">{{ date_filed_display }}</p>
+              </article>
+              <article class="esarf-summary-item">
+                <p class="esarf-summary-label">Company</p>
+                <p class="esarf-summary-value">{{ submit_company }}</p>
+              </article>
+              <article class="esarf-summary-item">
+                <p class="esarf-summary-label">Department</p>
+                <p class="esarf-summary-value">{{ submit_department }}</p>
+              </article>
+              <article class="esarf-summary-item">
+                <p class="esarf-summary-label">Position</p>
+                <p class="esarf-summary-value">{{ submit_position }}</p>
+              </article>
+              <article class="esarf-summary-item">
+                <p class="esarf-summary-label">Transaction</p>
+                <p class="esarf-summary-value">{{ req.transaction_types or '-' }}</p>
+              </article>
+              <article class="esarf-summary-item">
+                <p class="esarf-summary-label">Payroll Class</p>
+                <p class="esarf-summary-value">{{ req.payroll_class or '-' }}</p>
+              </article>
+              <article class="esarf-summary-item">
+                <p class="esarf-summary-label">Total Hours</p>
+                <p class="esarf-summary-value">{{ '%.2f'|format(req.total_hours) if req.total_hours is not none else '-' }}</p>
+              </article>
+              <article class="esarf-summary-item">
+                <p class="esarf-summary-label">Schedule</p>
+                <p class="esarf-summary-value">{{ req.time_schedule or '-' }} ({{ req.day_off or '-' }})</p>
+              </article>
+              <article class="esarf-summary-item">
+                <p class="esarf-summary-label">From - To</p>
+                <p class="esarf-summary-value">{{ date_from_display }} to {{ date_to_display }}</p>
+              </article>
+              <article class="esarf-summary-item">
+                <p class="esarf-summary-label">Time Range</p>
+                <p class="esarf-summary-value">{{ time_from_display }} to {{ time_to_display }}</p>
+              </article>
+              <article class="esarf-summary-item is-wide">
+                <p class="esarf-summary-label">Reason</p>
+                <p class="esarf-summary-value">{{ req.reason or '-' }}</p>
+              </article>
+            </div>
+
+            <div class="esarf-block">
+              <div class="esarf-signature-grid">
+                <article class="esarf-signature-item">
+                  <label>Employee Name</label>
+                  <div class="esarf-sign-line">{{ submit_name }}</div>
+                </article>
+                <article class="esarf-signature-item">
+                  <label>Department Manager</label>
+                  <div class="esarf-sign-line">{% if dept_manager_signed %}Approved{% else %}Pending{% endif %}</div>
+                </article>
+                <article class="esarf-signature-item">
+                  <label>Operations Manager</label>
+                  <div class="esarf-sign-line">{% if operation_signed %}Approved{% else %}Pending{% endif %}</div>
+                </article>
+                <article class="esarf-signature-item">
+                  <label>General Manager</label>
+                  <div class="esarf-sign-line">{% if raw_status == 'Approved' %}Approved{% else %}Pending{% endif %}</div>
+                </article>
+              </div>
+            </div>
+          </section>
+
+          <div class="esarf-modal-footer">
+            <button type="button" class="primary-btn secondary-btn" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+{% endblock %}

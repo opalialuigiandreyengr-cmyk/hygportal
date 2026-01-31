@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Employee Dashboard | HYG Employee Portal{% endblock %}
+
+{% block extra_head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/employee-dashboard.css') }}">
+{% endblock %}
+
+{% block page_content %}
+  <section class="hero employee-hero">
+    <h1>Welcome back, {{ current_user.username }}</h1>
+    {% if employee %}
+      <p>Here is your employee summary for today.</p>
+    {% else %}
+      <p>Your employee profile is not linked yet. Please contact HR.</p>
+    {% endif %}
+  </section>
+
+  <section class="grid-4">
+    <article class="card">
+      <div class="stat-head">
+        <div class="stat-icon"><i class="fa-solid fa-id-card"></i></div>
+      </div>
+      <h2 class="stat-value">{{ employee.employee_no if employee and employee.employee_no else "N/A" }}</h2>
+      <p class="stat-label">Employee Number</p>
+    </article>
+
+    <article class="card">
+      <div class="stat-head">
+        <div class="stat-icon"><i class="fa-solid fa-building-user"></i></div>
+      </div>
+      <h2 class="stat-value">{{ employee.department if employee and employee.department else "N/A" }}</h2>
+      <p class="stat-label">Department</p>
+    </article>
+
+    <article class="card">
+      <div class="stat-head">
+        <div class="stat-icon"><i class="fa-solid fa-briefcase"></i></div>
+      </div>
+      <h2 class="stat-value">{{ employee.position if employee and employee.position else "N/A" }}</h2>
+      <p class="stat-label">Position</p>
+    </article>
+
+    <article class="card">
+      <div class="stat-head">
+        <div class="stat-icon"><i class="fa-solid fa-circle-check"></i></div>
+      </div>
+      <h2 class="stat-value">{{ employee.employment_status if employee and employee.employment_status else "N/A" }}</h2>
+      <p class="stat-label">Employment Status</p>
+    </article>
+  </section>
+
+  <section class="grid-3">
+    <article class="card span-2">
+      <h2 class="section-title">My Details</h2>
+      <div class="employee-meta-grid">
+        <div class="employee-meta-item">
+          <p class="meta-label">Company</p>
+          <p class="meta-value">{{ employee.company if employee and employee.company else "N/A" }}</p>
+        </div>
+        <div class="employee-meta-item">
+          <p class="meta-label">Email</p>
+          <p class="meta-value">{{ employee.email if employee and employee.email else "N/A" }}</p>
+        </div>
+        <div class="employee-meta-item">
+          <p class="meta-label">Phone</p>
+          <p class="meta-value">{{ employee.phone if employee and employee.phone else "N/A" }}</p>
+        </div>
+        <div class="employee-meta-item">
+          <p class="meta-label">Leave Credits</p>
+          <p class="meta-value">{{ employee.leave_credits if employee and employee.leave_credits is not none else "N/A" }}</p>
+        </div>
+      </div>
+    </article>
+
+    <article class="card">
+      <h2 class="section-title">Quick Actions</h2>
+      <div class="quick-actions">
+        {% if employee %}
+          <a class="primary-btn action-btn" href="{{ url_for('employee.view_employee', employee_id=employee.id) }}">
+            <i class="fa-solid fa-user"></i> View My Profile
+          </a>
+        {% endif %}
+        <a class="primary-btn action-btn" href="{{ url_for('employee.esarf') }}">
+          <i class="fa-solid fa-file-signature"></i> EASARP Requests
+        </a>
+        <a class="primary-btn action-btn" href="{{ url_for('views.attendance') }}">
+          <i class="fa-solid fa-clock"></i> Attendance
+        </a>
+        <a class="primary-btn action-btn" href="{{ url_for('views.leaves') }}">
+          <i class="fa-solid fa-calendar-day"></i> Leaves
+        </a>
+      </div>
+    </article>
+  </section>
+{% endblock %}

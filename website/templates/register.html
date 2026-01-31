@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HYG Employee Portal Register</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/register.css') }}">
+</head>
+<body class="register-page">
+  <div class="register-shell">
+    {% include 'partials/toasts.html' %}
+
+    <div class="register-layout">
+      <aside class="register-side">
+        <div class="logo-badge logo-image">
+          <img src="{{ url_for('static', filename='images/logos/HYG LOGO.png') }}" alt="HYG Logo" class="hyg-logo">
+        </div>
+        <p class="register-eyebrow">Account Setup</p>
+        <h1>Create your employee portal account.</h1>
+        <p class="register-copy">Complete verification first, then set your login credentials and accept the terms to finish registration.</p>
+        <ul class="register-highlights">
+          <li><i class="fa-solid fa-circle-check"></i><span>Employee details verification</span></li>
+          <li><i class="fa-solid fa-key"></i><span>Secure username and password setup</span></li>
+          <li><i class="fa-solid fa-shield-halved"></i><span>Protected onboarding process</span></li>
+        </ul>
+      </aside>
+
+      <section class="register-card">
+        <div class="register-head">
+          <h2>Register</h2>
+          <p>Three quick steps to activate your account</p>
+        </div>
+
+        <div class="register-steps" aria-label="Registration progress">
+          <div class="step-pill active" data-step-indicator="1"><span>1</span><small>Verify</small></div>
+          <div class="step-pill" data-step-indicator="2"><span>2</span><small>Security</small></div>
+          <div class="step-pill" data-step-indicator="3"><span>3</span><small>Finish</small></div>
+        </div>
+
+        <!-- Register Form -->
+        <form method="post" id="registerForm" class="register-form">
+          <!-- STEP 1 -->
+          <div class="step active" id="step1">
+            <div class="name-grid">
+              <div class="field">
+                <label for="first_name">First Name</label>
+                <div class="field-wrap has-icon">
+                  <i class="fa-solid fa-user"></i>
+                  <input id="first_name" name="first_name" type="text" class="form-control" placeholder="Juan" required>
+                </div>
+              </div>
+              <div class="field">
+                <label for="middle_name">Middle Name</label>
+                <div class="field-wrap has-icon">
+                  <i class="fa-solid fa-id-card"></i>
+                  <input id="middle_name" name="middle_name" type="text" class="form-control" placeholder="De la">
+                </div>
+              </div>
+              <div class="field">
+                <label for="last_name">Last Name</label>
+                <div class="field-wrap has-icon">
+                  <i class="fa-solid fa-user-check"></i>
+                  <input id="last_name" name="last_name" type="text" class="form-control" placeholder="Cruz" required>
+                </div>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="birth_date">Birth Date</label>
+              <div class="field-wrap has-icon">
+                <i class="fa-solid fa-cake-candles"></i>
+                <input id="birth_date" name="birth_date" type="date" class="form-control" required>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="email">Email</label>
+              <div class="field-wrap has-icon">
+                <i class="fa-solid fa-envelope"></i>
+                <input id="email" name="email" type="email" class="form-control" placeholder="juandelacruz@gmail.com" required>
+              </div>
+            </div>
+
+            <div class="step-buttons">
+              <span class="btn-spacer"></span>
+              <button class="primary-btn" id="verifyBtn" type="button" onclick="nextStep()">Verify</button>
+            </div>
+          </div>
+
+          <!-- STEP 2 -->
+          <div class="step" id="step2">
+            <div class="field">
+              <label for="username">Username</label>
+              <div class="field-wrap has-icon">
+                <i class="fa-solid fa-at"></i>
+                <input id="username" name="username" type="text" class="form-control" placeholder="Username" required>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="password">Password</label>
+              <div class="field-wrap has-icon">
+                <i class="fa-solid fa-lock"></i>
+                <input id="password" name="password" type="password" class="form-control" placeholder="Enter password" required>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="confirm_password">Confirm Password</label>
+              <div class="field-wrap has-icon">
+                <i class="fa-solid fa-key"></i>
+                <input id="confirm_password" name="confirm_password" type="password" class="form-control" placeholder="Confirm password" required>
+              </div>
+            </div>
+
+            <div class="step-buttons">
+              <button class="secondary-btn" type="button" onclick="prevStep()">Previous</button>
+              <button class="primary-btn" type="button" onclick="nextStep()">Next</button>
+            </div>
+          </div>
+
+          <!-- STEP 3: Terms & Conditions -->
+          <div class="step" id="step3">
+            <div class="terms-box">
+              <p class="terms-title">Terms and Conditions</p>
+              <p class="terms-copy">Effective Date: March 2, 2026</p>
+              <div class="terms-content">
+                <p>By registering for the HYG Employee Portal, you agree to the following terms:</p>
+                <ol class="terms-list">
+                  <li><strong>Authorized use:</strong> Portal access is only for official work-related activities and approved internal communication.</li>
+                  <li><strong>Account responsibility:</strong> You are responsible for all activity under your account and must keep your credentials confidential.</li>
+                  <li><strong>Accurate information:</strong> You agree to provide true and updated personal and employment information during registration and account use.</li>
+                  <li><strong>Security compliance:</strong> You must follow company security policies, including password rules and immediate reporting of suspected unauthorized access.</li>
+                  <li><strong>Data handling:</strong> HR and management may process your portal data for attendance, leave, records management, compliance, and operational reporting.</li>
+                  <li><strong>Acceptable behavior:</strong> You must not misuse the portal, attempt unauthorized access, upload harmful content, or interfere with system performance.</li>
+                  <li><strong>Monitoring and audits:</strong> Portal activity may be logged and reviewed by authorized administrators for security, legal compliance, and system maintenance.</li>
+                  <li><strong>Policy updates:</strong> HYG may update these terms and related internal policies. Continued use after updates means you accept the revised terms.</li>
+                  <li><strong>Account actions:</strong> HYG may suspend or restrict access if policy violations, security threats, or compliance issues are detected.</li>
+                  <li><strong>Support contact:</strong> For account problems or access concerns, contact HR Admin for assistance.</li>
+                </ol>
+              </div>
+              <div class="form-check">
+                <input type="checkbox" name="terms" id="terms" class="form-check-input" required>
+                <label for="terms" class="form-check-label">I agree to the terms and conditions</label>
+              </div>
+            </div>
+            <div class="step-buttons">
+              <button class="secondary-btn" type="button" onclick="prevStep()">Previous</button>
+              <button class="primary-btn" id="submitBtn" type="submit">Register</button>
+            </div>
+          </div>
+        </form>
+
+        <div class="auth-switch auth-switch-center" aria-label="Authentication links">
+          <a href="{{ url_for('auth.login') }}" class="auth-link">Login</a>
+          <span class="auth-separator" aria-hidden="true">|</span>
+          <a href="{{ url_for('auth.register') }}" class="auth-link active" aria-current="page">Register</a>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="{{ url_for('static', filename='js/toast.js') }}"></script>
+  <script>
+    let currentStep = 1;
+    let verifiedEmployeeId = null;
+    let verifiedSignature = "";
+    let isVerifying = false;
+
+    const verifyEndpoint = "{{ url_for('auth.verify_employee') }}";
+    const completeEndpoint = "{{ url_for('auth.complete_registration') }}";
+
+    function showStep(step) {
+      document.querySelectorAll('.step').forEach((el) => el.classList.remove('active'));
+      document.getElementById(`step${step}`).classList.add('active');
+      document.querySelectorAll("[data-step-indicator]").forEach((el) => {
+        const indicatorStep = Number(el.getAttribute("data-step-indicator"));
+        el.classList.toggle("active", indicatorStep === step);
+        el.classList.toggle("done", indicatorStep < step);
+      });
+    }
+
+    function showToast(type, message) {
+      if (!window.HYGToast) return;
+      window.HYGToast.show(type, message);
+    }
+
+    function validateRequiredInputs(stepSelector) {
+      const requiredInputs = document.querySelectorAll(`${stepSelector} input[required]`);
+      for (const input of requiredInputs) {
+        if (!input.checkValidity()) {
+          input.reportValidity();
+          return false;
+        }
+      }
+      return true;
+    }
+
+    function getStepOnePayload() {
+      const form = document.getElementById("registerForm");
+      return {
+        first_name: form.first_name.value.trim(),
+        middle_name: form.middle_name.value.trim(),
+        last_name: form.last_name.value.trim(),
+        birth_date: form.birth_date.value,
+        email: form.email.value.trim()
+      };
+    }
+
+    async function verifyEmployee() {
+      if (isVerifying) return;
+      if (!validateRequiredInputs("#step1")) return;
+
+      const verifyBtn = document.getElementById("verifyBtn");
+      const payload = getStepOnePayload();
+      isVerifying = true;
+      verifyBtn.disabled = true;
+      verifyBtn.textContent = "Verifying...";
+
+      try {
+        const response = await fetch(verifyEndpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+
+        if (!response.ok) {
+          showToast("error", result.message || "Unable to verify employee.");
+          return;
+        }
+
+        verifiedEmployeeId = result.employee_id;
+        verifiedSignature = JSON.stringify(payload);
+        showToast("success", result.message || "Employee verified successfully.");
+        currentStep = 2;
+        showStep(currentStep);
+      } catch (error) {
+        showToast("error", "Network error while verifying employee details.");
+      } finally {
+        isVerifying = false;
+        verifyBtn.disabled = false;
+        verifyBtn.textContent = "Verify";
+      }
+    }
+
+    function nextStep() {
+      if (currentStep === 1) {
+        verifyEmployee();
+        return;
+      }
+
+      if (currentStep === 2) {
+        if (!validateRequiredInputs("#step2")) return;
+        const form = document.getElementById("registerForm");
+        
+        if (form.username.value.length < 4) {
+          showToast("error", "Username must be at least 4 characters.");
+          return;
+        }
+        if (form.password.value.length < 7) {
+          showToast("error", "Password must be at least 7 characters.");
+          return;
+        }
+        if (form.password.value !== form.confirm_password.value) {
+          showToast("error", "Passwords do not match.");
+          return;
+        }
+      }
+
+      if (currentStep < 3) {
+        currentStep += 1;
+        showStep(currentStep);
+      }
+    }
+
+    function prevStep() {
+      if (currentStep > 1) {
+        currentStep -= 1;
+        showStep(currentStep);
+      }
+    }
+
+    window.addEventListener("DOMContentLoaded", () => {
+      // Reset verification if user modifies fields after being verified
+      document.querySelectorAll("#step1 input").forEach((input) => {
+        input.addEventListener("input", () => {
+          verifiedEmployeeId = null;
+          verifiedSignature = "";
+        });
+      });
+
+      const form = document.getElementById("registerForm");
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+
+        if (!validateRequiredInputs("#step2")) {
+          currentStep = 2;
+          showStep(currentStep);
+          return;
+        }
+
+        if (!validateRequiredInputs("#step3")) return;
+
+        if (!verifiedEmployeeId) {
+          showToast("error", "Please verify employee details first.");
+          currentStep = 1;
+          showStep(currentStep);
+          return;
+        }
+
+        // Sanity check to make sure nobody edited their name in the background
+        if (JSON.stringify(getStepOnePayload()) !== verifiedSignature) {
+          showToast("error", "Employee details changed. Please verify again.");
+          currentStep = 1;
+          showStep(currentStep);
+          return;
+        }
+
+        const submitBtn = document.getElementById("submitBtn");
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Registering...";
+
+        try {
+          const response = await fetch(completeEndpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              employee_id: verifiedEmployeeId,
+              username: form.username.value.trim(),
+              password: form.password.value,
+              confirm_password: form.confirm_password.value,
+              terms_accepted: form.terms.checked
+            })
+          });
+          const result = await response.json();
+
+          if (!response.ok) {
+            showToast("error", result.message || "Registration failed.");
+            return;
+          }
+
+          showToast("success", result.message || "Registration successful.");
+          if (result.redirect_url) {
+            window.location.href = result.redirect_url;
+          }
+        } catch (error) {
+          showToast("error", "Network error while creating your account.");
+        } finally {
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Register";
+        }
+      });
+    });
+  </script>
+</body>
+</html>

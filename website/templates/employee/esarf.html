@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% block title %}ESARF | HYG Employee Portal{% endblock %}
+
+{% block extra_head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/esarf.css') }}">
+{% endblock %}
+
+{% block page_content %}
+  {% set esarf_form = esarf_form or {} %}
+  {% set esarf_transaction_types = esarf_transaction_types or [] %}
+  {% set selected_time_schedule = esarf_form.get('time_schedule', '') %}
+  {% set selected_day_off = esarf_form.get('day_off', '') %}
+  {% set selected_payroll_class = esarf_form.get('payroll_class', '') %}
+  {% set selected_date_from = esarf_form.get('date_from', '') %}
+  {% set selected_date_to = esarf_form.get('date_to', '') %}
+  {% set selected_time_from = esarf_form.get('time_from', '') %}
+  {% set selected_time_to = esarf_form.get('time_to', '') %}
+  {% set selected_total_hours = esarf_form.get('total_hours', '') %}
+  {% set selected_reason = esarf_form.get('reason', '') %}
+
+  <section class="hero esarf-hero">
+    <div>
+      <h1>Employee Salary Adjustment Request</h1>
+      <p>Submit ESARF requests for payroll adjustments and attendance corrections.</p>
+    </div>
+    <div class="esarf-hero-actions">
+      <a href="/employee/esarf_requests" class="esarf-info-btn esarf-request-btn">
+        <i class="fa-solid fa-list-check"></i>
+        <span>ESARF Requests</span>
+      </a>
+    </div>
+  </section>
+
+  <section class="esarf-layout">
+    <article class="card esarf-card">
+      <form method="POST" action="{{ url_for('employee.esarf') }}" class="esarf-grid" novalidate>
+        {% set esarf_employee = current_user.employee if current_user.is_authenticated and current_user.employee else None %}
+        {% set auto_employee_id = esarf_employee.employee_no if esarf_employee and esarf_employee.employee_no else '' %}
+        {% set auto_full_name = (
+          esarf_employee.first_name ~
+          (' ' ~ esarf_employee.middle_name[:1] ~ '.' if esarf_employee.middle_name else '') ~
+          ' ' ~ esarf_employee.last_name ~
+          (' ' ~ esarf_employee.suffix if esarf_employee.suffix else '')
+        )|trim if esarf_employee else '' %}
+        {% set auto_company = esarf_employee.company if esarf_employee and esarf_employee.company else '' %}
+        {% set auto_department = esarf_employee.department if esarf_employee and esarf_employee.department else '' %}
+
+        <input type="hidden" name="employee_id" value="{{ auto_employee_id }}">
+        <input type="hidden" name="full_name" value="{{ auto_full_name }}">
+        <input type="hidden" name="company" value="{{ auto_company }}">
+        <input type="hidden" name="department" value="{{ auto_department }}">
+
+        <div class="full-width auto-fill-head">
+          <small class="auto-fill-note">Auto-filled from profile.</small>
+          <button
+            type="button"
+            class="esarf-info-btn esarf-ghost-btn esarf-toggle-btn"
+            data-bs-toggle="collapse"
+            data-bs-target="#autoEmployeeFields"
+            aria-expanded="false"
+            aria-controls="autoEmployeeFields"
+          >
+            <i class="fa-solid fa-id-card"></i>
+            <span>Show Details</span>
+          </button>
+        </div>
+
+        <div class="collapse full-width" id="autoEmployeeFields">
+          <div class="auto-fields-wrap">
+            <div class="auto-fields-grid">
+              <div class="field">
+                <label>Employee ID No.</label>
+                <input type="text" value="{{ auto_employee_id }}" readonly>
+              </div>
+
+              <div class="field">
+                <label>Full Name</label>
+                <input type="text" value="{{ auto_full_name }}" readonly>
+              </div>
+
+              <div class="field">
+                <label>Company</label>
+                <input type="text" value="{{ auto_company }}" readonly>
+              </div>
+
+              <div class="field">
+                <label>Department</label>
+                <input type="text" value="{{ auto_department }}" readonly>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="full-width esarf-divider">
+          <span>Request Details</span>
+        </div>
+
+        <div class="full-width esarf-inline-meta">
+          <div class="field">
+            <label>Time Schedule</label>
+            <select name="time_schedule" required>
+              <option value="">Select Schedule</option>
+              <option value="8AM - 6PM" {% if selected_time_schedule == '8AM - 6PM' %}selected{% endif %}>8AM - 6PM</option>
+              <option value="9:00AM - 6:00PM" {% if selected_time_schedule == '9AM - 6PM' %}selected{% endif %}>9AM - 6PM</option>
+              <option value="9AM - 7PM" {% if selected_time_schedule == '9AM - 7PM' %}selected{% endif %}>9AM - 7PM</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label>Day Off</label>
+            <select name="day_off" required>
+              <option value="">Select Day</option>
+              <option value="Mon" {% if selected_day_off == 'Mon' %}selected{% endif %}>Monday</option>
+              <option value="Tue" {% if selected_day_off == 'Tue' %}selected{% endif %}>Tuesday</option>
+              <option value="Wed" {% if selected_day_off == 'Wed' %}selected{% endif %}>Wednesday</option>
+              <option value="Thu" {% if selected_day_off == 'Thu' %}selected{% endif %}>Thursday</option>
+              <option value="Fri" {% if selected_day_off == 'Fri' %}selected{% endif %}>Friday</option>
+              <option value="Sat" {% if selected_day_off == 'Sat' %}selected{% endif %}>Saturday</option>
+              <option value="Sun" {% if selected_day_off == 'Sun' %}selected{% endif %}>Sunday</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label>Payroll Class</label>
+            <select name="payroll_class" required>
+              <option value="">Select Payroll Class</option>
+              <option value="Rank and File" {% if selected_payroll_class == 'Rank and File' %}selected{% endif %}>Rank and File</option>
+              <option value="Admin" {% if selected_payroll_class == 'Admin' %}selected{% endif %}>Admin</option>
+              <option value="Managerial" {% if selected_payroll_class == 'Managerial' %}selected{% endif %}>Managerial</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field full-width">
+          <label>Transaction Type</label>
+          <div class="transaction-checklist" role="group" aria-label="Transaction Type">
+            <label class="transaction-option"><input type="checkbox" name="transaction_type" value="UT" {% if 'UT' in esarf_transaction_types %}checked{% endif %}>&nbsp;<span>Undertime (UT)</span></label>
+            <label class="transaction-option"><input type="checkbox" name="transaction_type" value="OT" {% if 'OT' in esarf_transaction_types %}checked{% endif %}>&nbsp;<span>Overtime (OT)</span></label>
+            <label class="transaction-option"><input type="checkbox" name="transaction_type" value="FIO" {% if 'FIO' in esarf_transaction_types %}checked{% endif %}>&nbsp;<span>Failure to Punch In/Out (FIO)</span></label>
+            <label class="transaction-option"><input type="checkbox" name="transaction_type" value="OB" {% if 'OB' in esarf_transaction_types %}checked{% endif %}>&nbsp;<span>Official Business (OB)</span></label>
+            <label class="transaction-option"><input type="checkbox" name="transaction_type" value="Adjustment" {% if 'Adjustment' in esarf_transaction_types %}checked{% endif %}>&nbsp;<span>Adjustment</span></label>
+          </div>
+          <small class="field-hint">Select one or more transactions.</small>
+        </div>
+
+        <div class="full-width esarf-date-time-columns">
+          <div class="field">
+            <label>Date From</label>
+            <input type="date" name="date_from" value="{{ selected_date_from }}">
+          </div>
+
+          <div class="field">
+            <label>Date To</label>
+            <input type="date" name="date_to" value="{{ selected_date_to }}">
+          </div>
+
+          <div class="field">
+            <label>Time From</label>
+            <input type="time" name="time_from" value="{{ selected_time_from }}">
+          </div>
+
+          <div class="field">
+            <label>Time To</label>
+            <input type="time" name="time_to" value="{{ selected_time_to }}">
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Total OT / UT / No. of Hours</label>
+          <input type="text" name="total_hours" id="totalHoursInput" required value="{{ selected_total_hours }}">
+        </div>
+
+        <div class="full-width esarf-divider">
+          <span>Reason</span>
+        </div>
+
+        <div class="field full-width">
+          <label>Reason</label>
+          <textarea name="reason" rows="3" required placeholder="Provide a short explanation for this request">{{ selected_reason }}</textarea>
+        </div>
+
+        <div class="full-width esarf-actions">
+          <button type="submit" class="primary-btn esarf-submit-btn">Submit ESARF</button>
+        </div>
+      </form>
+    </article>
+
+    <aside class="card esarf-note-card">
+      <h2 class="section-title">Submission Notes</h2>
+      <ul class="esarf-note-list">
+        <li>Prepare two copies of the form for every payroll period.</li>
+        <li>Select the correct transaction type for each entry.</li>
+        <li>For <strong>FIO</strong>, record only the missed time-in or time-out.</li>
+        <li>Leave dates should exclude rest days and holidays.</li>
+        <li>Overnight overtime must be written on its actual date.</li>
+      </ul>
+      <p class="esarf-note-deadline">
+        <i class="fa-regular fa-calendar-check"></i>
+        Submit approved ESARF forms on or before the 5th and 20th.
+      </p>
+    </aside>
+  </section>
+
+{% endblock %}
+
+{% block extra_scripts %}
+  <script src="{{ url_for('static', filename='js/esarf.js') }}"></script>
+{% endblock %}

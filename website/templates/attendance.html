@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Attendance | HYG Employee Portal{% endblock %}
+
+{% block page_content %}
+  <section class="clock-panel">
+    <h1 class="clock-time" id="liveClock">09:00:00 AM</h1>
+    <p class="clock-date" id="liveDate">Mon Feb 23 2026</p>
+    <div class="clock-actions">
+      <button class="clock-btn in" type="button">CLOCK IN</button>
+      <button class="clock-btn" type="button" style="background:#1e293b;color:#cbd5e1;">Take a Break</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2 class="section-title">Attendance History</h2>
+    <div class="history">
+      <div class="history-item">
+        <strong>Present</strong><br>
+        <small>May 22, 2024</small>
+        <div style="margin-top:0.35rem;color:#334155;">
+          In: <strong>08:55 AM</strong> | Out: <strong>05:30 PM</strong>
+        </div>
+      </div>
+      <div class="history-item">
+        <strong>Late</strong><br>
+        <small>May 21, 2024</small>
+        <div style="margin-top:0.35rem;color:#334155;">
+          In: <strong>09:15 AM</strong> | Out: <strong>06:00 PM</strong>
+        </div>
+      </div>
+      <div class="history-item">
+        <strong>Present</strong><br>
+        <small>May 20, 2024</small>
+        <div style="margin-top:0.35rem;color:#334155;">
+          In: <strong>08:45 AM</strong> | Out: <strong>05:15 PM</strong>
+        </div>
+      </div>
+    </div>
+  </section>
+{% endblock %}

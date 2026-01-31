@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}Users | HYG Employee Portal{% endblock %}
+
+{% block extra_head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/employee.css') }}">
+{% endblock %}
+
+{% block page_content %}
+  <section class="hero employees-hero">
+    <div>
+      <h1>Users Directory</h1>
+      <p>View and manage user accounts, role access, and employee status.</p>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="table-wrap table-responsive">
+      <table class="table align-middle mb-0 companies-table">
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Linked Employee</th>
+            <th>Role</th>
+            <th>Employee Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for user in users %}
+          {% set employee = user.employee %}
+          {% set status_text = employee.employment_status if employee and employee.employment_status else 'N/A' %}
+          {% set status_class = status_text|lower|replace(' ', '-') %}
+          <tr>
+            <td>
+              <div class="employee-cell company-cell">
+                <img
+                  src="{{ url_for('static', filename=employee.photopath) if employee and employee.photopath else 'https://picsum.photos/seed/user-' ~ user.id ~ '/100/100' }}"
+                  alt="{{ user.username }}"
+                  class="company-logo-table"
+                >
+                <div class="company-meta">
+                  <strong class="company-name-text">{{ user.username }}</strong>
+                  <small class="company-subtext">User ID: {{ user.id }}</small>
+                </div>
+              </div>
+            </td>
+            <td>
+              {% if employee %}
+                <strong class="role-text">{{ employee.first_name }} {{ employee.last_name }}</strong>
+                <small class="dept-text">{{ employee.employee_no or 'No Employee ID' }}</small>
+              {% else %}
+                <span class="company-address">No linked employee</span>
+              {% endif %}
+            </td>
+            <td><span class="company-name">{{ user.role|title }}</span></td>
+            <td>
+              {% if employee %}
+                <span class="status {{ status_class }}">{{ status_text }}</span>
+              {% else %}
+                <span class="status">{{ status_text }}</span>
+              {% endif %}
+            </td>
+            <td>
+              <button type="button"
+                      class="edit-btn"
+                      data-bs-toggle="modal"
+                      data-bs-target="#editUserModal{{ user.id }}">
+                <i class="fa-solid fa-pen-to-square"></i> Edit
+              </button>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="5">No users found.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  {% for user in users %}
+  {% set employee = user.employee %}
+  <div class="modal fade" id="editUserModal{{ user.id }}" tabindex="-1" aria-labelledby="editUserModalTitle{{ user.id }}" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 id="editUserModalTitle{{ user.id }}" class="section-title mb-0">Edit User</h2>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+
+        <div class="modal-body">
+          <form action="{{ url_for('admin.update_user', user_id=user.id) }}" method="POST" class="employee-form">
+            <div class="form-section-card">
+              <h3 class="form-section-title">Account Details</h3>
+
+              <div class="grid-2">
+                <div class="field">
+                  <label>Username</label>
+                  <input type="text" value="{{ user.username }}" readonly>
+                </div>
+                <div class="field">
+                  <label>Role</label>
+                  <select name="role" required>
+                    <option value="user" {% if user.role == 'user' %}selected{% endif %}>User</option>
+                    <option value="admin" {% if user.role == 'admin' %}selected{% endif %}>Admin</option>
+                    <option value="hr" {% if user.role == 'hr' %}selected{% endif %}>HR</option>
+                    <option value="timekeeper" {% if user.role == 'timekeeper' %}selected{% endif %}>Timekeeper</option>
+                    <option value="general manager" {% if user.role == 'general manager' %}selected{% endif %}>General Manager</option>
+                    <option value="operation" {% if user.role == 'operation' %}selected{% endif %}>Operation</option>
+                    <option value="dept manager" {% if user.role == 'dept manager' %}selected{% endif %}>Dept Manager</option>
+                  </select>
+                </div>
+              </div>
+
+              {% if employee %}
+              <div class="grid-2">
+                <div class="field">
+                  <label>Employee</label>
+                  <input type="text" value="{{ employee.first_name }} {{ employee.last_name }}" readonly>
+                </div>
+                <div class="field">
+                  <label>Employee Status</label>
+                  <select name="employment_status">
+                    <option value="Active" {% if employee.employment_status == 'Active' %}selected{% endif %}>Active</option>
+                    <option value="Resigned" {% if employee.employment_status == 'Resigned' %}selected{% endif %}>Resigned</option>
+                    <option value="Suspended" {% if employee.employment_status == 'Suspended' %}selected{% endif %}>Suspended</option>
+                    <option value="On Leave" {% if employee.employment_status == 'On Leave' %}selected{% endif %}>On Leave</option>
+                    <option value="Terminated" {% if employee.employment_status == 'Terminated' %}selected{% endif %}>Terminated</option>
+                    <option value="AWOL" {% if employee.employment_status == 'AWOL' %}selected{% endif %}>AWOL</option>
+                  </select>
+                </div>
+              </div>
+              {% else %}
+              <p class="company-address mb-0">This account is not linked to an employee record.</p>
+              {% endif %}
+            </div>
+
+            <div class="form-actions">
+              <button type="button" class="primary-btn secondary-btn" data-bs-dismiss="modal">Cancel</button>
+              <button type="submit" class="primary-btn">Save Changes</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+{% endblock %}

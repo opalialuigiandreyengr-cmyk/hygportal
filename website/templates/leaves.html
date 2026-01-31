@@ -1,0 +1,273 @@
+{% extends "base.html" %}
+{% block title %}Leaves | HYG Employee Portal{% endblock %}
+
+{% block page_content %}
+<style>
+
+/* HERO */
+.hero { margin-bottom:1.5rem; }
+.hero h1 { font-size:2rem; margin-bottom:0.3rem; }
+.hero p { color:#555; font-size:0.95rem; }
+
+/* LAYOUT */
+.leave-layout { display:grid; grid-template-columns:500px 1fr; gap:1.5rem; }
+@media(max-width:1100px){ .leave-layout { grid-template-columns:1fr; } }
+
+/* CARD */
+.card { background:#fff; padding:1.5rem; border-radius:12px; box-shadow:0 4px 12px rgba(0,0,0,0.05); }
+.section-title { font-size:1.2rem; margin-bottom:1rem; font-weight:600; }
+
+/* FORM */
+#leaveForm { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+.field { display:flex; flex-direction:column; }
+.full-width { grid-column:1/-1; }
+
+.field label { font-weight:600; margin-bottom:0.25rem; font-size:0.9rem; }
+
+.form-control, .form-select, textarea {
+  width:100%;
+  padding:0.55rem;
+  font-size:0.9rem;
+  border-radius:8px;
+  border:1px solid #ccc;
+}
+
+textarea { min-height:80px; resize:none; }
+
+.btn-primary {
+  grid-column:1/-1;
+  background:#0d6efd;
+  color:#fff;
+  padding:0.6rem;
+  border:none;
+  border-radius:8px;
+  cursor:pointer;
+}
+
+/* SUMMARY */
+.summary-box { display:flex; gap:1rem; margin-bottom:1rem; font-size:0.85rem; }
+.summary-box span { background:#f1f3f5; padding:0.3rem 0.6rem; border-radius:6px; }
+
+/* FILTER BUTTONS */
+.filter-buttons { margin-bottom:1rem; display:flex; gap:0.5rem; }
+.filter-buttons button {
+  padding:0.3rem 0.7rem;
+  border-radius:6px;
+  border:1px solid #ccc;
+  background:#fff;
+  cursor:pointer;
+}
+.filter-buttons button.active {
+  background:#0d6efd;
+  color:#fff;
+  border-color:#0d6efd;
+}
+
+/* LEAVE ITEM */
+.leave-list { display:flex; flex-direction:column; gap:0.8rem; }
+
+.leave-item {
+  background:#fff;
+  padding:1rem;
+  border-radius:12px;
+  box-shadow:0 3px 10px rgba(0,0,0,0.05);
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+
+.leave-info small { display:block; color:#666; }
+
+/* STATUS */
+.status {
+  font-size:0.75rem;
+  font-weight:600;
+  padding:0.3rem 0.7rem;
+  border-radius:20px;
+}
+
+.status.pending { background:#fff3cd; color:#856404; }
+.status.approved { background:#d4edda; color:#155724; }
+.status.rejected { background:#f8d7da; color:#721c24; }
+
+/* CANCEL */
+.btn-cancel {
+  margin-left:0.5rem;
+  padding:0.3rem 0.7rem;
+  border:none;
+  border-radius:20px;
+  background:red;
+  color:#fff;
+  cursor:pointer;
+  font-size:0.75rem;
+}
+
+</style>
+
+<section class="hero">
+  <h1>Leave Management</h1>
+  <p>Submit a leave request and track your leave status.</p>
+</section>
+
+<section class="leave-layout">
+
+  <!-- FORM -->
+  <article class="card">
+    <h2 class="section-title">New Leave Request</h2>
+
+    <form id="leaveForm">
+
+      <div class="field">
+        <label>Employee Name</label>
+        <input type="text" id="employeeName" class="form-control" required>
+      </div>
+
+      <div class="field">
+        <label>Leave Type</label>
+        <select id="leaveType" class="form-select" required>
+          <option value="">Select Type</option>
+          <option>Annual Leave</option>
+          <option>Sick Leave</option>
+          <option>Casual Leave</option>
+          <option>Maternity/Paternity</option>
+          <option>Unpaid Leave</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Start Date</label>
+        <input type="date" id="leaveStart" class="form-control" required>
+      </div>
+
+      <div class="field">
+        <label>End Date</label>
+        <input type="date" id="leaveEnd" class="form-control" required>
+      </div>
+
+      <div class="field full-width">
+        <label>Reason</label>
+        <textarea id="leaveReason" class="form-control" required></textarea>
+      </div>
+
+      <button type="submit" class="btn-primary">Submit Leave</button>
+
+    </form>
+  </article>
+
+  <!-- RIGHT PANEL -->
+  <article class="card">
+    <h2 class="section-title">Recent Leaves</h2>
+
+    <div class="summary-box">
+      <span>Pending: <strong id="pendingCount">0</strong></span>
+      <span>Approved: <strong id="approvedCount">0</strong></span>
+      <span>Rejected: <strong id="rejectedCount">0</strong></span>
+    </div>
+
+    <div class="filter-buttons">
+      <button data-filter="all" class="active">All</button>
+      <button data-filter="approved">Approved</button>
+      <button data-filter="pending">Pending</button>
+      <button data-filter="rejected">Rejected</button>
+    </div>
+
+    <div class="leave-list" id="leaveList"></div>
+  </article>
+
+</section>
+
+<script>
+let leaves = JSON.parse(localStorage.getItem("leaves")) || [];
+let currentFilter = "all";
+
+const form = document.getElementById("leaveForm");
+const leaveList = document.getElementById("leaveList");
+const filterButtons = document.querySelectorAll(".filter-buttons button");
+
+document.addEventListener("DOMContentLoaded", () => {
+  renderLeaves();
+  updateSummary();
+});
+
+/* SUBMIT */
+form.addEventListener("submit", function(e){
+  e.preventDefault();
+
+  const leaveData = {
+    id: Date.now(),
+    employee_name: document.getElementById("employeeName").value,
+    leave_type: document.getElementById("leaveType").value,
+    start_date: document.getElementById("leaveStart").value,
+    end_date: document.getElementById("leaveEnd").value,
+    reason: document.getElementById("leaveReason").value,
+    status: "pending"
+  };
+
+  leaves.unshift(leaveData);
+  localStorage.setItem("leaves", JSON.stringify(leaves));
+
+  form.reset();
+  renderLeaves();
+  updateSummary();
+});
+
+/* RENDER */
+function renderLeaves(){
+  leaveList.innerHTML="";
+
+  leaves
+    .filter(l => currentFilter==="all" || l.status===currentFilter)
+    .forEach(leave => {
+
+      const div = document.createElement("div");
+      div.className="leave-item";
+
+      div.innerHTML = `
+        <div class="leave-info">
+          <strong>${leave.leave_type}</strong> (${leave.employee_name})
+          <small>${leave.start_date} to ${leave.end_date}</small>
+          <small>Reason: ${leave.reason}</small>
+        </div>
+        <div>
+          <span class="status ${leave.status}">${leave.status.toUpperCase()}</span>
+          ${leave.status==="pending"
+            ? `<button class="btn-cancel" onclick="cancelLeave(${leave.id})">Cancel</button>`
+            : ""}
+        </div>
+      `;
+
+      leaveList.appendChild(div);
+    });
+}
+
+/* CANCEL */
+function cancelLeave(id){
+  leaves = leaves.filter(l => l.id !== id);
+  localStorage.setItem("leaves", JSON.stringify(leaves));
+  renderLeaves();
+  updateSummary();
+}
+
+/* SUMMARY */
+function updateSummary(){
+  const pending = leaves.filter(l=>l.status==="pending").length;
+  const approved = leaves.filter(l=>l.status==="approved").length;
+  const rejected = leaves.filter(l=>l.status==="rejected").length;
+
+  document.getElementById("pendingCount").textContent=pending;
+  document.getElementById("approvedCount").textContent=approved;
+  document.getElementById("rejectedCount").textContent=rejected;
+}
+
+/* FILTER */
+filterButtons.forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    filterButtons.forEach(b=>b.classList.remove("active"));
+    btn.classList.add("active");
+    currentFilter = btn.dataset.filter;
+    renderLeaves();
+  });
+});
+</script>
+
+{% endblock %}

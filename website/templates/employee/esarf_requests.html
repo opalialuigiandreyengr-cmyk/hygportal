@@ -2,7 +2,7 @@
 {% block title %}My ESARF Requests | HYG Employee Portal{% endblock %}
 
 {% block extra_head %}
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/esarf.css') }}">
+  <!-- <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/esarf.css') }}"> -->
   <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/employee.css') }}">
 {% endblock %}
 
@@ -40,9 +40,9 @@
       <h1>My ESARF Requests</h1>
       <p>Track your requests and approval status.</p>
     </div>
-    <div class="esarf-hero-actions employee-esarf-hero-tools">
+    <div class="esarf-hero-actions employee-esarf-hero-tools" style="display: flex; justify-content: space-between">
       <div class="employee-esarf-filter-box">
-        <label for="esarfStatusFilter">Filter</label>
+        <!-- <label for="esarfStatusFilter">Filter</label> -->
         <select id="esarfStatusFilter" class="employee-esarf-filter-select" aria-label="Filter ESARF requests by status">
           <option value="all">All ({{ stats.total }})</option>
           <option value="pending">Pending ({{ stats.pending }})</option>
@@ -51,11 +51,14 @@
           <option value="rejected">Rejected ({{ stats.rejected }})</option>
         </select>
       </div>
-      <span class="esarf-info-btn employee-esarf-count-pill" id="esarfShowingCount">0/{{ stats.total }}</span>
-      <a href="{{ url_for('employee.esarf') }}" class="esarf-info-btn esarf-request-btn employee-esarf-hero-btn">
-        <i class="fa-solid fa-plus"></i>
-        <span>New ESARF</span>
-      </a>
+      <div style="border: 1px solid black; border-radius: 20px; display: flex; align-items: center; padding: 8px; position: relative; top: -3px; background-color: #fde047; border-color: rgb(255, 255, 0);" >
+        <a href="{{ url_for('employee.esarf') }}" class="esarf-info-btn esarf-request-btn employee-esarf-hero-btn">
+          <i class="fa-solid fa-plus"></i>
+          <span style="font-size: 13px; font-weight: bold;">New ESARF</span>
+        </a>
+
+      </div>
+      <!-- <span class="esarf-info-btn employee-esarf-count-pill" id="esarfShowingCount">0/{{ stats.total }}</span> -->
     </div>
   </section>
 

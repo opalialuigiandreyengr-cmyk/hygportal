@@ -4,12 +4,41 @@
 {% block extra_head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/esarf.css') }}">
 <style>
-/* ===== MOBILE: HIDE INLINE NOTES, SHOW BUTTON ===== */
+/* ===== LAYOUT: FORM + NOTES SIDE-BY-SIDE ===== */
+.esarf-layout {
+  display: flex;
+  gap: 2rem;
+  align-items: flex-start;
+}
+
+/* Form takes majority, notes smaller */
+.esarf-card {
+  flex: 2;
+}
+
+/* Notes aside */
+.esarf-note-card {
+  flex: 1;
+  max-width: 300px;
+  position: sticky;
+  top: 1rem;
+}
+
+/* ===== MOBILE ===== */
 @media (max-width: 768px) {
-  .esarf-note-card {
-    display: none; /* hide inline notes on mobile */
+  /* Hide hero on mobile */
+  .esarf-hero {
+    display: none;
   }
 
+  .esarf-layout {
+    flex-direction: column;
+  }
+  .esarf-note-card {
+    display: none; /* hide on mobile, notes accessible via button */
+  }
+
+  /* Mobile Notes toggle button */
   .esarf-note-toggle-btn {
     display: inline-flex;
     align-items: center;
@@ -26,6 +55,11 @@
 
   .esarf-note-toggle-btn i {
     font-size: 1rem;
+  }
+
+  /* Make form full width on mobile and prevent scroll */
+  .esarf-card form {
+    overflow: hidden;
   }
 }
 </style>
@@ -44,7 +78,8 @@
 {% set selected_total_hours = esarf_form.get('total_hours', '') %}
 {% set selected_reason = esarf_form.get('reason', '') %}
 
-<section class="hero esarf-hero">
+<!-- ===== HERO (Desktop only) ===== -->
+<!-- <section class="hero esarf-hero">
   <div>
     <h1>Employee Salary Adjustment Request</h1>
     <p>Submit ESARF requests for payroll adjustments and attendance corrections.</p>
@@ -55,9 +90,10 @@
       <span>ESARF Requests</span>
     </a>
   </div>
-</section>
+</section> -->
 
 <section class="esarf-layout">
+  <!-- ===== ESARF FORM ===== -->
   <article class="card esarf-card">
     <form method="POST" action="{{ url_for('employee.esarf') }}" class="esarf-grid" novalidate>
       {% set esarf_employee = current_user.employee if current_user.is_authenticated and current_user.employee else None %}
@@ -77,8 +113,18 @@
       <input type="hidden" name="department" value="{{ auto_department }}">
 
       <div class="full-width auto-fill-head">
-        <small class="auto-fill-note">Auto-filled from profile.</small>
-        <button
+        <div>
+          <h1 style="font-size: 18px; font-weight: bold; margin-bottom: 10px;">Employee Salary Adjustment Request</h1>
+        </div>
+        <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+       <div class="esarf-hero-actions" style="background-color: yellow; width: 180px; padding: 4px; border-radius: 10px; text-align: center;">
+       <a href="/employee/esarf_requests">
+       <i class="fa-solid fa-list-check"></i>
+       <span>ESARF Requests</span>
+       </a>
+       </div>
+      <div>
+     <button
           type="button"
           class="esarf-info-btn esarf-ghost-btn esarf-toggle-btn"
           data-bs-toggle="collapse"
@@ -87,8 +133,12 @@
           aria-controls="autoEmployeeFields"
         >
           <i class="fa-solid fa-id-card"></i>
-          <span>Show Details</span>
+          <span>Details</span>
         </button>
+      </div>
+        </div>
+  
+      
       </div>
 
       <div class="collapse full-width" id="autoEmployeeFields">
@@ -206,37 +256,6 @@
     </form>
   </article>
 
-  <!-- ===== MOBILE NOTES BUTTON ===== -->
-  <button class="esarf-note-toggle-btn d-md-none" data-bs-toggle="modal" data-bs-target="#esarfNoteModal">
-    <i class="fa-solid fa-circle-info"></i>
-    <span>Submission Notes</span>
-  </button>
-
-  <!-- ===== SUBMISSION NOTES MODAL ===== -->
-  <div class="modal fade" id="esarfNoteModal" tabindex="-1" aria-labelledby="esarfNoteModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title" id="esarfNoteModalLabel">Submission Notes</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <ul class="esarf-note-list">
-            <li>Prepare two copies of the form for every payroll period.</li>
-            <li>Select the correct transaction type for each entry.</li>
-            <li>For <strong>FIO</strong>, record only the missed time-in or time-out.</li>
-            <li>Leave dates should exclude rest days and holidays.</li>
-            <li>Overnight overtime must be written on its actual date.</li>
-          </ul>
-          <p class="esarf-note-deadline">
-            <i class="fa-regular fa-calendar-check"></i>
-            Submit approved ESARF forms on or before the 5th and 20th.
-          </p>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <!-- ===== DESKTOP NOTES (always visible) ===== -->
   <aside class="card esarf-note-card d-none d-md-block">
     <h2 class="section-title">Submission Notes</h2>
@@ -254,8 +273,38 @@
   </aside>
 </section>
 
+<!-- ===== MOBILE NOTES BUTTON ===== -->
+<button class="esarf-note-toggle-btn d-md-none" data-bs-toggle="modal" data-bs-target="#esarfNoteModal">
+  <i class="fa-solid fa-circle-info"></i>
+  <span>Submission Notes</span>
+</button>
+
+<!-- ===== SUBMISSION NOTES MODAL ===== -->
+<div class="modal fade" id="esarfNoteModal" tabindex="-1" aria-labelledby="esarfNoteModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="esarfNoteModalLabel">Submission Notes</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <ul class="esarf-note-list">
+          <li>Prepare two copies of the form for every payroll period.</li>
+          <li>Select the correct transaction type for each entry.</li>
+          <li>For <strong>FIO</strong>, record only the missed time-in or time-out.</li>
+          <li>Leave dates should exclude rest days and holidays.</li>
+          <li>Overnight overtime must be written on its actual date.</li>
+        </ul>
+        <p class="esarf-note-deadline">
+          <i class="fa-regular fa-calendar-check"></i>
+          Submit approved ESARF forms on or before the 5th and 20th.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
 <script src="{{ url_for('static', filename='js/esarf.js') }}"></script>
-{% endblock %}
+{% endblock %} 

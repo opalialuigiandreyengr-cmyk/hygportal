@@ -3,7 +3,6 @@
 
 {% block page_content %}
 <style>
-
 /* ===== BUTTON PRIMARY ===== */
 .btn-primary{
   background:#facc15;
@@ -108,7 +107,41 @@
   color:#64748b;
 }
 
+/* ===== LAYOUT ===== */
+.leave-layout {
+  display:flex;
+  gap:2rem;
+}
 
+/* FORM + RIGHT PANEL */
+.leave-layout article.card {
+  flex:1;
+}
+
+/* ===== MOBILE ===== */
+@media (max-width:768px){
+  body, html {
+    height:100%;
+    overflow:hidden; /* disable page scroll */
+  }
+
+  .leave-layout {
+    flex-direction:column;
+    height:100vh; /* fill screen */
+  }
+
+  /* Make form and recent leaves share space */
+  .leave-layout article.card {
+    flex:1 1 50%;
+    min-height:0; /* allows internal scrolling */
+    overflow-y:auto;
+    padding:1rem;
+  }
+
+  .hero {
+    padding:1rem;
+  }
+}
 </style>
 
 <section class="hero">
@@ -161,7 +194,7 @@
     </form>
   </article>
 
-  <!-- RIGHT PANEL -->
+  <!-- RECENT LEAVES -->
   <article class="card">
     <h2 class="section-title">Recent Leaves</h2>
 

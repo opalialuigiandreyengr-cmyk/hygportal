@@ -1,4 +1,4 @@
-/* --- Hero & Buttons --- */
+--- Hero & Buttons ---
 .employees-hero {
   display: flex;
   justify-content: space-between;
@@ -1386,5 +1386,35 @@
 
   .employee-esarf-modal-dialog .esarf-paper-simple .esarf-block {
     padding: 0.54rem 0.6rem 0.66rem;
+  }
+}
+@media (max-width: 768px) {
+  .employee-esarf-modal-dialog {
+    max-width: 100%;        /* full width on mobile */
+    margin: 0.5rem;         /* small margin */
+  }
+
+  .employee-esarf-modal-dialog .modal-content {
+    max-height: 95vh;       /* fit within viewport */
+    display: flex;
+    flex-direction: column;
+  }
+
+  .employee-esarf-modal-dialog .modal-body {
+    overflow-y: auto;       /* scroll only body */
+    flex: 1 1 auto;         /* take remaining space */
+    -webkit-overflow-scrolling: touch; /* smooth scrolling on iOS */
+  }
+
+  .modal-header,
+  .modal-footer {
+    flex-shrink: 0;         /* header/footer stay visible */
+  }
+
+  /* Optional: make text slightly smaller on mobile */
+  .employee-esarf-modal-dialog .modal-body,
+  .employee-esarf-modal-dialog .modal-header,
+  .employee-esarf-modal-dialog .modal-footer {
+    font-size: 0.9rem;
   }
 }

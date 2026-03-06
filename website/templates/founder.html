@@ -2,32 +2,161 @@
 {% block title %}Founder | HYG Employee Portal{% endblock %}
 
 {% block page_content %}
-  <section class="text-page">
-    <div class="card founder">
-      <img src="https://picsum.photos/seed/founder-julian/500/500" alt="Julian Thorne">
-      <div>
-        <div class="pill warn" style="display:inline-flex;margin-bottom:0.5rem;">The Visionary</div>
-        <h1 style="font-size:2rem;font-weight:900;letter-spacing:-0.03em;">Julian Thorne</h1>
-        <p style="margin-top:0.25rem;color:#64748b;">Founder & CEO, HYG Company</p>
-        <p style="margin-top:0.8rem;color:#334155;line-height:1.6;">With 20+ years in distributed systems and behavioral economics, Julian founded HYG to bridge the gap between human intuition and machine precision.</p>
-      </div>
+
+<style>
+
+/* PAGE */
+.text-page{
+  max-width:1000px;
+  margin:auto;
+  padding:20px;
+}
+
+/* FOUNDER CARD */
+.founder{
+  display:flex;
+  gap:24px;
+  align-items:center;
+  padding:24px;
+}
+
+.founder img{
+  width:180px;
+  height:180px;
+  object-fit:cover;
+  border-radius:14px;
+}
+
+/* TEXT */
+.founder-title{
+  font-size:2rem;
+  font-weight:900;
+  letter-spacing:-0.03em;
+}
+
+.founder-role{
+  margin-top:4px;
+  color:#64748b;
+}
+
+.founder-description{
+  margin-top:12px;
+  color:#334155;
+  line-height:1.6;
+}
+
+/* PILL */
+.pill{
+  padding:4px 10px;
+  border-radius:20px;
+  font-size:12px;
+  font-weight:600;
+}
+
+.pill.warn{
+  background:#fde68a;
+  color:#92400e;
+}
+
+/* QUOTE */
+.quote{
+  margin:28px 0;
+  padding:18px 20px;
+  border-left:4px solid #2563eb;
+  background:#f8fafc;
+  font-style:italic;
+  color:#334155;
+}
+
+/* MILESTONES */
+.milestones{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+  gap:16px;
+}
+
+.milestone{
+  padding:18px;
+  border-radius:10px;
+  background:#ffffff;
+  border:1px solid #e2e8f0;
+}
+
+.milestone strong{
+  font-size:20px;
+}
+
+.milestone p{
+  margin-top:6px;
+  color:#64748b;
+}
+
+/* MOBILE */
+@media (max-width:768px){
+
+  .founder{
+    flex-direction:column;
+    text-align:center;
+  }
+
+  .founder img{
+    width:140px;
+    height:140px;
+  }
+
+}
+
+</style>
+
+<section class="text-page">
+
+  <div class="card founder">
+
+    <img src="https://picsum.photos/seed/founder-julian/500/500" alt="Julian Thorne">
+
+    <div>
+
+      <div class="pill warn">The Visionary</div>
+
+      <h1 class="founder-title">Julian Thorne</h1>
+
+      <p class="founder-role">
+        Founder & CEO, HYG Company
+      </p>
+
+      <p class="founder-description">
+        With 20+ years in distributed systems and behavioral economics,
+        Julian founded HYG to bridge the gap between human intuition
+        and machine precision.
+      </p>
+
     </div>
 
-    <div class="quote">"We do not just build tools. We build the future of human and digital interaction."</div>
+  </div>
 
-    <div class="milestones">
-      <article class="milestone">
-        <strong>2010</strong>
-        <p style="margin-top:0.35rem;color:#64748b;">Founded HYG in San Francisco.</p>
-      </article>
-      <article class="milestone">
-        <strong>2015</strong>
-        <p style="margin-top:0.35rem;color:#64748b;">Reached 1 million monthly active users.</p>
-      </article>
-      <article class="milestone">
-        <strong>2023</strong>
-        <p style="margin-top:0.35rem;color:#64748b;">Named Tech Visionary of the Year.</p>
-      </article>
-    </div>
-  </section>
+  <div class="quote">
+    "We do not just build tools. We build the future of human and digital interaction."
+  </div>
+
+  <div class="milestones">
+
+    <article class="milestone">
+      <strong>2010</strong>
+      <p>Founded HYG in San Francisco.</p>
+    </article>
+
+    <article class="milestone">
+      <strong>2015</strong>
+      <p>Reached 1 million monthly active users.</p>
+    </article>
+
+    <article class="milestone">
+      <strong>2023</strong>
+      <p>Named Tech Visionary of the Year.</p>
+    </article>
+
+  </div>
+
+</section>
+
 {% endblock %}

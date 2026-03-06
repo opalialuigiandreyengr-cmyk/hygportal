@@ -4,7 +4,6 @@
 {% block extra_head %}
   <!-- <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/esarf.css') }}"> -->
   <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/employee.css') }}">
-   
 {% endblock %}
 
 {% block page_content %}
@@ -42,24 +41,28 @@
       <p>Track your requests and approval status.</p>
     </div>
     <div class="esarf-hero-actions employee-esarf-hero-tools" style="display: flex; justify-content: space-between">
-      <div class="employee-esarf-filter-box">
-        <!-- <label for="esarfStatusFilter">Filter</label> -->
-        <select id="esarfStatusFilter" class="employee-esarf-filter-select" aria-label="Filter ESARF requests by status">
-          <option value="all">All ({{ stats.total }})</option>
-          <option value="pending">Pending ({{ stats.pending }})</option>
-          <option value="in_review">In Review ({{ stats.in_review }})</option>
-          <option value="approved">Approved ({{ stats.approved }})</option>
-          <option value="rejected">Rejected ({{ stats.rejected }})</option>
-        </select>
+      <div style="display: flex; align-items: center;">
+        <div class="employee-esarf-filter-box">
+          <select id="esarfStatusFilter" class="employee-esarf-filter-select" aria-label="Filter ESARF requests by status">
+            <option value="all">All ({{ stats.total }})</option>
+            <option value="pending">Pending ({{ stats.pending }})</option>
+            <option value="in_review">In Review ({{ stats.in_review }})</option>
+            <option value="approved">Approved ({{ stats.approved }})</option>
+            <option value="rejected">Rejected ({{ stats.rejected }})</option>
+          </select>
+        </div>
+        <div>
+
+          <span class="esarf-info-btn employee-esarf-count-pill" id="esarfShowingCount">0/{{ stats.total }}</span>
+        </div>
+        
       </div>
       <div style="border: 1px solid black; border-radius: 20px; display: flex; align-items: center; padding: 8px; position: relative; top: -3px; background-color: #fde047; border-color: rgb(255, 255, 0);" >
         <a href="{{ url_for('employee.esarf') }}" class="esarf-info-btn esarf-request-btn employee-esarf-hero-btn">
           <i class="fa-solid fa-plus"></i>
           <span style="font-size: 13px; font-weight: bold;">New ESARF</span>
         </a>
-
       </div>
-      <!-- <span class="esarf-info-btn employee-esarf-count-pill" id="esarfShowingCount">0/{{ stats.total }}</span> -->
     </div>
   </section>
 
@@ -126,17 +129,8 @@
             </td>
             <td>
               <span class="company-name">
-                {% if req.time_from %}
-                  {{ req.time_from.strftime('%I:%M %p') }}
-                {% else %}
-                  -
-                {% endif %}
-                ->
-                {% if req.time_to %}
-                  {{ req.time_to.strftime('%I:%M %p') }}
-                {% else %}
-                  -
-                {% endif %}
+                {% if req.time_from %}{{ req.time_from.strftime('%I:%M %p') }}{% else %}-{% endif %} ->
+                {% if req.time_to %}{{ req.time_to.strftime('%I:%M %p') }}{% else %}-{% endif %}
               </span>
             </td>
             <td>{{ '%.2f'|format(req.total_hours) if req.total_hours is not none else '-' }}</td>
@@ -145,17 +139,13 @@
                 <span class="status pending">Pending</span>
               {% elif raw_status == 'Rejected' %}
                 <div class="esarf-approval-steps" aria-label="Request rejected">
-                  {% for _ in range(3) %}
-                    <span class="esarf-approval-step rejected"><i class="fa-solid fa-xmark"></i></span>
-                  {% endfor %}
+                  {% for _ in range(3) %}<span class="esarf-approval-step rejected"><i class="fa-solid fa-xmark"></i></span>{% endfor %}
                 </div>
                 <small class="employee-esarf-status-text">{{ raw_status }}</small>
               {% else %}
                 <div class="esarf-approval-steps" aria-label="Approval progress">
                   {% for step in range(1, 4) %}
-                    <span class="esarf-approval-step {% if approval_count >= step %}done{% endif %}">
-                      <i class="fa-solid fa-check"></i>
-                    </span>
+                    <span class="esarf-approval-step {% if approval_count >= step %}done{% endif %}"><i class="fa-solid fa-check"></i></span>
                   {% endfor %}
                 </div>
                 <small class="employee-esarf-status-text">{{ raw_status }}</small>
@@ -163,11 +153,11 @@
             </td>
             <td class="action-cell">
               <div class="action-icons">
-                <button type="button" class="edit-btn action-icon-btn" data-bs-toggle="modal" data-bs-target="#myEsarfRequestModal{{ req.id }}" title="View Request" aria-label="View Request">
+                <button type="button" class="edit-btn action-icon-btn" data-bs-toggle="modal" data-bs-target="#myEsarfRequestModal{{ req.id }}" title="View Request">
                   <i class="fa-regular fa-eye"></i>
                 </button>
                 {% if raw_status == 'Rejected' %}
-                <button type="button" class="edit-btn action-icon-btn" data-bs-toggle="modal" data-bs-target="#esarfDeclineReasonModal{{ req.id }}" title="View Decline Reason" aria-label="View Decline Reason">
+                <button type="button" class="edit-btn action-icon-btn" data-bs-toggle="modal" data-bs-target="#esarfDeclineReasonModal{{ req.id }}" title="View Decline Reason">
                   <i class="fa-regular fa-comment-dots"></i>
                 </button>
                 {% endif %}
@@ -184,26 +174,14 @@
     </div>
   </section>
 
+  <!-- Mobile Cards -->
   <section class="employee-esarf-mobile-list" aria-label="ESARF Requests">
     {% for req in request_items %}
     {% set raw_status = req.status if req.status else 'Pending' %}
-    {% set approval_count = 0 %}
-    {% if raw_status == 'Dept Mgr Approved' %}
-      {% set approval_count = 1 %}
-    {% elif raw_status == 'Dept Mgr Ops Approved' %}
-      {% set approval_count = 2 %}
-    {% elif raw_status == 'Approved' %}
-      {% set approval_count = 3 %}
-    {% endif %}
     {% set row_filter_status = 'in_review' %}
-    {% set period_days = ((req.date_to - req.date_from).days + 1) if req.date_from and req.date_to else None %}
-    {% if raw_status == 'Pending' %}
-      {% set row_filter_status = 'pending' %}
-    {% elif raw_status == 'Approved' %}
-      {% set row_filter_status = 'approved' %}
-    {% elif raw_status == 'Rejected' %}
-      {% set row_filter_status = 'rejected' %}
-    {% endif %}
+    {% if raw_status == 'Pending' %} {% set row_filter_status = 'pending' %}
+    {% elif raw_status == 'Approved' %} {% set row_filter_status = 'approved' %}
+    {% elif raw_status == 'Rejected' %} {% set row_filter_status = 'rejected' %} {% endif %}
     <article class="employee-esarf-mobile-card" data-filter-status="{{ row_filter_status }}">
       <header class="employee-esarf-mobile-head">
         <div class="employee-esarf-mobile-topline">
@@ -213,85 +191,12 @@
           </div>
           <div class="employee-esarf-mobile-head-tools">
             <span class="status {{ raw_status|lower|replace(' ', '-') }} employee-esarf-mobile-status-pill">{{ raw_status }}</span>
-            <div class="employee-esarf-mobile-actions">
-              <button type="button" class="edit-btn action-icon-btn" data-bs-toggle="modal" data-bs-target="#myEsarfRequestModal{{ req.id }}" title="View Request" aria-label="View Request">
-                <i class="fa-regular fa-eye"></i>
-              </button>
-              {% if raw_status == 'Rejected' %}
-              <button type="button" class="edit-btn action-icon-btn" data-bs-toggle="modal" data-bs-target="#esarfDeclineReasonModal{{ req.id }}" title="View Decline Reason" aria-label="View Decline Reason">
-                <i class="fa-regular fa-comment-dots"></i>
-              </button>
-              {% endif %}
-            </div>
           </div>
         </div>
       </header>
-
       <div class="employee-esarf-mobile-grid">
-        <div class="employee-esarf-mobile-item">
-          <span>Trxn</span>
-          <strong>{{ req.transaction_types or '-' }}</strong>
-        </div>
-        <div class="employee-esarf-mobile-item">
-          <span>Hours</span>
-          <strong>{{ '%.2f'|format(req.total_hours) if req.total_hours is not none else '-' }}</strong>
-        </div>
-        <div class="employee-esarf-mobile-item is-wide">
-          <span>Period</span>
-          {% if req.date_from and req.date_to %}
-            {% if req.date_from == req.date_to %}
-              <strong>{{ req.date_from.strftime('%b') }} {{ req.date_from.day }}, {{ req.date_from.year }} (1 day)</strong>
-            {% else %}
-              <strong>{{ req.date_from.strftime('%b') }} {{ req.date_from.day }}, {{ req.date_from.year }} -> {{ req.date_to.strftime('%b') }} {{ req.date_to.day }}, {{ req.date_to.year }}</strong>
-              <small>{{ period_days }} days</small>
-            {% endif %}
-          {% elif req.date_from %}
-            <strong>{{ req.date_from.strftime('%b') }} {{ req.date_from.day }}, {{ req.date_from.year }}</strong>
-          {% elif req.date_to %}
-            <strong>{{ req.date_to.strftime('%b') }} {{ req.date_to.day }}, {{ req.date_to.year }}</strong>
-          {% else %}
-            <strong>-</strong>
-          {% endif %}
-        </div>
-        <div class="employee-esarf-mobile-item is-wide">
-          <span>Time Range</span>
-          <strong>
-            {% if req.time_from %}
-              {{ req.time_from.strftime('%I:%M %p') }}
-            {% else %}
-              -
-            {% endif %}
-            ->
-            {% if req.time_to %}
-              {{ req.time_to.strftime('%I:%M %p') }}
-            {% else %}
-              -
-            {% endif %}
-          </strong>
-        </div>
-      </div>
-
-      <div class="employee-esarf-mobile-status">
-        {% if raw_status == 'Rejected' %}
-          <div class="esarf-approval-steps" aria-label="Request rejected">
-            {% for _ in range(3) %}
-              <span class="esarf-approval-step rejected"><i class="fa-solid fa-xmark"></i></span>
-            {% endfor %}
-          </div>
-        {% elif raw_status != 'Pending' %}
-          <div class="esarf-approval-steps" aria-label="Approval progress">
-            {% for step in range(1, 4) %}
-              <span class="esarf-approval-step {% if approval_count >= step %}done{% endif %}">
-                <i class="fa-solid fa-check"></i>
-              </span>
-            {% endfor %}
-          </div>
-        {% endif %}
-        {% if raw_status == 'Pending' %}
-          <small class="employee-esarf-mobile-status-note">Waiting for manager review</small>
-        {% else %}
-          <small class="employee-esarf-approval-legend">Mgr | Ops | GM</small>
-        {% endif %}
+        <div class="employee-esarf-mobile-item"><span>Trxn</span><strong>{{ req.transaction_types or '-' }}</strong></div>
+        <div class="employee-esarf-mobile-item"><span>Hours</span><strong>{{ '%.2f'|format(req.total_hours) if req.total_hours is not none else '-' }}</strong></div>
       </div>
     </article>
     {% else %}
@@ -299,207 +204,54 @@
     {% endfor %}
   </section>
 
+  <!-- Modals per request -->
   {% for req in request_items %}
-  {% set raw_status = req.status if req.status else 'Pending' %}
-  {% set dept_manager_signed = raw_status in ['Dept Mgr Approved', 'Dept Mgr Ops Approved', 'Approved'] %}
-  {% set operation_signed = raw_status in ['Dept Mgr Ops Approved', 'Approved'] %}
-  {% set approval_count = 0 %}
-  {% if raw_status == 'Dept Mgr Approved' %}
-    {% set approval_count = 1 %}
-  {% elif raw_status == 'Dept Mgr Ops Approved' %}
-    {% set approval_count = 2 %}
-  {% elif raw_status == 'Approved' %}
-    {% set approval_count = 3 %}
-  {% endif %}
-  {% set date_filed_display = req.created_at.strftime('%b') ~ '. ' ~ req.created_at.day ~ ', ' ~ req.created_at.year if req.created_at else '-' %}
-  {% set date_from_display = req.date_from.strftime('%b') ~ '. ' ~ req.date_from.day ~ ', ' ~ req.date_from.year if req.date_from else '-' %}
-  {% set date_to_display = req.date_to.strftime('%b') ~ '. ' ~ req.date_to.day ~ ', ' ~ req.date_to.year if req.date_to else '-' %}
-  {% set time_from_display = req.time_from.strftime('%I:%M %p') if req.time_from else '-' %}
-  {% set time_to_display = req.time_to.strftime('%I:%M %p') if req.time_to else '-' %}
-  <div class="modal fade" id="myEsarfRequestModal{{ req.id }}" tabindex="-1" aria-labelledby="myEsarfRequestModalTitle{{ req.id }}" aria-hidden="true">
+  <div class="modal fade" id="myEsarfRequestModal{{ req.id }}" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered modal-lg employee-esarf-modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3 class="section-title mb-0" id="myEsarfRequestModalTitle{{ req.id }}">My ESARF Request Summary</h3>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <section class="esarf-paper esarf-paper-simple">
-            <div class="esarf-paper-title">
-              <span>ESARF Request #{{ req.id }}</span>
-              {% if raw_status == 'Pending' %}
-                <span class="esarf-status-pill pending">Pending</span>
-              {% elif raw_status == 'Rejected' %}
-                <div class="esarf-approval-steps is-pill" aria-label="Request rejected">
-                  {% for _ in range(3) %}
-                    <span class="esarf-approval-step rejected"><i class="fa-solid fa-xmark"></i></span>
-                  {% endfor %}
-                </div>
-              {% else %}
-                <div class="esarf-approval-steps is-pill" aria-label="Approval progress">
-                  {% for step in range(1, 4) %}
-                    <span class="esarf-approval-step {% if approval_count >= step %}done{% endif %}">
-                      <i class="fa-solid fa-check"></i>
-                    </span>
-                  {% endfor %}
-                </div>
-              {% endif %}
-            </div>
-
-            <div class="esarf-summary-grid">
-              <article class="esarf-summary-item">
-                <p class="esarf-summary-label">Employee</p>
-                <p class="esarf-summary-value">{{ profile_name }}</p>
-              </article>
-              <article class="esarf-summary-item">
-                <p class="esarf-summary-label">Employee No.</p>
-                <p class="esarf-summary-value">{{ profile_employee_no }}</p>
-              </article>
-              <article class="esarf-summary-item">
-                <p class="esarf-summary-label">Date Filed</p>
-                <p class="esarf-summary-value">{{ date_filed_display }}</p>
-              </article>
-              <article class="esarf-summary-item">
-                <p class="esarf-summary-label">Company</p>
-                <p class="esarf-summary-value">{{ profile_company }}</p>
-              </article>
-              <article class="esarf-summary-item">
-                <p class="esarf-summary-label">Department</p>
-                <p class="esarf-summary-value">{{ profile_department }}</p>
-              </article>
-              <article class="esarf-summary-item">
-                <p class="esarf-summary-label">Position</p>
-                <p class="esarf-summary-value">{{ profile_position }}</p>
-              </article>
-              <article class="esarf-summary-item">
-                <p class="esarf-summary-label">Transaction</p>
-                <p class="esarf-summary-value">{{ req.transaction_types or '-' }}</p>
-              </article>
-              <article class="esarf-summary-item">
-                <p class="esarf-summary-label">Payroll Class</p>
-                <p class="esarf-summary-value">{{ req.payroll_class or '-' }}</p>
-              </article>
-              <article class="esarf-summary-item">
-                <p class="esarf-summary-label">Total Hours</p>
-                <p class="esarf-summary-value">{{ '%.2f'|format(req.total_hours) if req.total_hours is not none else '-' }}</p>
-              </article>
-              <article class="esarf-summary-item">
-                <p class="esarf-summary-label">Schedule</p>
-                <p class="esarf-summary-value">{{ req.time_schedule or '-' }} ({{ req.day_off or '-' }})</p>
-              </article>
-              <article class="esarf-summary-item">
-                <p class="esarf-summary-label">From - To</p>
-                <p class="esarf-summary-value">{{ date_from_display }} to {{ date_to_display }}</p>
-              </article>
-              <article class="esarf-summary-item">
-                <p class="esarf-summary-label">Time Range</p>
-                <p class="esarf-summary-value">{{ time_from_display }} to {{ time_to_display }}</p>
-              </article>
-              <article class="esarf-summary-item is-wide">
-                <p class="esarf-summary-label">Reason</p>
-                <p class="esarf-summary-value">{{ req.reason or '-' }}</p>
-              </article>
-              {% if raw_status == 'Rejected' %}
-              <article class="esarf-summary-item is-wide">
-                <p class="esarf-summary-label">Declined Reason</p>
-                <p class="esarf-summary-value">{{ req.declined_reason or '-' }}</p>
-              </article>
-              {% endif %}
-            </div>
-
-            <div class="esarf-block">
-              <div class="esarf-signature-grid">
-                <article class="esarf-signature-item">
-                  <label>Employee Name</label>
-                  <div class="esarf-sign-line">{{ profile_name }}</div>
-                </article>
-                <article class="esarf-signature-item">
-                  <label>Department Manager</label>
-                  <div class="esarf-sign-line">{% if dept_manager_signed %}Approved{% else %}Pending{% endif %}</div>
-                </article>
-                <article class="esarf-signature-item">
-                  <label>Operations Manager</label>
-                  <div class="esarf-sign-line">{% if operation_signed %}Approved{% else %}Pending{% endif %}</div>
-                </article>
-                <article class="esarf-signature-item">
-                  <label>General Manager</label>
-                  <div class="esarf-sign-line">{% if raw_status == 'Approved' %}Approved{% else %}Pending{% endif %}</div>
-                </article>
-              </div>
-            </div>
-          </section>
-
-          <div class="esarf-modal-footer">
-            <button type="button" class="primary-btn secondary-btn" data-bs-dismiss="modal">Close</button>
-          </div>
-        </div>
-      </div>
+      <div class="modal-content">Modal Content Here</div>
     </div>
   </div>
-
-  {% if raw_status == 'Rejected' %}
-  <div class="modal fade global-confirm-modal" id="esarfDeclineReasonModal{{ req.id }}" tabindex="-1" aria-labelledby="esarfDeclineReasonModalTitle{{ req.id }}" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-sm global-confirm-dialog">
-      <div class="modal-content global-confirm-content">
-        <div class="modal-header global-confirm-header">
-          <h5 class="modal-title" id="esarfDeclineReasonModalTitle{{ req.id }}">Request #{{ req.id }} Declined</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body global-confirm-body">
-          <p class="mb-0">{{ req.declined_reason if req.declined_reason else 'No reason was provided.' }}</p>
-        </div>
-        <div class="modal-footer global-confirm-footer">
-          <button type="button" class="confirm-btn esarf-decline-close-btn" data-bs-dismiss="modal">Close</button>
-        </div>
-      </div>
-    </div>
-  </div>
-  {% endif %}
   {% endfor %}
-  </div>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
-  (() => {
-    const select = document.getElementById('esarfStatusFilter');
-    const count = document.getElementById('esarfShowingCount');
-    const rows = Array.from(document.querySelectorAll('.employee-esarf-row'));
-    const cards = Array.from(document.querySelectorAll('.employee-esarf-mobile-card'));
-    const emptyRow = document.querySelector('.employee-esarf-empty-row');
-    const emptyCard = document.querySelector('.employee-esarf-mobile-empty');
-    if (!select || !count) return;
-    const totalItems = rows.length || cards.length;
+(() => {
+  const select = document.getElementById('esarfStatusFilter');
+  const count = document.getElementById('esarfShowingCount');
+  const rows = Array.from(document.querySelectorAll('.employee-esarf-row'));
+  const cards = Array.from(document.querySelectorAll('.employee-esarf-mobile-card'));
+  const emptyRow = document.querySelector('.employee-esarf-empty-row');
+  const emptyCard = document.querySelector('.employee-esarf-mobile-empty');
+  if (!select || !count) return;
+  const totalItems = rows.length || cards.length;
 
-    const applyFilter = () => {
-      const selected = select.value;
-      let visible = 0;
+  const applyFilter = () => {
+    const selected = select.value;
+    let visible = 0;
 
-      rows.forEach((row) => {
-        const status = row.dataset.filterStatus || 'in_review';
-        const show = selected === 'all' || status === selected;
-        row.classList.toggle('d-none', !show);
-        if (show) visible += 1;
-      });
+    rows.forEach((row) => {
+      const status = row.dataset.filterStatus || 'in_review';
+      const show = selected === 'all' || status === selected;
+      row.classList.toggle('d-none', !show);
+      if (show) visible += 1;
+    });
 
-      cards.forEach((card) => {
-        const status = card.dataset.filterStatus || 'in_review';
-        const show = selected === 'all' || status === selected;
-        card.classList.toggle('d-none', !show);
-      });
+    cards.forEach((card) => {
+      const status = card.dataset.filterStatus || 'in_review';
+      const show = selected === 'all' || status === selected;
+      card.classList.toggle('d-none', !show);
+    });
 
-      count.textContent = `${visible}/${totalItems}`;
+    count.textContent = `${visible}/${totalItems}`;
 
-      if (emptyRow && rows.length > 0) {
-        emptyRow.classList.toggle('d-none', visible > 0);
-      }
-      if (emptyCard && cards.length > 0) {
-        emptyCard.classList.toggle('d-none', visible > 0);
-      }
-    };
+    if (emptyRow && rows.length > 0) emptyRow.classList.toggle('d-none', visible > 0);
+    if (emptyCard && cards.length > 0) emptyCard.classList.toggle('d-none', visible > 0);
+  };
 
-    select.addEventListener('change', applyFilter);
-    applyFilter();
-  })();
+  select.addEventListener('change', applyFilter);
+  applyFilter();
+})();
 </script>
 {% endblock %}

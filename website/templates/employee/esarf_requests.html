@@ -264,13 +264,12 @@
 <script>
 (() => {
   const select = document.getElementById('esarfStatusFilter');
-  const count = document.getElementById('esarfShowingCount');
   const rows = Array.from(document.querySelectorAll('.employee-esarf-row'));
   const cards = Array.from(document.querySelectorAll('.employee-esarf-mobile-card'));
   const emptyRow = document.querySelector('.employee-esarf-empty-row');
   const emptyCard = document.querySelector('.employee-esarf-mobile-empty');
-  if (!select || !count) return;
-  const totalItems = rows.length || cards.length;
+
+  if (!select) return;
 
   const applyFilter = () => {
     const selected = select.value;
@@ -279,23 +278,30 @@
     rows.forEach((row) => {
       const status = row.dataset.filterStatus || 'in_review';
       const show = selected === 'all' || status === selected;
-      row.classList.toggle('d-none', !show);
-      if (show) visible += 1;
+
+      row.style.display = show ? '' : 'none';
+
+      if (show) visible++;
     });
 
     cards.forEach((card) => {
       const status = card.dataset.filterStatus || 'in_review';
       const show = selected === 'all' || status === selected;
-      card.classList.toggle('d-none', !show);
+
+      card.style.display = show ? '' : 'none';
     });
 
-    count.textContent = `${visible}/${totalItems}`;
+    if (emptyRow && rows.length > 0) {
+      emptyRow.style.display = visible > 0 ? 'none' : '';
+    }
 
-    if (emptyRow && rows.length > 0) emptyRow.classList.toggle('d-none', visible > 0);
-    if (emptyCard && cards.length > 0) emptyCard.classList.toggle('d-none', visible > 0);
+    if (emptyCard && cards.length > 0) {
+      emptyCard.style.display = visible > 0 ? 'none' : '';
+    }
   };
 
   select.addEventListener('change', applyFilter);
+
   applyFilter();
 })();
 </script>

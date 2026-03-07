@@ -4,134 +4,173 @@
 {% block page_content %}
 
 <style>
-
 /* PAGE */
-.text-page{
-  max-width:1000px;
-  margin:auto;
-  padding:20px;
+.text-page {
+  max-width: 1000px;
+  margin: auto;
+  padding: 20px;
+  font-family: 'Inter', sans-serif;
 }
 
 /* FOUNDER CARD */
-.founder{
-  display:flex;
-  gap:24px;
-  align-items:center;
-  padding:24px;
+.founder {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  padding: 24px;
+  border-radius: 12px;
+  background: #f8fafc;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  transition: transform 0.3s, box-shadow 0.3s;
 }
 
-.founder img{
-  width:180px;
-  height:180px;
-  object-fit:cover;
-  border-radius:14px;
+.founder:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 20px rgba(0,0,0,0.08);
+}
+
+.founder img {
+  width: 180px;
+  height: 180px;
+  object-fit: cover;
+  border-radius: 14px;
 }
 
 /* TEXT */
-.founder-title{
-  font-size:2rem;
-  font-weight:900;
-  letter-spacing:-0.03em;
+.founder-title {
+  font-size: 2rem;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  margin-top: 8px;
 }
 
-.founder-role{
-  margin-top:4px;
-  color:#64748b;
+.founder-role {
+  margin-top: 4px;
+  color: #64748b;
+  font-weight: 500;
 }
 
-.founder-description{
-  margin-top:12px;
-  color:#334155;
-  line-height:1.6;
+.founder-description {
+  margin-top: 12px;
+  color: #334155;
+  line-height: 1.6;
 }
 
 /* PILL */
-.pill{
-  padding:4px 10px;
-  border-radius:20px;
-  font-size:12px;
-  font-weight:600;
+.pill {
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-block;
 }
 
-.pill.warn{
-  background:#fde68a;
-  color:#92400e;
+.pill.warn {
+  background: #fde68a;
+  color: #92400e;
 }
 
 /* QUOTE */
-.quote{
-  margin:28px 0;
-  padding:18px 20px;
-  border-left:4px solid #2563eb;
-  background:#f8fafc;
-  font-style:italic;
-  color:#334155;
+.quote {
+  margin: 28px 0;
+  padding: 18px 20px;
+  border-left: 4px solid #2563eb;
+  background: #f8fafc;
+  font-style: italic;
+  color: #334155;
+  border-radius: 6px;
 }
 
 /* MILESTONES */
-.milestones{
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
-  gap:16px;
+.milestones {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-top: 20px;
 }
 
-.milestone{
-  padding:18px;
-  border-radius:10px;
-  background:#ffffff;
-  border:1px solid #e2e8f0;
+.milestone {
+  padding: 18px;
+  border-radius: 10px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  text-align: center;
+  transition: transform 0.3s, box-shadow 0.3s;
 }
 
-.milestone strong{
-  font-size:20px;
+.milestone:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 16px rgba(0,0,0,0.06);
 }
 
-.milestone p{
-  margin-top:6px;
-  color:#64748b;
+.milestone strong {
+  font-size: 20px;
+  display: block;
+}
+
+.milestone p {
+  margin-top: 6px;
+  color: #64748b;
+}
+
+/* CTA BUTTON */
+.cta-btn {
+  display: inline-block;
+  margin-top: 16px;
+  padding: 10px 18px;
+  background: #2563eb;
+  color: #fff;
+  font-weight: 600;
+  border-radius: 8px;
+  text-decoration: none;
+  transition: background 0.3s;
+}
+
+.cta-btn:hover {
+  background: #1e40af;
 }
 
 /* MOBILE */
 @media (max-width:768px){
-
-  .founder{
-    flex-direction:column;
-    text-align:center;
+  .founder {
+    flex-direction: column;
+    text-align: center;
   }
 
-  .founder img{
-    width:140px;
-    height:140px;
+  .founder img {
+    width: 140px;
+    height: 140px;
   }
 
+  /* Milestones: 2 per row */
+  .milestones {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  .quote {
+    font-size: 0.95rem;
+  }
 }
-
 </style>
 
 <section class="text-page">
 
   <div class="card founder">
-
     <img src="https://picsum.photos/seed/founder-julian/500/500" alt="Julian Thorne">
 
     <div>
-
       <div class="pill warn">The Visionary</div>
-
       <h1 class="founder-title">Julian Thorne</h1>
-
-      <p class="founder-role">
-        Founder & CEO, HYG Company
-      </p>
-
+      <p class="founder-role">Founder & CEO, HYG Company</p>
       <p class="founder-description">
         With 20+ years in distributed systems and behavioral economics,
         Julian founded HYG to bridge the gap between human intuition
         and machine precision.
       </p>
 
+      <a href="#" class="cta-btn">Read Full Story</a>
     </div>
-
   </div>
 
   <div class="quote">
@@ -139,22 +178,18 @@
   </div>
 
   <div class="milestones">
-
     <article class="milestone">
       <strong>2010</strong>
       <p>Founded HYG in San Francisco.</p>
     </article>
-
     <article class="milestone">
       <strong>2015</strong>
       <p>Reached 1 million monthly active users.</p>
     </article>
-
     <article class="milestone">
       <strong>2023</strong>
       <p>Named Tech Visionary of the Year.</p>
     </article>
-
   </div>
 
 </section>

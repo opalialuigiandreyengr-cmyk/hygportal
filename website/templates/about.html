@@ -4,74 +4,184 @@
 {% block page_content %}
 
 <style>
-
 /* PAGE */
-.text-page{
-  max-width:1000px;
-  margin:auto;
-  padding:20px;
+.text-page {
+  max-width: 1000px;
+  margin: auto;
+  padding: 20px;
+  font-family: 'Inter', sans-serif;
 }
 
 /* HERO */
-.hero-block{
-  text-align:center;
-  padding:20px 10px;
+.hero-block {
+  text-align: center;
+  padding: 30px 10px;
 }
 
-.hero-block h1{
-  font-size:2rem;
-  font-weight:900;
-  letter-spacing:-0.03em;
+.hero-block h1 {
+  font-size: 2rem;
+  font-weight: 900;
+  letter-spacing: -0.03em;
 }
 
-.hero-block p{
-  margin-top:6px;
-  color:#64748b;
-  max-width:600px;
-  margin-left:auto;
-  margin-right:auto;
+.hero-block p {
+  margin-top: 8px;
+  color: #64748b;
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 /* GRID */
-.split-2{
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(250px,1fr));
-  gap:16px;
-  margin-top:16px;
+.split-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
 }
 
-/* CARD TEXT */
-.card p{
-  color:#64748b;
-  line-height:1.6;
+.card {
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 20px;
+  border: 1px solid #e2e8f0;
+  transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 20px rgba(0,0,0,0.08);
+}
+
+.card p {
+  color: #64748b;
+  line-height: 1.6;
 }
 
 /* CALLOUT */
-.callout{
-  margin-top:18px;
-  padding:18px;
-  border-radius:10px;
-  background:#f8fafc;
-  border:1px solid #e2e8f0;
+.callout {
+  margin-top: 18px;
+  padding: 18px;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
 }
 
-.callout ul{
-  margin:0;
-  padding-left:18px;
-  display:grid;
-  gap:6px;
-  color:#334155;
+.callout ul {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  color: #334155;
 }
 
-/* MOBILE */
-@media (max-width:768px){
+/* TEAM */
+.team-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
 
-  .hero-block h1{
-    font-size:1.6rem;
+.team-member {
+  text-align: center;
+  padding: 10px;
+  border-radius: 10px;
+  background: #f8fafc;
+  transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.team-member:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 16px rgba(0,0,0,0.08);
+}
+
+.team-member img {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-bottom: 8px;
+}
+
+/* FAQ Accordion */
+.faq-item {
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.faq-question {
+  cursor: pointer;
+  padding: 12px;
+  font-weight: 600;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.faq-answer {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+  padding: 0 12px;
+  color: #64748b;
+}
+
+/* STATS COUNTER */
+.stats {
+  display: flex;
+  justify-content: space-around;
+  margin-top: 30px;
+  flex-wrap: wrap;
+  gap: 20px;
+  text-align: center;
+}
+
+.stat {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #1e3a8a;
+}
+
+/* MOBILE IMPROVEMENTS */
+@media (max-width: 768px) {
+  .hero-block h1 {
+    font-size: 1.6rem;
   }
 
-}
+  /* Show 2 columns for split-2 cards */
+  .split-2 {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
 
+  /* Stats side by side */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    text-align: center;
+  }
+
+  /* Team grid: 2 per row */
+  .team-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  /* Reduce padding for mobile cards */
+  .card, .team-member, .callout {
+    padding: 12px;
+  }
+
+  /* FAQ padding adjustment */
+  .faq-question {
+    padding: 8px;
+  }
+
+  .faq-answer {
+    padding: 0 8px;
+  }
+}
 </style>
 
 <section class="text-page">
@@ -85,7 +195,6 @@
   </div>
 
   <div class="split-2">
-
     <article class="card">
       <h2 class="section-title">Our Vision</h2>
       <p>
@@ -101,12 +210,10 @@
         development and user-centric design.
       </p>
     </article>
-
   </div>
 
   <div class="callout">
     <h2 class="section-title">Company Values</h2>
-
     <ul>
       <li>Radical Transparency</li>
       <li>User First</li>
@@ -115,6 +222,95 @@
     </ul>
   </div>
 
+  <!-- TEAM SECTION -->
+  <h2 class="section-title" style="margin-top: 30px;">Meet Our Team</h2>
+  <div class="team-grid">
+    <div class="team-member">
+      <img src="{{ url_for('static', filename='images/team1.jpg') }}" alt="CEO">
+      <p><strong>Jane Doe</strong></p>
+      <p>CEO</p>
+    </div>
+    <div class="team-member">
+      <img src="{{ url_for('static', filename='images/team2.jpg') }}" alt="CTO">
+      <p><strong>John Smith</strong></p>
+      <p>CTO</p>
+    </div>
+    <div class="team-member">
+      <img src="{{ url_for('static', filename='images/team3.jpg') }}" alt="Head of Design">
+      <p><strong>Mary Lee</strong></p>
+      <p>Head of Design</p>
+    </div>
+        <div class="team-member">
+      <img src="{{ url_for('static', filename='images/team3.jpg') }}" alt="Head of Design">
+      <p><strong>Mary Lee</strong></p>
+      <p>Head of Design</p>
+    </div>
+  </div>
+
+  <!-- STATS SECTION -->
+  <div class="stats">
+    <div>
+      <div class="stat" data-target="500">0+</div>
+      <p>Projects Completed</p>
+    </div>
+    <div>
+      <div class="stat" data-target="150">0+</div>
+      <p>Employees Worldwide</p>
+    </div>
+    <div>
+      <div class="stat" data-target="10">0+</div>
+      <p>Years of Innovation</p>
+    </div>
+  </div>
+
+  <!-- FAQ SECTION -->
+  <h2 class="section-title" style="margin-top: 30px;">Frequently Asked Questions</h2>
+  <div class="faq-item">
+    <div class="faq-question">What services does HYG provide? <span>+</span></div>
+    <div class="faq-answer">
+      <p>We provide AI-powered solutions, web development, and digital infrastructure services tailored for enterprises.</p>
+    </div>
+  </div>
+  <div class="faq-item">
+    <div class="faq-question">Where is HYG located? <span>+</span></div>
+    <div class="faq-answer">
+      <p>HYG operates globally with offices in Asia, Europe, and North America.</p>
+    </div>
+  </div>
+
 </section>
+
+<script>
+// FAQ toggle
+document.querySelectorAll('.faq-question').forEach(item => {
+  item.addEventListener('click', () => {
+    const answer = item.nextElementSibling;
+    if(answer.style.maxHeight){
+      answer.style.maxHeight = null;
+      item.querySelector('span').textContent = '+';
+    } else {
+      answer.style.maxHeight = answer.scrollHeight + 'px';
+      item.querySelector('span').textContent = '-';
+    }
+  });
+});
+
+// Stats counter animation
+const counters = document.querySelectorAll('.stat');
+counters.forEach(counter => {
+  const updateCount = () => {
+    const target = +counter.getAttribute('data-target');
+    const count = +counter.innerText;
+    const increment = target / 100;
+    if(count < target){
+      counter.innerText = Math.ceil(count + increment);
+      setTimeout(updateCount, 20);
+    } else {
+      counter.innerText = target;
+    }
+  }
+  updateCount();
+});
+</script>
 
 {% endblock %}

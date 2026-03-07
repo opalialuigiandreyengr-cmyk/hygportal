@@ -88,7 +88,7 @@
           <tr class="employee-esarf-row" data-filter-status="{{ row_filter_status }}">
             <td>
               <div class="company-meta">
-                <strong class="company-name-text">#{{ req.id }}</strong>
+                <strong class="company-name-text" style="font-size: 12px;">#{{ req.id }}</strong>
                 <small class="company-subtext">{{ req.created_at.strftime('%m-%d-%Y') if req.created_at else '-' }}</small>
               </div>
             </td>
@@ -251,7 +251,7 @@
           </section>
           <div class="esarf-modal-footer">
             <button type="button" class="primary-btn secondary-btn" data-bs-dismiss="modal">Close</button>
-          </div>
+          </div>  
         </div>
       </div>
     </div>

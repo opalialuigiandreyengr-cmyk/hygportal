@@ -1228,6 +1228,10 @@ th {
   display: none;
 }
 
+.mobile-bottom-nav {
+  display: none;
+}
+
 @media (max-width: 1060px) {
   .grid-4 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1289,6 +1293,50 @@ th {
 
   .topbar-right .date-pill {
     display: none;
+  }
+
+  .mobile-bottom-nav {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 25;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    gap: 0.2rem;
+    padding: 0.45rem 0.55rem calc(0.55rem + env(safe-area-inset-bottom));
+    background: rgba(255, 255, 255, 0.96);
+    border-top: 1px solid #dbe3ee;
+    box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.12);
+    backdrop-filter: blur(8px);
+  }
+
+  .mobile-nav-link {
+    text-decoration: none;
+    color: #475569;
+    border-radius: 10px;
+    min-height: 48px;
+    display: grid;
+    place-items: center;
+    gap: 0.2rem;
+    font-size: 0.68rem;
+    font-weight: 700;
+    line-height: 1;
+    padding: 0.3rem 0.2rem;
+  }
+
+  .mobile-nav-link i {
+    font-size: 1rem;
+  }
+
+  .mobile-nav-link.active {
+    background: #fef08a;
+    color: #111827;
+  }
+
+  .app-main {
+    padding-bottom: calc(70px + env(safe-area-inset-bottom));
   }
 }
 

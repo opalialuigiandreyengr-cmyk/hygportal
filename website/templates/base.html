@@ -1,237 +1,251 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block title %}HYG Employee Portal{% endblock %}</title>
-
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
-
-<link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
-
-<style>
-/* MOBILE BOTTOM NAV */
-.mobile-bottom-nav{
-  position:fixed;
-  bottom:0;
-  left:0;
-  right:0;
-  height:65px;
-  background:white;
-  border-top:1px solid #e6e6e6;
-  display:none;
-  justify-content:space-around;
-  align-items:center;
-  z-index:1000;
-}
-
-.mobile-bottom-nav a{
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  justify-content:center;
-  font-size:11px;
-  color:#666;
-  text-decoration:none;
-}
-
-.mobile-bottom-nav a i{
-  font-size:18px;
-  margin-bottom:3px;
-}
-
-.mobile-bottom-nav a.active{
-  color:#f1fd0d;
-}
-
-/* MOBILE VIEW */
-@media (max-width:768px){
-  .sidebar{
-    display:none;
-  }
-
-  .mobile-bottom-nav{
-    display:flex;
-  }
-
-  .page{
-    padding-bottom:80px;
-  }
-}
-
-/* DESKTOP SIDEBAR PROFILE */
-.sidebar-foot {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  display:flex;
-  align-items:center;
-  gap:10px;
-  padding:10px;
-  border-top:1px solid #e6e6e6;
-}
-.sidebar-foot img{
-  width:40px;
-  height:40px;
-  border-radius:50%;
-}
-</style>
-
-{% block extra_head %}{% endblock %}
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}HYG Employee Portal{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+  {% block extra_head %}{% endblock %}
 </head>
-
 <body>
+  {% include 'partials/toasts.html' %}
 
-{% include 'partials/toasts.html' %}
+  <div class="overlay" id="mobileOverlay"></div>
 
-{% set role = current_user.role if current_user.is_authenticated else '' %}
-{% set is_employee_user = role == 'user' %}
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-head">
+        <div class="brand">
+          <div class="brand-mark logo-image">
+            <img src="{{ url_for('static', filename='images/logos/HYG LOGO.png') }}" alt="HYG Logo" class="hyg-logo">
+          </div>
+          <strong>HYG Employee Portal</strong>
+        </div>
+        <button class="sidebar-close" id="sidebarClose" aria-label="Close sidebar">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
 
-{% set profile_employee = current_user.employee if current_user.is_authenticated and current_user.employee else None %}
-{% set profile_name = (
-    profile_employee.first_name ~
-    (' ' ~ profile_employee.middle_name[:1] ~ '.' if profile_employee.middle_name else '') ~
-    ' ' ~ profile_employee.last_name ~
-    (' ' ~ profile_employee.suffix if profile_employee.suffix else '')
-) if profile_employee else (current_user.username if current_user.is_authenticated and current_user.username else 'Guest') %}
+      {% set role = current_user.role if current_user.is_authenticated else '' %}
+      {% set is_employee_user = role == 'user' %}
+      {% set can_manage_employees = role in ['admin', 'hr'] %}
+      {% set can_manage_companies = role in ['admin', 'hr'] %}
+      {% set can_manage_users = role == 'admin' %}
+      {% set can_view_esarf_requests = role in ['admin', 'timekeeper', 'dept manager', 'operation', 'general manager'] %}
+      {% set can_view_attendance = role in ['admin', 'user'] %}
+      {% set can_view_leaves = role in ['admin', 'user'] %}
+      {% set can_view_info_pages = role in ['admin', 'user'] %}
+      <ul class="nav-list">
+        <li>
+          <a href="{% if is_employee_user %}{{ url_for('employee.employee_dashboard') }}{% else %}{{ url_for('views.home') }}{% endif %}" class="nav-link {% if request.path == '/dashboard' or request.path == '/' or request.path == '/employee/employee_dashboard' or request.path == '/employee_dashboard' %}active{% endif %}">
+            <i class="fa-solid fa-gauge-high"></i>
+            <span>Dashboard</span>
+          </a>
+        </li>
+        {% if can_manage_employees %}
+          <li>
+            <a href="{{ url_for('admin.employees') }}" class="nav-link {% if request.path == '/employees' %}active{% endif %}">
+              <i class="fa-solid fa-user-tie"></i>
+              <span>Employees</span>
+            </a>
+          </li>
+        {% endif %}
+        {% if can_manage_companies %}
+          <li>
+            <a href="{{ url_for('admin.companies') }}" class="nav-link {% if request.path == '/companies' %}active{% endif %}">
+              <i class="fa-solid fa-building"></i>
+              <span>Companies</span>
+            </a>
+          </li>
+        {% endif %}
+        {% if can_manage_users %}
+          <li>
+            <a href="{{ url_for('admin.users') }}" class="nav-link {% if request.path == '/users' %}active{% endif %}">
+              <i class="fa-solid fa-user-tie"></i>
+              <span>User Management</span>
+            </a>
+          </li>
+        {% endif %}
+        {% if can_view_esarf_requests %}
+          <li>
+            <a href="{{ url_for('admin.esarf_requests') }}" class="nav-link {% if request.path == '/esarf_requests' %}active{% endif %}">
+              <i class="fa-solid fa-file-signature"></i>
+              <span>ESARF Requests</span>
+            </a>
+          </li>
+           <li>
+            <a href="{{ url_for('admin.leave_requests') }}" class="nav-link {% if request.path == '/leave_requests' %}active{% endif %}">
+              <i class="fa-solid fa-file-signature"></i>
+              <span>Leave Requests</span>
+            </a>
+          </li>
+        {% endif %}
+        {% if can_view_attendance %}
+          <li>
+            <a href="{{ url_for('views.attendance') }}" class="nav-link {% if request.path == '/attendance' %}active{% endif %}">
+              <i class="fa-solid fa-clock"></i>
+              <span>Attendance</span>
+            </a>
+          </li>
+        {% endif %}
+        {% if can_view_leaves %}
+          <li>
+            <a href="{{ url_for('views.leaves') }}" class="nav-link {% if request.path == '/leaves' %}active{% endif %}">
+              <i class="fa-solid fa-calendar-day"></i>
+              <span>Leaves</span>
+            </a>
+          </li>
+        {% endif %}
+        {% if is_employee_user %}
+        <li>
+          <a href="{{ url_for('employee.esarf') }}" class="nav-link {% if request.path in ['/employee/esarf', '/esarf', '/employee/esarf_requests'] %}active{% endif %}">
+            <i class="fa-solid fa-file-signature"></i>
+            <span>ESARF</span>
+          </a>
+        </li>
+        {% endif %}
+        {% if can_view_info_pages %}
+          <li>
+            <a href="{{ url_for('views.about') }}" class="nav-link {% if request.path == '/about' %}active{% endif %}">
+              <i class="fa-solid fa-circle-info"></i>
+              <span>About</span>
+            </a>
+          </li>
+          <li>
+            <a href="{{ url_for('views.founder') }}" class="nav-link {% if request.path == '/founder' %}active{% endif %}">
+              <i class="fa-solid fa-crown"></i>
+              <span>Founder</span>
+            </a>
+          </li>
+        {% endif %}
+      </ul>
 
-{% set role_label_map = {
-    'admin': 'Administrator',
-    'hr': 'HR',
-    'timekeeper': 'Timekeeper',
-    'user': 'Employee',
-    'dept manager': 'Dept Manager',
-    'operation': 'Operations',
-    'general manager': 'General Manager'
-} %}
+      {% set profile_employee = current_user.employee if current_user.is_authenticated and current_user.employee else None %}
+      {% set profile_name = (
+        profile_employee.first_name ~
+        (' ' ~ profile_employee.middle_name[:1] ~ '.' if profile_employee.middle_name else '') ~
+        ' ' ~ profile_employee.last_name ~
+        (' ' ~ profile_employee.suffix if profile_employee.suffix else '')
+      ) if profile_employee else (current_user.username if current_user.is_authenticated and current_user.username else 'Guest') %}
+      {% set role_label_map = {'admin': 'Administrator', 'hr': 'HR', 'timekeeper': 'Timekeeper', 'user': 'Employee', 'dept manager': 'Dept Manager', 'operation': 'Operations', 'general manager': 'General Manager'} %}
+      {% set profile_position = profile_employee.position if profile_employee and profile_employee.position else role_label_map.get(role, 'Employee') %}
+      {% set profile_photo = url_for('static', filename=profile_employee.photopath) if profile_employee and profile_employee.photopath else 'https://picsum.photos/seed/' ~ (current_user.id if current_user.is_authenticated else 'guest') ~ '/40/40' %}
+      <div class="sidebar-foot">
+        <img src="{{ profile_photo }}" alt="{{ profile_name }}">
+        <div>
+          <div><strong>{{ profile_name|trim }}</strong></div>
+          <small>{{ profile_position }}</small>
+        </div>
+      </div>
+    </aside>
 
-{% set profile_position = profile_employee.position if profile_employee and profile_employee.position else role_label_map.get(role, 'Employee') %}
-{% set profile_photo = url_for('static', filename=profile_employee.photopath) if profile_employee and profile_employee.photopath else 'https://picsum.photos/seed/' ~ (current_user.id if current_user.is_authenticated else 'guest') ~ '/40/40' %}
+    <section class="app-main">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="menu-btn" id="menuBtn" aria-label="Toggle menu">
+            <i class="fa-solid fa-bars"></i>
+          </button>
+          <label class="search">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input type="text" placeholder="Search">
+          </label>
+        </div>
+        <div class="topbar-right">
+          <button class="icon-btn" title="Notifications"><i class="fa-regular fa-bell"></i></button>
+          <button class="icon-btn" title="Messages"><i class="fa-regular fa-comment-dots"></i></button>
+          <div class="date-pill"><i class="fa-regular fa-calendar"></i><span id="topbarDate">Today</span></div>
+        </div>
+      </header>
 
-<div class="app-shell">
-
-<!-- SIDEBAR (DESKTOP) -->
-<aside class="sidebar">
-
-<div class="sidebar-head">
-  <div class="brand">
-    <div class="brand-mark logo-image">
-      <img src="{{ url_for('static', filename='images/logos/HYG LOGO.png') }}" class="hyg-logo">
-    </div>
-    <strong>HYG Portal</strong>
+      <main class="page">
+        {% block page_content %}{% endblock %}
+      </main>
+    </section>
   </div>
-</div>
 
-<ul class="nav-list">
-  <li>
-    <a href="{% if is_employee_user %}{{ url_for('employee.employee_dashboard') }}{% else %}{{ url_for('views.home') }}{% endif %}" class="nav-link {% if request.path=='/' %}active{% endif %}">
+  <nav class="mobile-bottom-nav" aria-label="Mobile navigation">
+    <a href="{% if is_employee_user %}{{ url_for('employee.employee_dashboard') }}{% else %}{{ url_for('views.home') }}{% endif %}" class="mobile-nav-link {% if request.path == '/dashboard' or request.path == '/' or request.path == '/employee/employee_dashboard' or request.path == '/employee_dashboard' %}active{% endif %}">
       <i class="fa-solid fa-gauge-high"></i>
       <span>Dashboard</span>
     </a>
-  </li>
-  <li>
-    <a href="{{ url_for('views.attendance') }}" class="nav-link">
-      <i class="fa-solid fa-clock"></i>
-      <span>Attendance</span>
-    </a>
-  </li>
-  <li>
-    <a href="{{ url_for('views.leaves') }}" class="nav-link">
-      <i class="fa-solid fa-calendar-day"></i>
-      <span>Leaves</span>
-    </a>
-  </li>
-  {% if is_employee_user %}
-  <li>
-    <a href="{{ url_for('employee.esarf') }}" class="nav-link">
-      <i class="fa-solid fa-file-signature"></i>
-      <span>ESARF</span>
-    </a>
-  </li>
-  {% endif %}
-  <li>
-    <a href="{{ url_for('views.about') }}" class="nav-link">
-      <i class="fa-solid fa-circle-info"></i>
-      <span>About</span>
-    </a>
-  </li>
-  <li>
-    <a href="{{ url_for('auth.logout') }}" class="nav-link">
-      <i class="fa-solid fa-arrow-right-from-bracket"></i>
-      <span>Logout</span>
-    </a>
-  </li>
-</ul>
+    {% if is_employee_user %}
+      <a href="{{ url_for('views.attendance') }}" class="mobile-nav-link {% if request.path == '/attendance' %}active{% endif %}">
+        <i class="fa-solid fa-clock"></i>
+        <span>Attendance</span>
+      </a>
+      <a href="{{ url_for('views.leaves') }}" class="mobile-nav-link {% if request.path == '/leaves' %}active{% endif %}">
+        <i class="fa-solid fa-calendar-day"></i>
+        <span>Leaves</span>
+      </a>
+      <a href="{{ url_for('employee.esarf') }}" class="mobile-nav-link {% if request.path in ['/employee/esarf', '/esarf', '/employee/esarf_requests'] %}active{% endif %}">
+        <i class="fa-solid fa-file-signature"></i>
+        <span>ESARF</span>
+      </a>
+    {% elif can_manage_employees %}
+      <a href="{{ url_for('admin.employees') }}" class="mobile-nav-link {% if request.path == '/employees' %}active{% endif %}">
+        <i class="fa-solid fa-user-tie"></i>
+        <span>Employees</span>
+      </a>
+      <a href="{{ url_for('admin.esarf_requests') }}" class="mobile-nav-link {% if request.path == '/esarf_requests' %}active{% endif %}">
+        <i class="fa-solid fa-file-signature"></i>
+        <span>ESARF</span>
+      </a>
+      <a href="{{ url_for('admin.leave_requests') }}" class="mobile-nav-link {% if request.path == '/leave_requests' %}active{% endif %}">
+        <i class="fa-solid fa-calendar-day"></i>
+        <span>Leaves</span>
+      </a>
+    {% elif can_view_esarf_requests %}
+      <a href="{{ url_for('admin.esarf_requests') }}" class="mobile-nav-link {% if request.path == '/esarf_requests' %}active{% endif %}">
+        <i class="fa-solid fa-file-signature"></i>
+        <span>ESARF</span>
+      </a>
+      <a href="{{ url_for('admin.leave_requests') }}" class="mobile-nav-link {% if request.path == '/leave_requests' %}active{% endif %}">
+        <i class="fa-solid fa-calendar-day"></i>
+        <span>Leaves</span>
+      </a>
+      <a href="{{ url_for('views.about') }}" class="mobile-nav-link {% if request.path == '/about' %}active{% endif %}">
+        <i class="fa-solid fa-circle-info"></i>
+        <span>About</span>
+      </a>
+    {% endif %}
+  </nav>
 
-<!-- DESKTOP PROFILE FOOTER -->
-<div class="sidebar-foot">
-  <img src="{{ profile_photo }}" alt="{{ profile_name }}">
-  <div>
-    <div><strong>{{ profile_name|trim }}</strong></div>
-    <small>{{ profile_position }}</small>
+  <div class="modal fade global-confirm-modal" id="globalConfirmModal" tabindex="-1" aria-labelledby="globalConfirmModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm global-confirm-dialog">
+      <div class="modal-content global-confirm-content">
+        <div class="modal-header global-confirm-header">
+          <h5 class="modal-title" id="globalConfirmModalTitle">Confirm Action</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body global-confirm-body">
+          <p id="globalConfirmModalMessage" class="mb-0">Are you sure you want to continue?</p>
+          <div id="globalConfirmReasonWrap" class="global-confirm-reason d-none">
+            <label for="globalConfirmReasonInput" id="globalConfirmReasonLabel" class="form-label">Please enter reason why:</label>
+            <textarea
+              id="globalConfirmReasonInput"
+              class="form-control form-control-sm"
+              rows="3"
+              placeholder="Type reason here..."
+            ></textarea>
+            <div id="globalConfirmReasonError" class="global-confirm-reason-error d-none">Reason is required.</div>
+          </div>
+        </div>
+        <div class="modal-footer global-confirm-footer">
+          <button type="button" class="confirm-btn confirm-btn-cancel" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="confirm-btn confirm-btn-submit" id="globalConfirmModalSubmit">Confirm</button>
+        </div>
+      </div>
+    </div>
   </div>
-</div>
 
-</aside>
-
-<!-- MAIN CONTENT -->
-<section class="app-main">
-
-<header class="topbar">
-  <div class="topbar-left">
-    <img src="" alt="">
-  </div>
-  <div class="topbar-right">
-    <button class="icon-btn"><i class="fa-regular fa-bell"></i></button>
-  </div>
-</header>
-
-<main class="page">
-{% block page_content %}{% endblock %}
-</main>
-
-</section>
-
-</div>
-
-<!-- MOBILE BOTTOM NAV -->
-<nav class="mobile-bottom-nav">
-  <a href="{% if is_employee_user %}{{ url_for('employee.employee_dashboard') }}{% else %}{{ url_for('views.home') }}{% endif %}" class="{% if request.path=='/' %}active{% endif %}">
-    <i class="fa-solid fa-gauge-high"></i>
-    <span>Home</span>
-  </a>
-  <a href="{{ url_for('views.attendance') }}" class="{% if request.path=='/attendance' %}active{% endif %}">
-    <i class="fa-solid fa-clock"></i>
-    <span>Attendance</span>
-  </a>
-  <a href="{{ url_for('views.leaves') }}" class="{% if request.path=='/leaves' %}active{% endif %}">
-    <i class="fa-solid fa-calendar-day"></i>
-    <span>Leaves</span>
-  </a>
-  {% if is_employee_user %}
-  <a href="{{ url_for('employee.esarf') }}" class="{% if request.path=='/employee/esarf' %}active{% endif %}">
-    <i class="fa-solid fa-file-signature"></i>
-    <span>ESARF</span>
-  </a>
-  {% endif %}
-  <a href="{{ url_for('views.about') }}">
-    <i class="fa-solid fa-circle-info"></i>
-    <span>About</span>
-  </a>
-</nav>
-
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<script src="{{ url_for('static', filename='js/toast.js') }}"></script>
-<script src="{{ url_for('static', filename='js/app.js') }}"></script>
-{% block extra_scripts %}{% endblock %}
-
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="{{ url_for('static', filename='js/toast.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  {% block extra_scripts %}{% endblock %}
 </body>
 </html>

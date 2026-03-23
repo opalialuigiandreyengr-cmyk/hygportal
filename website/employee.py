@@ -4,7 +4,7 @@ from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from . import db
-from .models import Employee, EsarfRequest
+from .models import Employee, EsarfRequest, LeaveRequest
 
 employee = Blueprint('employee', __name__)
 
@@ -118,3 +118,39 @@ def esarf_requests():
     esarf_request_items = EsarfRequest.query.filter_by(submitted_by_user_id=current_user.id).order_by(EsarfRequest.id.desc()).all()
     
     return render_template('employee/esarf_requests.html', esarf_requests=esarf_request_items)
+
+
+@employee.route('/submit_leave', methods=['GET', 'POST'])
+def submit_leave():
+    if current_user.role != 'user':
+        return redirect(url_for('views.home'))
+
+    if request.method == "POST":
+        start_date = datetime.strptime(
+        request.form.get("start_date"), "%Y-%m-%d").date()
+        end_date = datetime.strptime(
+        request.form.get("end_date"), "%Y-%m-%d").date()
+        leave_type = request.form.get("leave_date")
+        leave_category = request.form.get("leave_category")
+        reason = request.form.get("reason")
+
+    new_leave_request = LeaveRequest(
+        submitted_by_user_id=current_user.id,
+        start_date=start_date,
+        end_date=end_date,
+        leave_type=leave_category,
+        leave_category=leave_category,
+        reason=reason,
+    )
+    db.session.add(new_leave_request)
+    db.session.commit()
+    flash(f"Leave request submitted successfull")
+    return redirect(url_for("employee.leaves"))
+
+
+@employee.route('/leaves', methods=['GET', 'POST'])
+def leaves():
+    if current_user.role != 'user':
+        return redirect(url_for('views.home'))
+
+    return render_template("leaves.html", user=current_user)

@@ -17,7 +17,7 @@ def attendance():
 
 @views.route('/leaves')
 def leaves():
-    return render_template("leaves.html")
+    return render_template("leaves.html", user=current_user)
 
 
 @views.route('/about')

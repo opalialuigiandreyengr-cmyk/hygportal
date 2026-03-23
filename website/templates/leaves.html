@@ -117,10 +117,13 @@ textarea.lm-input{
   border-radius:8px;
   cursor:pointer;
   font-size:13px;
+  text-align: center;
 }
 
 .lm-category-grid input:checked + label{
-  border-color:black;
+  background-color: black;
+  color: white;
+  
 }
 
 /* ===== BUTTON ===== */
@@ -292,7 +295,7 @@ style="display:none;margin-top:10px">
 <div class="lm-field">
 
 <label>Reason</label>
-<textarea name="reason" class="lm-input"></textarea>
+<textarea name="reason" required class="lm-input"></textarea>
 
 </div>
 

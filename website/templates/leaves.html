@@ -7,7 +7,6 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
 
 <style>
-
 /* ===== RESET ===== */
 *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
 
@@ -184,7 +183,6 @@ textarea.lm-input{
 .lm-status.pending{background:#fef3c7;color:#92400e;}
 .lm-status.approved{background:#dcfce7;color:#166534;}
 .lm-status.rejected{background:#fee2e2;color:#991b1b;}
-
 </style>
 
 {% endblock %}
@@ -371,14 +369,17 @@ const leaveDays = document.getElementById("leaveDays");
 function calculateDays(){
   if(startDate.value && endDate.value){
     const start = new Date(startDate.value);
-    const end = new Date(endDate.value);x
-    const diff = (end - start) / (1000*60*60*24) + 1;
-    leaveDays.textContent = diff > 0 ? `${diff} day${diff>1?'s':''}` : "0 days";
+    const end = new Date(endDate.value);
+    let diff = (end - start) / (1000*60*60*24) + 1;
+    if(diff < 0) diff = 0;
+    leaveDays.textContent = `${diff} day${diff !== 1 ? 's' : ''}`;
+  } else {
+    leaveDays.textContent = "0 day/s";
   }
 }
 
-startDate.addEventListener("change",calculateDays);
-endDate.addEventListener("change",calculateDays);
+startDate.addEventListener("change", calculateDays);
+endDate.addEventListener("change", calculateDays);
 
 /* ===== OTHER LEAVE INPUT ===== */
 const otherRadio = document.getElementById("otherLeaveRadio");

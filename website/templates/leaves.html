@@ -315,24 +315,16 @@ Submit Request
 <div class="lm-stat-row">
 
 <div class="lm-stat">
-<span class="lm-stat-num pending-c">
-{{ leaves | selectattr("status","equalto","pending") | list | length }}
-</span>
-<span>Pending</span>
+  <span class="lm-stat-num pending-c">{{ pending_count }}</span>
+  <span>Pending</span>
 </div>
-
 <div class="lm-stat">
-<span class="lm-stat-num approved-c">
-{{ leaves | selectattr("status","equalto","approved") | list | length }}
-</span>
-<span>Approved</span>
+  <span class="lm-stat-num approved-c">{{ approved_count }}</span>
+  <span>Approved</span>
 </div>
-
 <div class="lm-stat">
-<span class="lm-stat-num rejected-c">
-{{ leaves | selectattr("status","equalto","rejected") | list | length }}
-</span>
-<span>Rejected</span>
+  <span class="lm-stat-num rejected-c">{{ rejected_count }}</span>
+  <span>Rejected</span>
 </div>
 
 </div>
@@ -379,7 +371,7 @@ const leaveDays = document.getElementById("leaveDays");
 function calculateDays(){
   if(startDate.value && endDate.value){
     const start = new Date(startDate.value);
-    const end = new Date(endDate.value);
+    const end = new Date(endDate.value);x
     const diff = (end - start) / (1000*60*60*24) + 1;
     leaveDays.textContent = diff > 0 ? `${diff} day${diff>1?'s':''}` : "0 days";
   }

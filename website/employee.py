@@ -61,7 +61,7 @@ def esarf():
         try:
             date_from = datetime.strptime(date_from_raw, '%Y-%m-%d').date() if date_from_raw else None
             date_to = datetime.strptime(date_to_raw, '%Y-%m-%d').date() if date_to_raw else None
-            time_from = datetime.strptime(time_from_raw, '%H:%M').time() if time_from_raw else None
+            time_from = datetime.strptime(time_fromp_raw, '%H:%M').time() if time_from_raw else None
             time_to = datetime.strptime(time_to_raw, '%H:%M').time() if time_to_raw else None
             total_hours = float(total_hours_raw) if total_hours_raw else None
 
@@ -120,37 +120,70 @@ def esarf_requests():
     return render_template('employee/esarf_requests.html', esarf_requests=esarf_request_items)
 
 
-@employee.route('/submit_leave', methods=['GET', 'POST'])
+@employee.route('/submit_leave', methods=['POST'])
+@login_required
 def submit_leave():
     if current_user.role != 'user':
         return redirect(url_for('views.home'))
 
-    if request.method == "POST":
-        start_date = datetime.strptime(
-        request.form.get("start_date"), "%Y-%m-%d").date()
-        end_date = datetime.strptime(
-        request.form.get("end_date"), "%Y-%m-%d").date()
-        leave_type = request.form.get("leave_date")
+    try:
+        start_date = datetime.strptime(request.form.get("start_date"), "%Y-%m-%d").date()
+        end_date = datetime.strptime(request.form.get("end_date"), "%Y-%m-%d").date()
+        leave_type = request.form.get("leave_type")  # Fixed typo: was leave_date
         leave_category = request.form.get("leave_category")
+        other_leave = request.form.get("other_leave")
         reason = request.form.get("reason")
 
-    new_leave_request = LeaveRequest(
-        submitted_by_user_id=current_user.id,
-        start_date=start_date,
-        end_date=end_date,
-        leave_type=leave_category,
-        leave_category=leave_category,
-        reason=reason,
-    )
-    db.session.add(new_leave_request)
-    db.session.commit()
-    flash(f"Leave request submitted successfull")
+        if leave_category == "Others" and not other_leave:
+            flash("Please specify your 'Other' leave type.", category="error")
+            return redirect(url_for("employee.leaves"))
+
+        # Use the 'other_leave' value if "Others" selected
+        final_category = other_leave if leave_category == "Others" else leave_category
+
+        new_leave_request = LeaveRequest(
+            submitted_by_user_id=current_user.id,
+            start_date=start_date,
+            end_date=end_date,
+            leave_type=leave_type,
+            leave_category=final_category,
+            reason=reason,
+        )
+
+        db.session.add(new_leave_request)
+        db.session.commit()
+        flash("Leave request submitted successfully.", category="success")
+
+    except Exception as e:
+        db.session.rollback()
+        flash("Failed to submit leave. Check your inputs.", category="error")
+
     return redirect(url_for("employee.leaves"))
 
 
 @employee.route('/leaves', methods=['GET', 'POST'])
+@login_required
 def leaves():
     if current_user.role != 'user':
         return redirect(url_for('views.home'))
 
-    return render_template("leaves.html", user=current_user)
+    # Fetch all leave requests for current user
+    leave_requests = LeaveRequest.query.filter_by(
+        submitted_by_user_id=current_user.id
+    ).order_by(LeaveRequest.id.desc()).all()
+
+    pending_count = LeaveRequest.query.filter_by(submitted_by_user_id=current_user.id, 
+        status="Pending").count()
+    approved_count = LeaveRequest.query.filter_by(submitted_by_user_id=current_user.id,
+        status="approved").count()    
+    rejected_count = LeaveRequest.query.filter_by(submitted_by_user_id=current_user.id,
+        status="rejected").count()
+    print("hello")    
+    return render_template(
+        "leaves.html",
+        user=current_user,
+        leaves=leave_requests,
+        pending_count=pending_count,
+        approved_count=approved_count,
+        rejected_count=rejected_count
+    )

@@ -3,38 +3,87 @@
 
 {% block page_content %}
   <section class="clock-panel">
-    <h1 class="clock-time" id="liveClock">09:00:00 AM</h1>
-    <p class="clock-date" id="liveDate">Mon Feb 23 2026</p>
+    <h1 class="clock-time" id="liveClock">--:--:--</h1>
+    <p class="clock-date" id="liveDate">Loading date...</p>
+
     <div class="clock-actions">
-      <button class="clock-btn in" type="button">CLOCK IN</button>
-      <button class="clock-btn" type="button" style="background:#1e293b;color:#cbd5e1;">Take a Break</button>
+      <button class="clock-btn in" type="button" id="clockInBtn">
+        CLOCK IN
+      </button>
+
+   <button 
+    class="clock-btn out" 
+    type="button" 
+    id="clockOutBtn"
+    style="background:#dc2626;color:#ffffff;">
+    CLOCK OUT
+  </button>
     </div>
   </section>
 
   <section class="card">
     <h2 class="section-title">Attendance History</h2>
+
     <div class="history">
       <div class="history-item">
         <strong>Present</strong><br>
         <small>May 22, 2024</small>
-        <div style="margin-top:0.35rem;color:#334155;">
+        <div class="history-time">
           In: <strong>08:55 AM</strong> | Out: <strong>05:30 PM</strong>
         </div>
       </div>
+
       <div class="history-item">
         <strong>Late</strong><br>
         <small>May 21, 2024</small>
-        <div style="margin-top:0.35rem;color:#334155;">
+        <div class="history-time">
           In: <strong>09:15 AM</strong> | Out: <strong>06:00 PM</strong>
         </div>
       </div>
+
       <div class="history-item">
         <strong>Present</strong><br>
         <small>May 20, 2024</small>
-        <div style="margin-top:0.35rem;color:#334155;">
+        <div class="history-time">
           In: <strong>08:45 AM</strong> | Out: <strong>05:15 PM</strong>
         </div>
       </div>
     </div>
   </section>
+
+  <!-- LIVE CLOCK SCRIPT -->
+  <script>
+    function updateClock() {
+      const now = new Date();
+
+      // Format time
+      let hours = now.getHours();
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const seconds = String(now.getSeconds()).padStart(2, '0');
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+
+      hours = hours % 12;
+      hours = hours ? hours : 12; // 0 becomes 12
+
+      const timeString = 
+        String(hours).padStart(2, '0') + ':' + minutes + ':' + seconds + ' ' + ampm;
+
+      // Format date
+      const dateString = now.toDateString();
+
+      document.getElementById('liveClock').textContent = timeString;
+      document.getElementById('liveDate').textContent = dateString;
+    }
+
+    setInterval(updateClock, 1000);
+    updateClock();
+  </script>
+
+  <!-- OPTIONAL CLEAN STYLE -->
+  <style>
+    .history-time {
+      margin-top: 0.35rem;
+      color: #334155;
+    }
+  </style>
 {% endblock %}

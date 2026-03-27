@@ -161,28 +161,38 @@ def submit_leave():
     return redirect(url_for("employee.leaves"))
 
 
+
 @employee.route('/leaves', methods=['GET', 'POST'])
 @login_required
 def leaves():
     if current_user.role != 'user':
         return redirect(url_for('views.home'))
 
-    # Fetch all leave requests for current user
+    # Pagination parameters
+    page = request.args.get('page', 1, type=int)  # Get the current page, default=1
+    per_page = 5  # Number of leave requests per page, adjust as needed
+
+    # Paginate leave requests
     leave_requests = LeaveRequest.query.filter_by(
         submitted_by_user_id=current_user.id
-    ).order_by(LeaveRequest.id.desc()).all()
+    ).order_by(LeaveRequest.id.desc()).paginate(page=page, per_page=per_page)
 
-    pending_count = LeaveRequest.query.filter_by(submitted_by_user_id=current_user.id, 
-        status="Pending").count()
-    approved_count = LeaveRequest.query.filter_by(submitted_by_user_id=current_user.id,
-        status="approved").count()    
-    rejected_count = LeaveRequest.query.filter_by(submitted_by_user_id=current_user.id,
-        status="rejected").count()
-    print("hello")    
+    # Count statuses (can remain as-is)
+    pending_count = LeaveRequest.query.filter_by(
+        submitted_by_user_id=current_user.id, status="Pending"
+    ).count()
+    approved_count = LeaveRequest.query.filter_by(
+        submitted_by_user_id=current_user.id, status="approved"
+    ).count()
+    rejected_count = LeaveRequest.query.filter_by(
+        submitted_by_user_id=current_user.id, status="rejected"
+    ).count()
+
     return render_template(
         "leaves.html",
         user=current_user,
-        leaves=leave_requests,
+        leaves=leave_requests.items,  # Only the items for the current page
+        pagination=leave_requests,    # Pass the pagination object for controls
         pending_count=pending_count,
         approved_count=approved_count,
         rejected_count=rejected_count

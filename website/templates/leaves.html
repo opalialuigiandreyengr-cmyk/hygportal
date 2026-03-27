@@ -14,10 +14,10 @@ body, .leave-page-root{
   font-family:'DM Sans',sans-serif;
 }
 
-/* ===== LAYOUT ===== */
+/* ===== LAYOUT (FIXED FULL WIDTH) ===== */
 .lm-layout{
   display:grid;
-  grid-template-columns:1fr 340px;
+  grid-template-columns:1fr; /* ✅ default for mobile */
   gap:1.5rem;
   align-items:start;
 }
@@ -64,6 +64,7 @@ body, .leave-page-root{
   font-size:14px;
 }
 
+
 textarea.lm-input{
   min-height:90px;
 }
@@ -76,7 +77,6 @@ textarea.lm-input{
 }
 
 .lm-pill-group input[type="radio"]{
-  /* keep in DOM for validation but invisible */
   position:absolute;
   opacity:0;
   width:0;
@@ -112,30 +112,60 @@ textarea.lm-input{
 
 .lm-category-grid label{
   border:1px solid #ddd;
-  padding:10px;
+  padding:8px;
   border-radius:8px;
   cursor:pointer;
   font-size:13px;
-  text-align: center;
+  text-align:center;
 }
 
 .lm-category-grid input:checked + label{
-  background-color: black;
-  color: white;
-  
+  background-color:black;
+  color:white;
 }
 
-/* ===== BUTTON ===== */
+/* ===== BUTTON ===== */  
 .lm-btn-submit{
   background:#ffd015;
   border:none;
-  padding:11px 22px;
-  border-radius:99px;
-  font-weight:600;
+  cursor:pointer;
+  font-size: 12px ;
+  padding: 6px 20px;
+  border-radius: 10px;
+  font-weight: bold;
+}
+
+/* ===== MODAL FULL WIDTH ===== */
+.lm-modal{
+  display:none;
+  position:fixed;
+  z-index:999;
+  left:0;
+  top:0;
+  width:100%;
+  height:100%;
+  background: rgba(0,0,0,0.4); /* dark transparent overlay */
+  overflow:auto;
+}
+
+.lm-modal-content{
+  width:90%;
+  max-width:900px;   /* 👈 makes it smaller */
+  margin:0px auto;  /* 👈 centers it vertically + horizontally */
+  padding:20px;
+  background:#fff;   /* keep content readable */
+  border-radius:12px;
+}
+
+.lm-close{
+  display:block;
+  text-align:right;
+  font-size:22px;
+  margin-bottom:10px;
   cursor:pointer;
 }
 
-/* ===== ASIDE ===== */
+/* ===== STATS ===== */
 .lm-stat-row{
   display:grid;
   grid-template-columns:1fr 1fr 1fr;
@@ -179,10 +209,77 @@ textarea.lm-input{
   font-size:10px;
   text-transform:uppercase;
 }
+#openOverview{
+  font-weight: bold;
+  background-color: black;
+  color: wheat;
+}
 
 .lm-status.pending{background:#fef3c7;color:#92400e;}
 .lm-status.approved{background:#dcfce7;color:#166534;}
 .lm-status.rejected{background:#fee2e2;color:#991b1b;}
+
+/* ===== DESKTOP LAYOUT: SHOW OVERVIEW ON THE RIGHT ===== */
+@media (min-width:1024px){
+  .lm-layout{
+    grid-template-columns:2fr 1fr; /* form left, overview right */
+  }
+
+  /* show overview div as normal, hide modal */
+  #overviewModal{
+    display:block;
+    position:relative;
+    background:transparent;
+    height:auto;
+    width:auto;
+    z-index:auto;
+    overflow:visible;
+  }
+
+
+  .lm-modal-content{
+    max-width:none;
+    margin:0;
+    background:#fff;
+    border-radius:12px;
+  }
+
+  #openOverview,
+  #closeOverview{
+    display:none; /* hide modal buttons on desktop */
+  }
+}
+.pagination {
+    display: flex;
+    justify-content: center; /* center the pagination */
+    align-items: center;
+    margin: 1.5rem 0;
+    font-family: Arial, sans-serif;
+}
+
+.pagination a, 
+.pagination span {
+    margin: 0 0.25rem;
+    padding: 0.5rem 0.8rem;
+    text-decoration: none;
+    /* color: #007BFF; link color */
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.pagination a:hover {
+    background-color: #007BFF;
+    color: white;
+    border-color: #007BFF;
+}
+
+.pagination .disabled {
+    color: #999;
+    border-color: #ddd;
+    cursor: not-allowed;
+    background-color: #f9f9f9;
+}
 </style>
 
 {% endblock %}
@@ -193,10 +290,21 @@ textarea.lm-input{
 
 <div class="lm-layout">
 
-<!-- ================= FORM ================= -->
 <div class="lm-card">
 
-<p class="lm-section-label">Leave Management</p>
+  <div style="display: flex; align-items: center; justify-content: space-between;">
+    <p class="lm-section-label">Leave Management</p>
+    <button id="openOverview" style="
+  margin-bottom:10px;
+  padding:6px 12px;
+  border:1px solid #ddd;
+  border-radius:8px;
+  cursor:pointer;
+  font-size:12px;
+">
+  View Overview
+</button>
+  </div>
 
 <form method="POST" action="/submit_leave">
 
@@ -305,63 +413,95 @@ Submit Request
 
 </div>
 
-<!-- ================= HISTORY ================= -->
-<aside class="lm-card">
+<!-- OVERVIEW: modal on mobile, sidebar on desktop -->
+<div id="overviewModal" class="lm-modal">
+<div class="lm-modal-content">
+<span id="closeOverview" class="lm-close">&times;</span>
 
 <p class="lm-section-label">Overview</p>
 
 <div class="lm-stat-row">
-
 <div class="lm-stat">
-  <span class="lm-stat-num pending-c">{{ pending_count }}</span>
-  <span>Pending</span>
+<span class="lm-stat-num pending-c">{{ pending_count }}</span>
+<span>Pending</span>
 </div>
 <div class="lm-stat">
-  <span class="lm-stat-num approved-c">{{ approved_count }}</span>
-  <span>Approved</span>
+<span class="lm-stat-num approved-c">{{ approved_count }}</span>
+<span>Approved</span>
 </div>
 <div class="lm-stat">
-  <span class="lm-stat-num rejected-c">{{ rejected_count }}</span>
-  <span>Rejected</span>
+<span class="lm-stat-num rejected-c">{{ rejected_count }}</span>
+<span>Rejected</span>
 </div>
-
 </div>
 
 <p class="lm-section-label">Recent Leaves</p>
 
 <div id="leaveList">
-
 {% for leave in leaves %}
-
 <div class="lm-leave-item">
-
 <div>
 <strong>{{leave.leave_category}}</strong>
 <div style="font-size:11px;color:#888">
 {{leave.start_date}} → {{leave.end_date}}
 </div>
 </div>
-
 <div>
 <span class="lm-status {{leave.status}}">
 {{leave.status}}
 </span>
 </div>
-
 </div>
-
 {% endfor %}
+<div class="pagination" style="display:flex; align-items:center; gap:6px; font-family:sans-serif;">
+
+  <!-- PREVIOUS -->
+  {% if pagination.has_prev %}
+    <a href="{{ url_for('employee.leaves', page=pagination.prev_num) }}"
+       style="padding:6px 10px; border:1px solid #ccc; border-radius:6px; text-decoration:none; color:#333;">
+       &laquo;
+    </a>
+  {% else %}
+    <span style="padding:6px 10px; border:1px solid #eee; border-radius:6px; color:#aaa;">
+      &laquo;
+    </span>
+  {% endif %}
+
+  <!-- PAGE NUMBERS -->
+  {% for p in range(1, pagination.pages + 1) %}
+    {% if p == pagination.page %}
+      <span style="padding:6px 10px; border-radius:6px; background:#333; color:#fff; font-weight:bold;">
+        {{ p }}
+      </span>
+    {% else %}
+      <a href="{{ url_for('employee.leaves', page=p) }}"
+         style="padding:6px 10px; border:1px solid #ccc; border-radius:6px; text-decoration:none; color:#333;">
+        {{ p }}
+      </a>
+    {% endif %}
+  {% endfor %}
+
+  <!-- NEXT -->
+  {% if pagination.has_next %}
+    <a href="{{ url_for('employee.leaves', page=pagination.next_num) }}"
+       style="padding:6px 10px; border:1px solid #ccc; border-radius:6px; text-decoration:none; color:#333;">
+       &raquo;
+    </a>
+  {% else %}
+    <span style="padding:6px 10px; border:1px solid #eee; border-radius:6px; color:#aaa;">
+      &raquo;
+    </span>
+  {% endif %}
 
 </div>
-
-</aside>
+</div>
 
 </div>
+</div>
+
 </div>
 
 <script>
-
-/* ===== DATE LIMIT ===== */
 const startDate = document.getElementById("leaveStart");
 const endDate = document.getElementById("leaveEnd");
 const leaveDays = document.getElementById("leaveDays");
@@ -381,8 +521,6 @@ function calculateDays(){
 startDate.addEventListener("change", calculateDays);
 endDate.addEventListener("change", calculateDays);
 
-/* ===== OTHER LEAVE INPUT ===== */
-const otherRadio = document.getElementById("otherLeaveRadio");
 const otherInput = document.getElementById("otherLeaveInput");
 
 document.querySelectorAll('input[name="leave_category"]').forEach(radio => {
@@ -392,6 +530,33 @@ document.querySelectorAll('input[name="leave_category"]').forEach(radio => {
   });
 });
 
+const modal = document.getElementById("overviewModal");
+const openBtn = document.getElementById("openOverview");
+const closeBtn = document.getElementById("closeOverview");
+
+openBtn.onclick = () => modal.style.display = "block";
+closeBtn.onclick = () => modal.style.display = "none";
+
+// ===== DATE DEFAULT + LIMITS =====
+const today = new Date().toISOString().split("T")[0];
+
+// set default start date
+startDate.value = today;
+
+// prevent past dates
+startDate.min = today;
+endDate.min = today;
+
+// ensure end date is never before start date
+startDate.addEventListener("change", () => {
+  endDate.min = startDate.value;
+
+  if(endDate.value < startDate.value){
+    endDate.value = startDate.value;
+  }
+
+  calculateDays();
+});
 </script>
 
 {% endblock %}

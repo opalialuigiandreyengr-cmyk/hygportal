@@ -77,12 +77,16 @@
   }
 
   const confirmModalEl = document.getElementById("globalConfirmModal");
+  const confirmModalTitle = document.getElementById("globalConfirmModalTitle");
   const confirmModalMsg = document.getElementById("globalConfirmModalMessage");
   const confirmModalSubmit = document.getElementById("globalConfirmModalSubmit");
   const confirmReasonWrap = document.getElementById("globalConfirmReasonWrap");
   const confirmReasonLabel = document.getElementById("globalConfirmReasonLabel");
   const confirmReasonInput = document.getElementById("globalConfirmReasonInput");
   const confirmReasonError = document.getElementById("globalConfirmReasonError");
+  const defaultConfirmTitle = "Confirm Action";
+  const defaultConfirmMessage = "Are you sure you want to continue?";
+  const defaultConfirmSubmitText = "Confirm";
   let pendingConfirmForm = null;
   let confirmModal = null;
 
@@ -91,7 +95,6 @@
   }
 
   function buildConfirmMessage(form) {
-    const defaultMessage = "Are you sure you want to continue?";
     const template = form.getAttribute("data-confirm-template");
     const staticMessage = form.getAttribute("data-confirm-message");
 
@@ -104,7 +107,41 @@
       return template.replace("{status}", "this status");
     }
 
-    return staticMessage || defaultMessage;
+    return staticMessage || defaultConfirmMessage;
+  }
+
+  function setConfirmSubmitVariant(variantName) {
+    if (!confirmModalSubmit) {
+      return;
+    }
+
+    const variant = (variantName || "primary").toLowerCase();
+    confirmModalSubmit.classList.remove("confirm-btn-submit", "confirm-btn-success", "confirm-btn-danger");
+
+    if (variant === "danger") {
+      confirmModalSubmit.classList.add("confirm-btn-danger");
+      return;
+    }
+
+    if (variant === "success") {
+      confirmModalSubmit.classList.add("confirm-btn-success");
+      return;
+    }
+
+    confirmModalSubmit.classList.add("confirm-btn-submit");
+  }
+
+  function resetConfirmModalUi() {
+    if (confirmModalTitle) {
+      confirmModalTitle.textContent = defaultConfirmTitle;
+    }
+    if (confirmModalMsg) {
+      confirmModalMsg.textContent = defaultConfirmMessage;
+    }
+    if (confirmModalSubmit) {
+      confirmModalSubmit.textContent = defaultConfirmSubmitText;
+    }
+    setConfirmSubmitVariant("primary");
   }
 
   function resetConfirmReasonUi() {
@@ -121,6 +158,40 @@
     if (confirmReasonLabel) {
       confirmReasonLabel.textContent = "Please enter reason why:";
     }
+  }
+
+  function openConfirmForForm(form) {
+    if (!confirmModal || !confirmModalMsg || !confirmModalSubmit) {
+      return;
+    }
+
+    pendingConfirmForm = form;
+    resetConfirmModalUi();
+    if (confirmModalTitle) {
+      confirmModalTitle.textContent = form.getAttribute("data-confirm-title") || defaultConfirmTitle;
+    }
+    confirmModalMsg.textContent = buildConfirmMessage(form);
+    confirmModalSubmit.textContent = form.getAttribute("data-confirm-confirm-text") || defaultConfirmSubmitText;
+    setConfirmSubmitVariant(form.getAttribute("data-confirm-variant"));
+    resetConfirmReasonUi();
+
+    if (form.getAttribute("data-require-reason") === "true") {
+      const reasonPrompt = form.getAttribute("data-reason-prompt") || "Please enter reason why:";
+      const reasonField = form.getAttribute("data-reason-field") || "reject_reason";
+      const reasonHiddenInput = form.querySelector(`[name='${reasonField}']`);
+
+      if (confirmReasonWrap) {
+        confirmReasonWrap.classList.remove("d-none");
+      }
+      if (confirmReasonLabel) {
+        confirmReasonLabel.textContent = reasonPrompt;
+      }
+      if (confirmReasonInput) {
+        confirmReasonInput.value = reasonHiddenInput ? (reasonHiddenInput.value || "").trim() : "";
+      }
+    }
+
+    confirmModal.show();
   }
 
   document.addEventListener("submit", function (event) {
@@ -144,32 +215,19 @@
       return;
     }
 
-    pendingConfirmForm = form;
-    confirmModalMsg.textContent = buildConfirmMessage(form);
-    resetConfirmReasonUi();
-
-    if (form.getAttribute("data-require-reason") === "true") {
-      const reasonPrompt = form.getAttribute("data-reason-prompt") || "Please enter reason why:";
-      const reasonField = form.getAttribute("data-reason-field") || "reject_reason";
-      const reasonHiddenInput = form.querySelector(`[name='${reasonField}']`);
-
-      if (confirmReasonWrap) {
-        confirmReasonWrap.classList.remove("d-none");
-      }
-      if (confirmReasonLabel) {
-        confirmReasonLabel.textContent = reasonPrompt;
-      }
-      if (confirmReasonInput) {
-        confirmReasonInput.value = reasonHiddenInput ? (reasonHiddenInput.value || "").trim() : "";
-      }
-    }
-
-    confirmModal.show();
+    openConfirmForForm(form);
   });
 
   if (confirmModalEl) {
+    confirmModalEl.addEventListener("shown.bs.modal", function () {
+      if (confirmModalSubmit) {
+        confirmModalSubmit.focus();
+      }
+    });
+
     confirmModalEl.addEventListener("hidden.bs.modal", function () {
       pendingConfirmForm = null;
+      resetConfirmModalUi();
       resetConfirmReasonUi();
     });
   }
@@ -210,6 +268,13 @@
           confirmReasonInput.classList.remove("is-invalid");
         }
         reasonInput.value = finalReason;
+      }
+
+      if (typeof pendingConfirmForm.checkValidity === "function" && !pendingConfirmForm.checkValidity()) {
+        if (typeof pendingConfirmForm.reportValidity === "function") {
+          pendingConfirmForm.reportValidity();
+        }
+        return;
       }
 
       pendingConfirmForm.dataset.confirmed = "true";

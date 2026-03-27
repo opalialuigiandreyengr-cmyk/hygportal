@@ -41,15 +41,37 @@ def _sync_service_accounts():
     from .models import User
 
     account_configs = [
-        ("HR_USERNAME", "HR_PASSWORD", "hr"),
-        ("TIMEKEEPER_USERNAME", "TIMEKEEPER_PASSWORD", "timekeeper"),
+        {
+            "username_env": "ADMIN_USERNAME",
+            "password_env": "ADMIN_PASSWORD",
+            "default_username": "admin",
+            "default_password": "admin123",
+            "role": "admin",
+        },
+        {
+            "username_env": "HR_USERNAME",
+            "password_env": "HR_PASSWORD",
+            "default_username": "",
+            "default_password": "",
+            "role": "hr",
+        },
+        {
+            "username_env": "TIMEKEEPER_USERNAME",
+            "password_env": "TIMEKEEPER_PASSWORD",
+            "default_username": "",
+            "default_password": "",
+            "role": "timekeeper",
+        },
     ]
 
     has_changes = False
 
-    for username_key, password_key, role in account_configs:
-        username = (os.getenv(username_key) or "").strip()
-        password = os.getenv(password_key) or ""
+    for config in account_configs:
+        username = (
+            os.getenv(config["username_env"], config["default_username"]) or ""
+        ).strip()
+        password = os.getenv(config["password_env"], config["default_password"]) or ""
+        role = config["role"]
         if not username or not password:
             continue
 

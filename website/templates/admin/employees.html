@@ -6,19 +6,54 @@
 {% endblock %}
 
 {% block page_content %}
-  <!-- HERO SECTION -->
   <section class="hero employees-hero">
-    <div>
-      <h1>Employees Directory</h1>
-      <p>View and connect with employees across the organization.</p>
+    <div class="employees-hero-head">
+      <div class="employees-hero-copy">
+        <h1>Employees</h1>
+        <p class="employees-hero-subtitle">Manage employee records and quickly find team members.</p>
+      </div>
+      <div class="employees-hero-actions">
+        <button type="button" data-bs-toggle="modal" data-bs-target="#addEmployeeModal" class="primary-btn btn-mini">
+          <i class="fa-solid fa-user-plus"></i> Add Employee
+        </button>
+      </div>
     </div>
-    <button type="button" data-bs-toggle="modal" data-bs-target="#addEmployeeModal" class="primary-btn btn-mini">
-      Add Employee
-    </button>
   </section>
 
   <!-- EMPLOYEES TABLE -->
-  <section class="card">
+  <section class="card employees-card">
+    <form class="employees-tools" method="GET" action="{{ url_for('admin.employees') }}">
+      <label class="employees-search">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input
+          type="search"
+          name="search"
+          class="employees-search-input"
+          placeholder="Search name, email, ID, department, or position"
+          value="{{ employee_filters.search }}"
+          autocomplete="off"
+        >
+      </label>
+      <select name="status" class="employees-filter-select" aria-label="Filter by status">
+        <option value="">All Statuses</option>
+        <option value="Active" {% if employee_filters.status == 'Active' %}selected{% endif %}>Active</option>
+        <option value="Resigned" {% if employee_filters.status == 'Resigned' %}selected{% endif %}>Resigned</option>
+        <option value="Suspended" {% if employee_filters.status == 'Suspended' %}selected{% endif %}>Suspended</option>
+        <option value="On Leave" {% if employee_filters.status == 'On Leave' %}selected{% endif %}>On Leave</option>
+        <option value="Terminated" {% if employee_filters.status == 'Terminated' %}selected{% endif %}>Terminated</option>
+        <option value="AWOL" {% if employee_filters.status == 'AWOL' %}selected{% endif %}>AWOL</option>
+      </select>
+      <select name="company" class="employees-filter-select" aria-label="Filter by company">
+        <option value="">All Companies</option>
+        {% for company in companies %}
+        <option value="{{ company.company_name }}" {% if employee_filters.company == company.company_name %}selected{% endif %}>{{ company.company_name }}</option>
+        {% endfor %}
+      </select>
+      <div class="employees-tools-actions">
+        <button type="submit" class="primary-btn btn-mini">Filter</button>
+        <a href="{{ url_for('admin.employees') }}" class="employees-reset-link">Reset</a>
+      </div>
+    </form>
     <div class="table-wrap table-responsive">
       <table class="table align-middle mb-0 employees-table">
         <thead>
@@ -29,7 +64,7 @@
             <th>Role & Department</th>
             <th>Joined</th>
             <th>Status</th>
-            <th>Action</th>
+            <th class="action-col-head" title="Update"><i class="fa-solid fa-rotate"></i></th>
           </tr>
         </thead>
         <tbody>
@@ -68,7 +103,9 @@
               <button type="button"
                       class="edit-btn"
                       data-bs-toggle="modal"
-                      data-bs-target="#editEmployeeModal{{ employee.id }}">
+                      data-bs-target="#editEmployeeModal{{ employee.id }}"
+                      aria-label="Edit employee"
+                      title="Edit employee">
                 <i class="fa-solid fa-pen-to-square"></i> Edit
               </button>
             </td>
@@ -81,6 +118,21 @@
         </tbody>
       </table>
     </div>
+    {% if employee_pagination.pages > 1 %}
+    <nav class="employees-pagination" aria-label="Employees pagination">
+      <a
+        class="employees-page-link {% if not employee_pagination.has_prev %}is-disabled{% endif %}"
+        href="{% if employee_pagination.has_prev %}{{ url_for('admin.employees', page=employee_pagination.prev_num, search=employee_filters.search, status=employee_filters.status, company=employee_filters.company) }}{% else %}#{% endif %}">
+        Previous
+      </a>
+      <span class="employees-page-meta">Page {{ employee_pagination.page }} of {{ employee_pagination.pages }}</span>
+      <a
+        class="employees-page-link {% if not employee_pagination.has_next %}is-disabled{% endif %}"
+        href="{% if employee_pagination.has_next %}{{ url_for('admin.employees', page=employee_pagination.next_num, search=employee_filters.search, status=employee_filters.status, company=employee_filters.company) }}{% else %}#{% endif %}">
+        Next
+      </a>
+    </nav>
+    {% endif %}
   </section>
 
   <!-- EDIT EMPLOYEE MODALS -->
@@ -94,7 +146,12 @@
         </div>
 
         <div class="modal-body">
-          <form action="{{ url_for('admin.edit_employee', employee_id=employee.id) }}" method="POST" enctype="multipart/form-data" class="employee-form">
+          <form action="{{ url_for('admin.edit_employee', employee_id=employee.id) }}" method="POST" enctype="multipart/form-data" class="employee-form"
+                data-confirm-action="true"
+                data-confirm-title="Update Employee Record"
+                data-confirm-message="Please confirm you want to save the updated employee details."
+                data-confirm-confirm-text="Update Employee"
+                data-confirm-variant="success">
             
             <!-- 1. PERSONAL INFORMATION & PHOTO -->
             <div class="form-section-card">
@@ -265,7 +322,12 @@
         </div>
 
         <div class="modal-body">
-          <form id="addEmployeeForm" action="{{ url_for('admin.add_employee') }}" method="POST" enctype="multipart/form-data" class="employee-form">
+          <form id="addEmployeeForm" action="{{ url_for('admin.add_employee') }}" method="POST" enctype="multipart/form-data" class="employee-form"
+                data-confirm-action="true"
+                data-confirm-title="Save Employee Record"
+                data-confirm-message="Please confirm you want to save this employee record."
+                data-confirm-confirm-text="Save Employee"
+                data-confirm-variant="success">
 
             <!-- 1. PERSONAL INFORMATION & PHOTO -->
             <div class="form-section-card">
@@ -284,22 +346,22 @@
                     <label for="photoUploadAdd" class="upload-btn">Choose Photo</label>
                     <input type="file" id="photoUploadAdd" name="photo" accept=".png,.jpg,.jpeg,image/png,image/jpeg" hidden onchange="previewImage(event, 'Add')">
                     <small class="upload-hint">JPG, PNG. Max 10MB.</small>
-                    <p class="upload-error hidden" id="photoUploadAddError">Please attach an ID photo before saving employee.</p>
+                    <p class="upload-error hidden" id="photoUploadAddError">Please upload a valid JPG or PNG image.</p>
                   </div>
                 </div>
 
                 <div class="personal-info-fields">
                   <div class="grid-4">
-                    <div class="field"><label>First Name </label><input type="text" name="first_name" value="{{ add_form.get('first_name', '') }}" required></div>
-                    <div class="field"><label>Middle Name </label><input type="text" name="middle_name" value="{{ add_form.get('middle_name', '') }}" required></div>
-                    <div class="field"><label>Last Name </label><input type="text" name="last_name" value="{{ add_form.get('last_name', '') }}" required></div>
-                    <div class="field"><label>Suffix </label><input type="text" name="suffix" value="{{ add_form.get('suffix', '') }}" placeholder="e.g. Jr, Sr"></div>
+                    <div class="field"><label>First Name <span class="req">*</span></label><input type="text" name="first_name" value="{{ add_form.get('first_name', '') }}" required style="text-transform: uppercase;" oninput="this.value = this.value.toUpperCase()"></div>
+                    <div class="field"><label>Middle Name <span class="req">*</span></label><input type="text" name="middle_name" value="{{ add_form.get('middle_name', '') }}" required style="text-transform: uppercase;" oninput="this.value = this.value.toUpperCase()"></div>
+                    <div class="field"><label>Last Name <span class="req">*</span></label><input type="text" name="last_name" value="{{ add_form.get('last_name', '') }}" required style="text-transform: uppercase;" oninput="this.value = this.value.toUpperCase()"></div>
+                    <div class="field"><label>Suffix </label><input type="text" name="suffix" value="{{ add_form.get('suffix', '') }}" placeholder="e.g. Jr, Sr" style="text-transform: uppercase;" oninput="this.value = this.value.toUpperCase()"></div>
                   </div>
                   <div class="grid-4">
-                    <div class="field"><label>Birth Date </label><input type="date" name="birth_date" value="{{ add_form.get('birth_date', '') }}" required></div>
-                    <div class="field"><label>Age </label><input type="number" name="age" min="15" max="100" value="{{ add_form.get('age', '') }}" required></div>
+                    <div class="field"><label>Birth Date <span class="req">*</span></label><input type="date" name="birth_date" value="{{ add_form.get('birth_date', '') }}" required></div>
+                    <div class="field"><label>Age <span class="req">*</span></label><input type="number" name="age" min="15" max="100" value="{{ add_form.get('age', '') }}"></div>
                     <div class="field">
-                      <label>Gender </label>
+                      <label>Gender <span class="req">*</span></label>
                       <select name="gender" required>
                         <option value="" {% if not add_form.get('gender') %}selected{% endif %} disabled>Select</option>
                         <option value="Male" {% if add_form.get('gender') == 'Male' %}selected{% endif %}>Male</option>
@@ -307,12 +369,12 @@
                         <option value="Other" {% if add_form.get('gender') == 'Other' %}selected{% endif %}>Other</option>
                       </select>
                     </div>
-                    <div class="field"><label>Religion </label><input type="text" name="religion" value="{{ add_form.get('religion', '') }}" placeholder="e.g. Catholic" required></div>
+                    <div class="field"><label>Religion <span class="req">*</span></label><input type="text" name="religion" value="{{ add_form.get('religion', '') }}" placeholder="e.g. Catholic" required></div>
                   </div>
                   <div class="grid-2">
                     <div class="field"><label>Biometric No.</label><input type="text" name="biometric_no" value="{{ add_form.get('biometric_no', '') }}"></div>
                     <div class="field">
-                      <label>Educational Attainment </label>
+                      <label>Educational Attainment <span class="req">*</span></label>
                       <select name="educational_attainment" required>
                         <option value="" {% if not add_form.get('educational_attainment') %}selected{% endif %} disabled>Select Attainment</option>
                         <option value="High School" {% if add_form.get('educational_attainment') == 'High School' %}selected{% endif %}>High School Graduate</option>
@@ -331,13 +393,13 @@
             <div class="form-section-card">
               <h3 class="form-section-title">Contact & Address</h3>
               <div class="grid-4">
-                <div class="field"><label>Email Address </label><input type="email" name="email" value="{{ add_form.get('email', '') }}" placeholder="employee@company.com" required></div>
-                <div class="field"><label>Phone Number </label><input type="tel" name="phone" value="{{ add_form.get('phone', '') }}" placeholder="+63 900 000 0000" required></div>
-                <div class="field"><label>Zip Code </label><input type="text" name="zipCode" value="{{ add_form.get('zipCode', '') }}" required></div>
-                <div class="field"><label>Facebook Profile </label><input type="text" name="facebook" value="{{ add_form.get('facebook', '') }}" placeholder="URL or Username" required></div>
+                <div class="field"><label>Email Address <span class="req">*</span></label><input type="email" name="email" value="{{ add_form.get('email', '') }}" placeholder="employee@company.com" required></div>
+                <div class="field"><label>Phone Number <span class="req">*</span></label><input type="tel" name="phone" value="{{ add_form.get('phone', '') }}" placeholder="+63 900 000 0000" required></div>
+                <div class="field"><label>Zip Code</label><input type="text" name="zipCode" value="{{ add_form.get('zipCode', '') }}"></div>
+                <div class="field"><label>Facebook Profile</label><input type="text" name="facebook" value="{{ add_form.get('facebook', '') }}" placeholder="URL or Username"></div>
               </div>
               <div class="field">
-                <label>Present Address </label>
+                <label>Present Address <span class="req">*</span></label>
                 <textarea name="present_address" rows="2" placeholder="Full street, barangay, city/municipality" required>{{ add_form.get('present_address', '') }}</textarea>
               </div>
             </div>
@@ -347,9 +409,9 @@
               <div class="form-section-card">
                 <h3 class="form-section-title">Employment Details</h3>
                 <div class="grid-2">
-                  <div class="field"><label>Employee ID No. </label><input type="text" name="employee_no" value="{{ add_form.get('employee_no', '') }}" required></div>
+                  <div class="field"><label>Employee ID No.</label><input type="text" name="employee_no" value="{{ add_form.get('employee_no', '') }}"></div>
                   <div class="field">
-                    <label>Company </label>
+                    <label>Company <span class="req">*</span></label>
                     <select name="company" required>
                       <option value="" {% if not add_form.get('company') %}selected{% endif %} disabled>Select Company</option>
                       {% for company in companies %}
@@ -359,13 +421,13 @@
                   </div>
                 </div>
                 <div class="grid-2">
-                  <div class="field"><label>Department </label><input type="text" name="department" value="{{ add_form.get('department', '') }}" required></div>
-                  <div class="field"><label>Position </label><input type="text" name="position" value="{{ add_form.get('position', '') }}" required></div>
+                  <div class="field"><label>Department</label><input type="text" name="department" value="{{ add_form.get('department', '') }}"></div>
+                  <div class="field"><label>Position</label><input type="text" name="position" value="{{ add_form.get('position', '') }}"></div>
                 </div>
-                <div class="grid-2">0
-                  <div class="field"><label>Hired Date </label><input type="date" name="hired_date" value="{{ add_form.get('hired_date', '') }}" required></div>
+                <div class="grid-2">
+                  <div class="field"><label>Hired Date <span class="req">*</span></label><input type="date" name="hired_date" value="{{ add_form.get('hired_date', '') }}" required></div>
                   <div class="field">
-                    <label>Employee Type </label>
+                    <label>Employee Type <span class="req">*</span></label>
                     <select name="employee_type" required>
                       <option value="" {% if not add_form.get('employee_type') %}selected{% endif %} disabled>Select Type</option>
                       <option value="Regular" {% if add_form.get('employee_type') == 'Regular' %}selected{% endif %}>Regular</option>
@@ -375,10 +437,10 @@
                   </div>
                 </div>
                 <div class="field">
-                  <label>Employment Status </label>
+                  <label>Employment Status <span class="req">*</span></label>
                   <select name="employment_status" required>
-                    <option value="" {% if not add_form.get('employment_status') %}selected{% endif %} disabled>Select Status</option>
-                    <option value="Active" {% if add_form.get('employment_status') == 'Active' %}selected{% endif %}>Active</option>
+                    <option value="" disabled>Select Status</option>
+                    <option value="Active" {% if (add_form.get('employment_status') or 'Active') == 'Active' %}selected{% endif %}>Active</option>
                     <option value="Resigned" {% if add_form.get('employment_status') == 'Resigned' %}selected{% endif %}>Resigned</option>
                     <option value="Suspended" {% if add_form.get('employment_status') == 'Suspended' %}selected{% endif %}>Suspended</option>
                     <option value="On Leave" {% if add_form.get('employment_status') == 'On Leave' %}selected{% endif %}>On Leave</option>

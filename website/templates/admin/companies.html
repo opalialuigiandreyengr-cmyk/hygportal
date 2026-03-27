@@ -7,16 +7,42 @@
 
 {% block page_content %}
   <section class="hero employees-hero">
-    <div>
-      <h1>Companies Directory</h1>
-      <p>View and manage partner companies and subsidiaries.</p>
+    <div class="employees-hero-head">
+      <div class="employees-hero-copy">
+        <h1>Companies</h1>
+        <p class="employees-hero-subtitle">View and manage partner companies and subsidiaries.</p>
+      </div>
+      <div class="employees-hero-actions">
+        <button type="button" data-bs-toggle="modal" data-bs-target="#addCompanyModal" class="primary-btn btn-mini">
+          <i class="fa-solid fa-building"></i> Add Company
+        </button>
+      </div>
     </div>
-    <button type="button" data-bs-toggle="modal" data-bs-target="#addCompanyModal" class="primary-btn btn-mini">
-      Add Company
-    </button>
   </section>
 
-  <section class="card">
+  <section class="card employees-card">
+    <form class="employees-tools companies-tools" method="GET" action="{{ url_for('admin.companies') }}">
+      <label class="employees-search">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input
+          type="search"
+          name="search"
+          class="employees-search-input"
+          placeholder="Search company name, contact number, or address"
+          value="{{ company_filters.search }}"
+          autocomplete="off"
+        >
+      </label>
+      <select name="contact_filter" class="employees-filter-select" aria-label="Filter by contact">
+        <option value="">All Contacts</option>
+        <option value="with_contact" {% if company_filters.contact_filter == 'with_contact' %}selected{% endif %}>With Contact</option>
+        <option value="without_contact" {% if company_filters.contact_filter == 'without_contact' %}selected{% endif %}>Without Contact</option>
+      </select>
+      <div class="employees-tools-actions">
+        <button type="submit" class="primary-btn btn-mini">Filter</button>
+        <a href="{{ url_for('admin.companies') }}" class="employees-reset-link">Reset</a>
+      </div>
+    </form>
     <div class="table-wrap table-responsive">
       <table class="table align-middle mb-0 companies-table">
         <thead>
@@ -64,6 +90,21 @@
         </tbody>
       </table>
     </div>
+    {% if company_pagination.pages > 1 %}
+    <nav class="employees-pagination" aria-label="Companies pagination">
+      <a
+        class="employees-page-link {% if not company_pagination.has_prev %}is-disabled{% endif %}"
+        href="{% if company_pagination.has_prev %}{{ url_for('admin.companies', page=company_pagination.prev_num, search=company_filters.search, contact_filter=company_filters.contact_filter) }}{% else %}#{% endif %}">
+        Previous
+      </a>
+      <span class="employees-page-meta">Page {{ company_pagination.page }} of {{ company_pagination.pages }}</span>
+      <a
+        class="employees-page-link {% if not company_pagination.has_next %}is-disabled{% endif %}"
+        href="{% if company_pagination.has_next %}{{ url_for('admin.companies', page=company_pagination.next_num, search=company_filters.search, contact_filter=company_filters.contact_filter) }}{% else %}#{% endif %}">
+        Next
+      </a>
+    </nav>
+    {% endif %}
   </section>
 
   <div class="modal fade" id="addCompanyModal" tabindex="-1" aria-labelledby="addCompanyModalTitle" aria-hidden="true">

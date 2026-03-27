@@ -1,7 +1,9 @@
 import re
+from datetime import date
 
 from flask import Blueprint, flash, redirect, render_template, request, session, url_for
 from flask_login import current_user
+from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 
 from . import db
@@ -23,30 +25,135 @@ ESARF_STATUS_APPROVED = "Approved"
 ESARF_STATUS_REJECTED = "Rejected"
 
 
+def _compute_age_from_birth_date(birth_date):
+    if not birth_date:
+        return None
+
+    today = date.today()
+    age = today.year - birth_date.year - (
+        (today.month, today.day) < (birth_date.month, birth_date.day)
+    )
+    return age if age >= 0 else None
+
+
 @admin.route("/employees")
 @roles_required("admin", "hr")
 def employees():
-    employee_items = Employee.query.order_by(Employee.id.desc()).all()
+    search = (request.args.get("search") or "").strip()
+    status = (request.args.get("status") or "").strip()
+    company = (request.args.get("company") or "").strip()
+    page = request.args.get("page", 1, type=int)
+    per_page = 10
+
+    employee_query = Employee.query
+
+    if search:
+        search_pattern = f"%{search}%"
+        employee_query = employee_query.filter(
+            or_(
+                Employee.first_name.ilike(search_pattern),
+                Employee.middle_name.ilike(search_pattern),
+                Employee.last_name.ilike(search_pattern),
+                Employee.email.ilike(search_pattern),
+                Employee.employee_no.ilike(search_pattern),
+                Employee.department.ilike(search_pattern),
+                Employee.position.ilike(search_pattern),
+                Employee.company.ilike(search_pattern),
+            )
+        )
+
+    if status:
+        employee_query = employee_query.filter(
+            or_(
+                Employee.employment_status.ilike(status),
+                Employee.status.ilike(status),
+            )
+        )
+
+    if company:
+        employee_query = employee_query.filter(Employee.company == company)
+
+    employee_pagination = employee_query.order_by(Employee.id.desc()).paginate(
+        page=page,
+        per_page=per_page,
+        error_out=False,
+    )
+    employee_items = employee_pagination.items
     company_items = Company.query.order_by(Company.company_name.asc()).all()
     add_employee_form = session.pop("add_employee_form", {})
+
     return render_template(
         "admin/employees.html",
         employees=employee_items,
         companies=company_items,
         add_employee_form=add_employee_form,
+        employee_pagination=employee_pagination,
+        employee_filters={
+            "search": search,
+            "status": status,
+            "company": company,
+        },
     )
 
 
 @admin.route("/companies")
 @roles_required("admin", "hr")
 def companies():
-    company_items = Company.query.order_by(Company.id.desc()).all()
-    return render_template("admin/companies.html", companies=company_items)
+    search = (request.args.get("search") or "").strip()
+    contact_filter = (request.args.get("contact_filter") or "").strip()
+    page = request.args.get("page", 1, type=int)
+    per_page = 10
+
+    company_query = Company.query
+
+    if search:
+        search_pattern = f"%{search}%"
+        company_query = company_query.filter(
+            or_(
+                Company.company_name.ilike(search_pattern),
+                Company.contact_number.ilike(search_pattern),
+                Company.address.ilike(search_pattern),
+            )
+        )
+
+    if contact_filter == "with_contact":
+        company_query = company_query.filter(
+            Company.contact_number.isnot(None),
+            Company.contact_number != "",
+        )
+    elif contact_filter == "without_contact":
+        company_query = company_query.filter(
+            or_(
+                Company.contact_number.is_(None),
+                Company.contact_number == "",
+            )
+        )
+
+    company_pagination = company_query.order_by(Company.id.desc()).paginate(
+        page=page,
+        per_page=per_page,
+        error_out=False,
+    )
+    company_items = company_pagination.items
+
+    return render_template(
+        "admin/companies.html",
+        companies=company_items,
+        company_pagination=company_pagination,
+        company_filters={
+            "search": search,
+            "contact_filter": contact_filter,
+        },
+    )
 
 
 @admin.route("/add-employee", methods=["POST"])
 @roles_required("admin", "hr")
 def add_employee():
+    employment_status = (request.form.get("employment_status") or "").strip() or "Active"
+    birth_date = _parse_date(request.form.get("birth_date"))
+    age = _compute_age_from_birth_date(birth_date)
+
     fields_to_check = {
         "email": "Email Address",
         "employee_no": "Employee ID No.",
@@ -98,10 +205,10 @@ def add_employee():
         middle_name=request.form.get("middle_name"),
         last_name=request.form.get("last_name"),
         suffix=request.form.get("suffix"),
-        age=_parse_int(request.form.get("age")),
+        age=age,
         religion=request.form.get("religion"),
         educational_attainment=request.form.get("educational_attainment"),
-        birth_date=_parse_date(request.form.get("birth_date")),
+        birth_date=birth_date,
         hired_date=_parse_date(request.form.get("hired_date")),
         department=request.form.get("department"),
         position=request.form.get("position"),
@@ -122,9 +229,9 @@ def add_employee():
         facebook=request.form.get("facebook"),
         account_no=request.form.get("account_no"),
         leave_credits=float(request.form.get("leave_credits") or 0),
-        status=(request.form.get("employment_status") or "").strip(),
+        status=employment_status,
         photopath=employee_photo_path,
-        employment_status=(request.form.get("employment_status") or "").strip(),
+        employment_status=employment_status,
         gender=request.form.get("gender"),
         payroll_frequency=request.form.get("payroll_frequency"),
         emp_code=request.form.get("emp_code"),

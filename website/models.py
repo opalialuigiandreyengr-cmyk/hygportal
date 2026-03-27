@@ -96,3 +96,18 @@ class EsarfRequest(db.Model):
         'User',
         backref=db.backref('esarf_requests', lazy=True),
     )
+
+    
+class LeaveRequest(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    submitted_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    status = db.Column(db.String(20), nullable=False, default='Pending')
+    leave_type = db.Column(db.String(20), nullable=False)
+    leave_category = db.Column(db.String(100), nullable=False)
+    start_date = db.Column(db.Date, nullable=False)
+    end_date = db.Column(db.Date, nullable=False)
+    reason = db.Column(db.String(255))
+    submitted_by_user = db.relationship(
+        'User',
+        backref=db.backref('leave_requests', lazy=True),
+    )

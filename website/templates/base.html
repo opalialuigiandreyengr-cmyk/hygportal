@@ -95,7 +95,7 @@
         {% endif %}
         {% if can_view_leaves %}
           <li>
-            <a href="{{ url_for('views.leaves') }}" class="nav-link {% if request.path == '/leaves' %}active{% endif %}">
+            <a href="{{ url_for('employee.leaves') }}" class="nav-link {% if request.path == '/leaves' %}active{% endif %}">
               <i class="fa-solid fa-calendar-day"></i>
               <span>Leaves</span>
             </a>
@@ -178,7 +178,7 @@
         <i class="fa-solid fa-clock"></i>
         <span>Attendance</span>
       </a>
-      <a href="{{ url_for('views.leaves') }}" class="mobile-nav-link {% if request.path == '/leaves' %}active{% endif %}">
+      <a href="{{ url_for('employee.leaves') }}" class="mobile-nav-link {% if request.path == '/leaves' %}active{% endif %}">
         <i class="fa-solid fa-calendar-day"></i>
         <span>Leaves</span>
       </a>

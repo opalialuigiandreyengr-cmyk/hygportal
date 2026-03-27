@@ -15,11 +15,6 @@ def attendance():
     return render_template("attendance.html")
 
 
-@views.route('/leaves')
-def leaves():
-    return render_template("leaves.html")
-
-
 @views.route('/about')
 def about():
     return render_template("about.html")

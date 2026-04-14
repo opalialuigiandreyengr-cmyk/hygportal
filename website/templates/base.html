@@ -55,6 +55,15 @@
             </a>
           </li>
         {% endif %}
+        {% if can_manage_employees %}
+  <li>
+    <a href="{{ url_for('admin.register_employee') }}" 
+       class="nav-link {% if request.path == '/register_employee' %}active{% endif %}">
+      <i class="fa-solid fa-user-plus"></i>
+      <span>Register Employee</span>
+    </a>
+  </li>
+{% endif %}
         {% if can_manage_companies %}
           <li>
             <a href="{{ url_for('admin.companies') }}" class="nav-link {% if request.path == '/companies' %}active{% endif %}">

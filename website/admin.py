@@ -5,6 +5,7 @@ from flask import Blueprint, flash, redirect, render_template, request, session,
 from flask_login import current_user
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
+from flask_login import login_required
 
 from . import db
 from .helpers import (
@@ -27,7 +28,7 @@ ESARF_STATUS_REJECTED = "Rejected"
 
 def _compute_age_from_birth_date(birth_date):
     if not birth_date:
-        return None
+        return Nones
 
     today = date.today()
     age = today.year - birth_date.year - (
@@ -146,6 +147,11 @@ def companies():
         },
     )
 
+
+@admin.route('/register_employee')
+@login_required
+def register_employee():
+    return render_template('admin/register_employee.html')
 
 @admin.route("/add-employee", methods=["POST"])
 @roles_required("admin", "hr")

@@ -43,8 +43,8 @@
       <ul class="nav-list">
         <li>
           <a href="{% if is_employee_user %}{{ url_for('employee.employee_dashboard') }}{% else %}{{ url_for('views.home') }}{% endif %}" class="nav-link {% if request.path == '/dashboard' or request.path == '/' or request.path == '/employee/employee_dashboard' or request.path == '/employee_dashboard' %}active{% endif %}">
-            <i class="fa-solid fa-gauge-high"></i>
-            <span>Dashboard</span>
+            <i class="fa-solid fa-right-from-bracket"></i>
+            <span>LOGIN/REGISTER</span>
           </a>
         </li>
         {% if can_manage_employees %}
@@ -179,8 +179,8 @@
 
   <nav class="mobile-bottom-nav" aria-label="Mobile navigation">
     <a href="{% if is_employee_user %}{{ url_for('employee.employee_dashboard') }}{% else %}{{ url_for('views.home') }}{% endif %}" class="mobile-nav-link {% if request.path == '/dashboard' or request.path == '/' or request.path == '/employee/employee_dashboard' or request.path == '/employee_dashboard' %}active{% endif %}">
-      <i class="fa-solid fa-gauge-high"></i>
-      <span>Dashboard</span>
+      <i class="fa-solid fa-right-from-bracket"></i>
+      <span>Login/Register</span>
     </a>
     {% if is_employee_user %}
       <a href="{{ url_for('views.attendance') }}" class="mobile-nav-link {% if request.path == '/attendance' %}active{% endif %}">

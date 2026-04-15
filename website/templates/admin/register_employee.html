@@ -3,71 +3,222 @@
 {% block title %}Register Employee{% endblock %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/pages/employees.css') }}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+<style>
+
+/* ===== GLOBAL ===== */
+body {
+  font-family: 'Inter', sans-serif;
+}
+
+/* ===== FIELD ===== */
+.field {
+  display: flex;
+  flex-direction: column;
+}
+
+.field label {
+  font-size: 13px;
+  margin-bottom: 5px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.field input,
+.field select,
+.field textarea {
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  font-size: 13px;
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  border-color: #2563eb;
+  outline: none;
+}
+
+/* ===== GRIDS (DESKTOP DEFAULT) ===== */
+.grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 15px;
+}
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 15px;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 15px;
+}
+
+/* ===== CARD ===== */
+.form-section-card {
+  background: #fff;
+  padding: 20px;
+  border-radius: 14px;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.05);
+  margin-bottom: 20px;
+}
+
+.form-section-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 15px;
+  color: #1f2937;
+}
+
+/* ===== PHOTO ===== */
+.photo-section {
+  display: flex;
+  gap: 25px;
+  margin-bottom: 25px;
+}
+
+.photo-box {
+  width: 180px;
+  height: 180px;
+  border-radius: 16px;
+  border: 2px dashed #cbd5e1;
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.photo-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.photo-placeholder {
+  text-align: center;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.photo-info {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* ===== BUTTONS ===== */
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.form-actions button {
+  padding: 10px 18px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+}
+
+.form-actions button[type="submit"] {
+  background: gold;
+  color: white;
+}
+
+.form-actions button[type="reset"] {
+  background: #e5e7eb;
+}
+
+/* ===== MOBILE ===== */
+@media (max-width: 768px) {
+
+  .grid-4,
+  .grid-3,
+  .grid-2 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  textarea {
+    grid-column: span 2;
+  }
+
+  .photo-section {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .photo-box {
+    margin: 0 auto;
+  }
+
+  .form-actions {
+    flex-direction: column;
+  }
+
+  .form-actions button {
+    width: 100%;
+  }
+}
+
+</style>
 {% endblock %}
 
 {% block page_content %}
-<div class="container mt-4">
 
-  <h2 class="mb-4" style="font-weight: bold; font-size: 26px;">Register Employee</h2>
+<div>
+  <h2 style="font-weight:700; margin-bottom: 10px; font-size:24px;">Register Employee</h2>
 
-  <form action="{{ url_for('admin.add_employee') }}" method="POST" enctype="multipart/form-data" class="employee-form">
+  <form action="{{ url_for('admin.add_employee') }}" method="POST" enctype="multipart/form-data">
 
-    <!-- PERSONAL INFO -->
+    <!-- PERSONAL -->
     <div class="form-section-card">
       <h3 class="form-section-title">Personal Information</h3>
 
-      <div class="grid-4">
-        <div class="field">
-          <label>First Name *</label>
-          <input type="text" name="first_name" required>
-        </div>
+      <div class="photo-section">
+        <label class="photo-box" for="photoInput">
+          <img id="previewImg" style="display:none;">
+          <div class="photo-placeholder" id="placeholder"> 
+            📷<br>Click to Upload Photo
+          </div>
+        </label>
 
-        <div class="field">
-          <label>Middle Name *</label>
-          <input type="text" name="middle_name" required>
-        </div>
+        <input type="file" id="photoInput" name="photo" hidden onchange="previewPhoto(event)">
 
-        <div class="field">
-          <label>Last Name *</label>
-          <input type="text" name="last_name" required>
-        </div>
-
-        <div class="field">
-          <label>Suffix</label>
-          <input type="text" name="suffix">
+        <div class="photo-info">
+          <h4>Profile Upload</h4>
+          <p>Upload a clear square photo</p>
         </div>
       </div>
 
       <div class="grid-4">
-        <div class="field">
-          <label>Birth Date *</label>
-          <input type="date" name="birth_date" required>
-        </div>
+        <div class="field"><label>First Name</label><input name="first_name" required></div>
+        <div class="field"><label>Middle Name</label><input name="middle_name"></div>
+        <div class="field"><label>Last Name</label><input name="last_name" required></div>
+        <div class="field"><label>Suffix</label><input name="suffix"></div>
+      </div>
 
+      <div class="grid-4">
+        <div class="field"><label>Birth Date</label><input type="date" name="birth_date"></div>
+        <div class="field"><label>Age</label><input type="number" name="age"></div>
         <div class="field">
-          <label>Age *</label>
-          <input type="number" name="age" required>
-        </div>
-
-        <div class="field">
-          <label>Gender *</label>
-          <select name="gender" required>
-            <option value="" disabled selected>Select</option>
+          <label>Gender</label>
+          <select name="gender">
+            <option>Select</option>
             <option>Male</option>
             <option>Female</option>
-            <option>Other</option>
           </select>
         </div>
-
-        <div class="field">
-          <label>Religion *</label>
-          <input type="text" name="religion" required>
-        </div>
+        <div class="field"><label>Religion</label><input name="religion"></div>
       </div>
     </div>
 
@@ -76,96 +227,52 @@
       <h3 class="form-section-title">Contact Information</h3>
 
       <div class="grid-3">
-        <div class="field">
-          <label>Email *</label>
-          <input type="email" name="email" required>
-        </div>
-
-        <div class="field">
-          <label>Phone *</label>
-          <input type="tel" name="phone" required>
-        </div>
-
-        <div class="field">
-          <label>Zip Code</label>
-          <input type="text" name="zipCode">
-        </div>
+        <div class="field"><label>Email</label><input type="email" name="email"></div>
+        <div class="field"><label>Phone</label><input name="phone"></div>
+        <div class="field"><label>Zip Code</label><input name="zipCode"></div>
       </div>
 
       <div class="field">
-        <label>Address *</label>
-        <textarea name="present_address" required></textarea>
+        <label>Address</label>
+        <textarea name="present_address"></textarea>
       </div>
     </div>
 
-    <!-- EMPLOYMENT -->
+    <!-- EMPLOYMENT (FIXED 2 COLUMN DESKTOP) -->
     <div class="form-section-card">
       <h3 class="form-section-title">Employment Details</h3>
 
       <div class="grid-2">
         <div class="field">
-          <label>Employee ID *</label>
-          <input type="text" name="employee_no" required>
-        </div>
-
-        <div class="field">
-          <label>Company *</label>
-          <select name="company" required>
-            <option value="" disabled selected>Select Company</option>
+          <label>Company</label>
+          <select name="company">
+            <option>Select Company</option>
             {% for company in companies %}
             <option value="{{ company.company_name }}">{{ company.company_name }}</option>
             {% endfor %}
           </select>
         </div>
-      </div>
 
-      <div class="grid-2">
         <div class="field">
-          <label>Department *</label>
-          <input type="text" name="department" required>
+          <label>Position</label>
+          <input name="position">
         </div>
 
         <div class="field">
-          <label>Position *</label>
-          <input type="text" name="position" required>
-        </div>
-      </div>
-
-      <div class="grid-2">
-        <div class="field">
-          <label>Hired Date *</label>
-          <input type="date" name="hired_date" required>
+          <label>Hired Date</label>
+          <input type="date" name="hired_date">
         </div>
 
         <div class="field">
-          <label>Employee Type *</label>
-          <select name="employee_type" required>
-            <option value="" disabled selected>Select</option>
+          <label>Employee Type</label>
+          <select name="employee_type">
+            <option>Select</option>
             <option>Regular</option>
             <option>Probationary</option>
             <option>Trainee</option>
           </select>
         </div>
       </div>
-
-      <div class="field">
-        <label>Status *</label>
-        <select name="employment_status" required>
-          <option>Active</option>
-          <option>Resigned</option>
-          <option>Suspended</option>
-          <option>On Leave</option>
-        </select>
-      </div>
-    </div>
-
-    <!-- GOVERNMENT IDS -->
-
-
-    <!-- PHOTO -->
-    <div class="form-section-card">
-      <h3 class="form-section-title">Profile Photo</h3>
-      <input type="file" name="photo">
     </div>
 
     <!-- ACTION -->
@@ -175,6 +282,22 @@
     </div>
 
   </form>
-
 </div>
+
+<script>
+function previewPhoto(event) {
+  const file = event.target.files[0];
+  const img = document.getElementById("previewImg");
+  const placeholder = document.getElementById("placeholder");
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    img.src = e.target.result;
+    img.style.display = "block";
+    placeholder.style.display = "none";
+  };
+  reader.readAsDataURL(file);
+}
+</script>
+
 {% endblock %}

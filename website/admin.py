@@ -28,7 +28,7 @@ ESARF_STATUS_REJECTED = "Rejected"
 
 def _compute_age_from_birth_date(birth_date):
     if not birth_date:
-        return Nones
+        return None
 
     today = date.today()
     age = today.year - birth_date.year - (
@@ -149,114 +149,70 @@ def companies():
 
 
 @admin.route('/register_employee')
-@login_required
 def register_employee():
     return render_template('admin/register_employee.html')
 
 @admin.route("/add-employee", methods=["POST"])
-@roles_required("admin", "hr")
 def add_employee():
-    employment_status = (request.form.get("employment_status") or "").strip() or "Active"
+
+    # Always default status
+    employment_status = "Pending"
+
+    # Parse birthdate and compute age
     birth_date = _parse_date(request.form.get("birth_date"))
     age = _compute_age_from_birth_date(birth_date)
 
-    fields_to_check = {
-        "email": "Email Address",
-        "employee_no": "Employee ID No.",
-        "biometric_no": "Biometric No.",
-        "sss_no": "SSS No.",
-        "philhealth_no": "PhilHealth No.",
-        "pagibig_no": "Pag-IBIG No.",
-        "tin_no": "TIN No.",
-        "valid_id_no": "Valid ID No.",
-        "account_no": "Bank Account No."
-    }
-
-    duplicates =[]
-    existing_employees = Employee.query.all()
-
-    for field, label in fields_to_check.items():
-        form_val = (request.form.get(field) or "").strip()
-        if not form_val:
-            continue
-
-        # Clean the input: lowercase and remove spaces/dashes (except for email)
-        clean_form = form_val.lower() if field == "email" else re.sub(r"[^a-zA-Z0-9]", "", form_val).lower()
-
-        # Check against existing database records
-        for emp in existing_employees:
-            emp_val = getattr(emp, field, "") or ""
-            if not emp_val:
-                continue
-            
-            clean_emp = emp_val.lower() if field == "email" else re.sub(r"[^a-zA-Z0-9]", "", emp_val).lower()
-            
-            if clean_form == clean_emp:
-                duplicates.append(label)
-                break  # Move to the next field once a duplicate is found
-
-    # If any duplicates were found, stop and flash the message
-    if duplicates:
-        session["add_employee_form"] = request.form.to_dict(flat=True)
-        flash(f"Duplicate data found for: {', '.join(duplicates)}.", category="error")
-        return redirect(url_for("admin.employees"))
-
-    # 2. Process Photo Upload
+    # Photo upload
     photo_file = request.files.get("photo")
-    employee_photo_path = _save_employee_photo(photo_file)[0] if photo_file and photo_file.filename else None
+    employee_photo_path = (
+        _save_employee_photo(photo_file)[0]
+        if photo_file and photo_file.filename
+        else None
+    )
 
-    # 3. Create and Save Employee
+    # Create employee (ONLY fields from your HTML form)
     new_employee = Employee(
+        # Personal Info
         first_name=request.form.get("first_name"),
         middle_name=request.form.get("middle_name"),
         last_name=request.form.get("last_name"),
         suffix=request.form.get("suffix"),
         age=age,
+        gender=request.form.get("gender"),
         religion=request.form.get("religion"),
-        educational_attainment=request.form.get("educational_attainment"),
-        birth_date=birth_date,
-        hired_date=_parse_date(request.form.get("hired_date")),
-        department=request.form.get("department"),
-        position=request.form.get("position"),
-        company=(request.form.get("company") or "").strip(),
-        employee_no=request.form.get("employee_no"),
-        biometric_no=request.form.get("biometric_no"),
-        employee_type=request.form.get("employee_type"),
-        location=request.form.get("location"),
+
+        # Contact Info
         email=request.form.get("email"),
         phone=request.form.get("phone"),
-        present_address=request.form.get("present_address"),
-        permanent_address=request.form.get("permanent_address"),
-        sss_no=request.form.get("sss_no"),
-        philhealth_no=request.form.get("philhealth_no"),
-        pagibig_no=request.form.get("pagibig_no"),
-        tin_no=request.form.get("tin_no"),
-        valid_id_no=request.form.get("valid_id_no"),
-        facebook=request.form.get("facebook"),
-        account_no=request.form.get("account_no"),
-        leave_credits=float(request.form.get("leave_credits") or 0),
-        status=employment_status,
-        photopath=employee_photo_path,
-        employment_status=employment_status,
-        gender=request.form.get("gender"),
-        payroll_frequency=request.form.get("payroll_frequency"),
-        emp_code=request.form.get("emp_code"),
         zipCode=request.form.get("zipCode"),
+        present_address=request.form.get("present_address"),
+
+        # Employment Info
+        employee_no=None,
+        company=(request.form.get("company") or "").strip(),
+        department=None,
+        position=request.form.get("position"),
+        hired_date=_parse_date(request.form.get("hired_date")),
+        employee_type=request.form.get("employee_type"),
+
+        # Photo
+        photopath=employee_photo_path,
+
+        # DEFAULT STATUS (NO USER INPUT)
+        status="Pending",
+        employment_status="Pending",
     )
 
     try:
         db.session.add(new_employee)
         db.session.commit()
-        session.pop("add_employee_form", None)
-        flash("Employee added successfully.", category="success")
-    except IntegrityError:
+        # flash("Employee added successfully.", "success")
+
+    except Exception:
         db.session.rollback()
-        session["add_employee_form"] = request.form.to_dict(flat=True)
-        flash("Duplicate data detected. Please use unique employee details.", category="error")
-        
+        flash("Error saving employee.", "error")
+
     return redirect(url_for("admin.employees"))
-
-
 # EDIT EMPLOYEE
 @admin.route("/edit-employee/<int:employee_id>", methods=["POST"])
 @roles_required("admin", "hr")

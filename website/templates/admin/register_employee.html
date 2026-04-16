@@ -219,7 +219,7 @@ body {
           </select>
         </div>
         <div class="field"><label>Religion</label><input name="religion"></div>
-      </div>
+      </div>2
     </div>
 
     <!-- CONTACT -->
@@ -298,6 +298,37 @@ function previewPhoto(event) {
   };
   reader.readAsDataURL(file);
 }
+
+/* ===== DUPLICATE NAME CHECK ===== */
+document.addEventListener("DOMContentLoaded", function () {
+  const form = document.querySelector("form");
+
+  form.addEventListener("submit", function (e) {
+    const firstName = document.querySelector("input[name='first_name']").value.trim().toLowerCase();
+    const lastName = document.querySelector("input[name='last_name']").value.trim().toLowerCase();
+
+    // If empty, let required handle it
+    if (!firstName || !lastName) return;
+
+    // Simple rule: block same exact full name input (client-side only)
+    const fullName = firstName + " " + lastName;
+
+    // Optional: you can extend this list or fetch from backend later
+    const existingEmployees = window.existingEmployees || [];3
+
+    const isDuplicate = existingEmployees.some(emp =>
+      (emp.first_name + " " + emp.last_name).toLowerCase() === fullName
+    );
+
+    if (isDuplicate) {
+      e.preventDefault();
+
+      alert("⚠️ Employee already exists with the same First Name and Last Name!");
+
+      return false;
+    }
+  });
+});
 </script>
 
 {% endblock %}

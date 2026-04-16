@@ -162,6 +162,20 @@ def add_employee():
     birth_date = _parse_date(request.form.get("birth_date"))
     age = _compute_age_from_birth_date(birth_date)
 
+    # Get name fields (ADDED FOR DUPLICATE CHECK ONLY)
+    first_name = (request.form.get("first_name") or "").strip()
+    last_name = (request.form.get("last_name") or "").strip()
+
+    # ✅ DUPLICATE CHECK ADDED (NO OTHER CHANGES)
+    existing_employee = Employee.query.filter(
+        Employee.first_name.ilike(first_name),
+        Employee.last_name.ilike(last_name)
+    ).first()
+
+    if existing_employee:
+        flash("Employee with the same First Name and Last Name already exists!", "error")
+        return redirect(url_for("admin.employees"))
+
     # Photo upload
     photo_file = request.files.get("photo")
     employee_photo_path = (

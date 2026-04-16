@@ -12,11 +12,24 @@
         <h1>Employees</h1>
         <p class="employees-hero-subtitle">Manage employee records and quickly find team members.</p>
       </div>
-      <div class="employees-hero-actions">
-        <button type="button" data-bs-toggle="modal" data-bs-target="#addEmployeeModal" class="primary-btn btn-mini">
-          <i class="fa-solid fa-user-plus"></i> Add Employee
-        </button>
-      </div>
+    <div class="employees-hero-actions" style="display: flex; gap: 8px; flex-wrap: wrap;">
+  
+  <!-- ADD BUTTON -->
+  <button type="button"
+          data-bs-toggle="modal"
+          data-bs-target="#addEmployeeModal"
+          class="primary-btn btn-mini">
+    <i class="fa-solid fa-user-plus"></i> Add Employee
+  </button>
+
+  <!-- PENDING BUTTON -->
+  <a href="{{ url_for('admin.employees', status='Pending') }}"
+     class="primary-btn btn-mini"
+     style="background:#f59e0b;">
+    <i class="fa-solid fa-clock"></i> Pending
+  </a>
+
+</div>
     </div>
   </section>
 

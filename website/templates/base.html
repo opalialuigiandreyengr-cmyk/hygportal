@@ -44,7 +44,7 @@
         <li>
           <a href="{% if is_employee_user %}{{ url_for('employee.employee_dashboard') }}{% else %}{{ url_for('views.home') }}{% endif %}" class="nav-link {% if request.path == '/dashboard' or request.path == '/' or request.path == '/employee/employee_dashboard' or request.path == '/employee_dashboard' %}active{% endif %}">
             <i class="fa-solid fa-right-from-bracket"></i>
-            <span>LOGIN/REGISTER</span>
+            <span>Login / Register</span>
           </a>
         </li>
         {% if can_manage_employees %}

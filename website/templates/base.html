@@ -177,52 +177,75 @@
     </section>
   </div>
 
-  <nav class="mobile-bottom-nav" aria-label="Mobile navigation">
-    <a href="{% if is_employee_user %}{{ url_for('employee.employee_dashboard') }}{% else %}{{ url_for('views.home') }}{% endif %}" class="mobile-nav-link {% if request.path == '/dashboard' or request.path == '/' or request.path == '/employee/employee_dashboard' or request.path == '/employee_dashboard' %}active{% endif %}">
-      <i class="fa-solid fa-right-from-bracket"></i>
-      <span>Login/Register</span>
+<nav class="mobile-bottom-nav" aria-label="Mobile navigation">
+  <a href="{% if is_employee_user %}{{ url_for('employee.employee_dashboard') }}{% else %}{{ url_for('views.home') }}{% endif %}"
+     class="mobile-nav-link {% if request.path == '/dashboard' or request.path == '/' or request.path == '/employee/employee_dashboard' or request.path == '/employee_dashboard' %}active{% endif %}">
+    <i class="fa-solid fa-right-from-bracket"></i>
+    <span>Login/Register</span>
+  </a>
+
+  {% if is_employee_user %}
+
+    <a href="{{ url_for('views.attendance') }}"
+       class="mobile-nav-link {% if request.path == '/attendance' %}active{% endif %}">
+      <i class="fa-solid fa-clock"></i>
+      <span>Attendance</span>
     </a>
-    {% if is_employee_user %}
-      <a href="{{ url_for('views.attendance') }}" class="mobile-nav-link {% if request.path == '/attendance' %}active{% endif %}">
-        <i class="fa-solid fa-clock"></i>
-        <span>Attendance</span>
-      </a>
-      <a href="{{ url_for('employee.leaves') }}" class="mobile-nav-link {% if request.path == '/leaves' %}active{% endif %}">
-        <i class="fa-solid fa-calendar-day"></i>
-        <span>Leaves</span>
-      </a>
-      <a href="{{ url_for('employee.esarf') }}" class="mobile-nav-link {% if request.path in ['/employee/esarf', '/esarf', '/employee/esarf_requests'] %}active{% endif %}">
-        <i class="fa-solid fa-file-signature"></i>
-        <span>ESARF</span>
-      </a>
-    {% elif can_manage_employees %}
-      <a href="{{ url_for('admin.employees') }}" class="mobile-nav-link {% if request.path == '/employees' %}active{% endif %}">
-        <i class="fa-solid fa-user-tie"></i>
-        <span>Employees</span>
-      </a>
-      <a href="{{ url_for('admin.esarf_requests') }}" class="mobile-nav-link {% if request.path == '/esarf_requests' %}active{% endif %}">
-        <i class="fa-solid fa-file-signature"></i>
-        <span>ESARF</span>
-      </a>
-      <a href="{{ url_for('admin.leave_requests') }}" class="mobile-nav-link {% if request.path == '/leave_requests' %}active{% endif %}">
-        <i class="fa-solid fa-calendar-day"></i>
-        <span>Leaves</span>
-      </a>
-    {% elif can_view_esarf_requests %}
-      <a href="{{ url_for('admin.esarf_requests') }}" class="mobile-nav-link {% if request.path == '/esarf_requests' %}active{% endif %}">
-        <i class="fa-solid fa-file-signature"></i>
-        <span>ESARF</span>
-      </a>
-      <a href="{{ url_for('admin.leave_requests') }}" class="mobile-nav-link {% if request.path == '/leave_requests' %}active{% endif %}">
-        <i class="fa-solid fa-calendar-day"></i>
-        <span>Leaves</span>
-      </a>
-      <a href="{{ url_for('views.about') }}" class="mobile-nav-link {% if request.path == '/about' %}active{% endif %}">
-        <i class="fa-solid fa-circle-info"></i>
-        <span>About</span>
-      </a>
-    {% endif %}
-  </nav>
+
+    <a href="{{ url_for('employee.leaves') }}"
+       class="mobile-nav-link {% if request.path == '/leaves' %}active{% endif %}">
+      <i class="fa-solid fa-calendar-day"></i>
+      <span>Leaves</span>
+    </a>
+
+    <a href="{{ url_for('employee.esarf') }}"
+       class="mobile-nav-link {% if request.path in ['/employee/esarf', '/esarf', '/employee/esarf_requests'] %}active{% endif %}">
+      <i class="fa-solid fa-file-signature"></i>
+      <span>ESARF</span>
+    </a>
+
+  {% elif can_manage_employees %}
+
+    <a href="{{ url_for('admin.employees') }}"
+       class="mobile-nav-link {% if request.path == '/employees' %}active{% endif %}">
+      <i class="fa-solid fa-user-tie"></i>
+      <span>Employees</span>
+    </a>
+
+    <a href="{{ url_for('admin.register_employee') }}"
+       class="mobile-nav-link {% if request.path == '/register_employee' %}active{% endif %}">
+      <i class="fa-solid fa-user-plus"></i>
+      <span>Register Employee</span>
+    </a>
+
+    <a href="{{ url_for('admin.companies') }}"
+       class="mobile-nav-link {% if request.path == '/companies' %}active{% endif %}">
+      <i class="fa-solid fa-building"></i>
+      <span>Companies</span>
+    </a>
+
+  {% elif can_view_esarf_requests %}
+
+    <a href="{{ url_for('admin.esarf_requests') }}"
+       class="mobile-nav-link {% if request.path == '/esarf_requests' %}active{% endif %}">
+      <i class="fa-solid fa-file-signature"></i>
+      <span>ESARF</span>
+    </a>
+
+    <a href="{{ url_for('admin.leave_requests') }}"
+       class="mobile-nav-link {% if request.path == '/leave_requests' %}active{% endif %}">
+      <i class="fa-solid fa-calendar-day"></i>
+      <span>Leaves</span>
+    </a>
+
+    <a href="{{ url_for('views.about') }}"
+       class="mobile-nav-link {% if request.path == '/about' %}active{% endif %}">
+      <i class="fa-solid fa-circle-info"></i>
+      <span>About</span>
+    </a>
+
+  {% endif %}
+</nav>
 
   <div class="modal fade global-confirm-modal" id="globalConfirmModal" tabindex="-1" aria-labelledby="globalConfirmModalTitle" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-sm global-confirm-dialog">

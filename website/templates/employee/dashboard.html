@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Employee Dashboard | HYG Employee Portal{% endblock %}
+{% block title %}Dashboard | HYG Employee Portal{% endblock %}
 
 {% block extra_head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/employee-dashboard.css') }}">
@@ -7,322 +7,73 @@
 
 {% block page_content %}
 
-<!-- ================= HERO ================= -->
-<section class="hero employee-hero">
-
-  <div class="hero-left">
-    <h1>Welcome back, {{ current_user.username }}</h1>
-
-    {% if employee %}
-      <p class="hero-sub">Here is your employee dashboard overview.</p>
-    {% else %}
-      <p class="hero-sub warning">Your employee profile is not linked yet. Please contact HR.</p>
-    {% endif %}
+<!-- ================= GREETING ================= -->
+<section class="page-header dash-greeting">
+  <div class="greeting-text">
+    <h1>Hey, {{ current_user.username }}</h1>
+    <p>{{ employee.position if employee and employee.position else "Welcome to your dashboard" }}</p>
   </div>
-
-  <div class="hero-right">
-    <a class="primary-btn" href="{{ url_for('employee.esarf') }}">
-      <i class="fa-solid fa-file-signature"></i>
-      Create ESARF
-    </a>
-  </div>
-
+  <a class="primary-btn btn-mini" href="{{ url_for('employee.esarf') }}">
+    <i class="fa-solid fa-plus"></i> ESARF
+  </a>
 </section>
 
 
-<!-- ================= PROFILE + BASIC INFO ================= -->
-<section class="grid-3 dashboard-top">
+<!-- ================= QUICK ACTIONS ================= -->
+<section class="dash-actions">
+  {% if employee %}
+  <a class="dash-action-card" href="{{ url_for('employee.view_employee', employee_id=employee.id) }}">
+    <div class="dash-action-icon"><i class="fa-solid fa-user"></i></div>
+    <span>Profile</span>
+  </a>
+  {% endif %}
 
-  <!-- PROFILE CARD -->
-<article class="card profile-card" style="display:flex; gap:1rem; align-items:flex-start;">
+  <a class="dash-action-card" href="{{ url_for('views.attendance') }}">
+    <div class="dash-action-icon"><i class="fa-solid fa-clock"></i></div>
+    <span>Attendance</span>
+  </a>
 
-  <div class="profile-info" style="flex:1;">
+  <a class="dash-action-card" href="{{ url_for('employee.leaves') }}">
+    <div class="dash-action-icon"><i class="fa-solid fa-calendar-day"></i></div>
+    <span>Leaves</span>
+  </a>
 
-    <div style="display:flex; align-items:center; gap:10px; margin-bottom:4px;">
+  <a class="dash-action-card" href="{{ url_for('employee.esarf') }}">
+    <div class="dash-action-icon"><i class="fa-solid fa-file-signature"></i></div>
+    <span>ESARF</span>
+  </a>
+</section>
 
-      <div style="
-        width:45px;
-        height:40px;
-        background:#feee0c;
-        border-radius:12px;
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        font-size:18px;
-        color:#000000;
-      ">
-        <i class="fa-solid fa-user"></i>
-      </div>
 
-      <h2 style="margin:0; font-size:1.2rem; font-weight:700; color:#0f172a;">
-        {{ employee.fullname if employee and employee.fullname else current_user.username }}
-      </h2>
-
-    </div>
-
-    <p style="
-      margin:0 0 8px 0;
-      font-size:0.9rem;
-      color:#64748b;
-      font-weight:500;
-    ">
-      {{ employee.position if employee and employee.position else "Position not assigned" }}
-    </p>
-
-    <div style="display:flex; flex-direction:column; gap:4px; margin-bottom:10px;">
-
-      <div style="display:flex; align-items:center; gap:6px; font-size:0.85rem; color:#475569;">
-        <i class="fa-solid fa-building" style="color:#0d0d0e;"></i>
-        <span>
-          {{ employee.department if employee and employee.department else "N/A" }}
-        </span>
-      </div>
-
-      <div style="display:flex; align-items:center; gap:6px; font-size:0.85rem; color:#475569;">
-        <i class="fa-solid fa-envelope" style="color:#0d0d0e;"></i>
-        <span>
-          {{ employee.email if employee and employee.email else "N/A" }}
-        </span>
-      </div>
-
-    </div>
-
-    {% if employee %}
-    <a href="{{ url_for('employee.view_employee', employee_id=employee.id) }}"
-       style="
-        display:inline-flex;
-        align-items:center;
-        gap:6px;
-        padding:6px 12px;
-        font-size:0.85rem;
-        font-weight:600;
-        background:#f1f5f9;
-        border:1px solid #e2e8f0;
-        border-radius:8px;
-        text-decoration:none;
-        color:#0f172a;
-        transition:all .2s ease;
-       ">
-      <i class="fa-solid fa-user"></i>
-      View Profile
-    </a>
-    {% endif %}
-
+<!-- ================= INFO STRIP ================= -->
+<section class="dash-info-strip">
+  {% if employee and employee.employee_no %}
+  <div class="info-chip">
+    <i class="fa-solid fa-id-card"></i>
+    <span>{{ employee.employee_no }}</span>
   </div>
+  {% endif %}
 
-</article>
-
-
-  <!-- EMPLOYEE NUMBER -->
-  <article class="card stat-card">
-
-    <div class="stat-icon">
-      <i class="fa-solid fa-id-card"></i>
-    </div>
-
-    <div class="stat-content">
-      <p class="stat-label">Employee Number</p>
-      <h2 class="stat-value">
-        {{ employee.employee_no if employee and employee.employee_no else "N/A" }}
-      </h2>
-    </div>
-
-  </article>
-
-
-  <!-- EMPLOYMENT STATUS -->
-  <article class="card stat-card">
-
-    <div class="stat-icon">
-      <i class="fa-solid fa-circle-check"></i>
-    </div>
-
-    <div class="stat-content">
-      <p class="stat-label">Employment Status</p>
-      <h2 class="stat-value">
-        {{ employee.employment_status if employee and employee.employment_status else "N/A" }}
-      </h2>
-    </div>
-
-  </article>
-
-</section>
-
-
-<!-- ================= DASHBOARD SUMMARY ================= -->
-<section class="grid-4 dashboard-summary">
-
-  <article class="card stat-summary">
-
-    <div class="stat-icon green">
-      <i class="fa-solid fa-calendar-day"></i>
-    </div>
-
-    <h2 class="stat-value">
-      {{ employee.leave_credits if employee and employee.leave_credits is not none else "N/A" }}
-    </h2>
-
-    <p class="stat-label">Leave Credits</p>
-
-  </article>
-
-
-  <article class="card stat-summary">
-
-    <div class="stat-icon blue">
-      <i class="fa-solid fa-clock"></i>
-    </div>
-
-    <h2 class="stat-value">--</h2>
-
-    <p class="stat-label">Attendance Today</p>
-
-  </article>
-
-
-  <article class="card stat-summary">
-
-    <div class="stat-icon orange">
-      <i class="fa-solid fa-file-signature"></i>
-    </div>
-
-    <h2 class="stat-value">--</h2>
-
-    <p class="stat-label">Pending ESARF</p>
-
-  </article>
-
-
-  <article class="card stat-summary">
-
-    <div class="stat-icon purple">
-      <i class="fa-solid fa-bell"></i>
-    </div>
-
-    <h2 class="stat-value">--</h2>
-
-    <p class="stat-label">Notifications</p>
-
-  </article>
-
-</section>
-
-
-<!-- ================= DETAILS + QUICK ACTIONS ================= -->
-<section class="grid-3 dashboard-middle">
-
-  <!-- EMPLOYEE DETAILS -->
-  <article class="card span-2">
-
-    <h2 class="section-title">Employee Information</h2>
-
-    <div class="employee-meta-grid">
-
-      <div class="employee-meta-item">
-        <p class="meta-label">Company</p>
-        <p class="meta-value">
-          {{ employee.company if employee and employee.company else "N/A" }}
-        </p>
-      </div>
-
-      <div class="employee-meta-item">
-        <p class="meta-label">Phone</p>
-        <p class="meta-value">
-          {{ employee.phone if employee and employee.phone else "N/A" }}
-        </p>
-      </div>
-
-      <div class="employee-meta-item">
-        <p class="meta-label">Department</p>
-        <p class="meta-value">
-          {{ employee.department if employee and employee.department else "N/A" }}
-        </p>
-      </div>
-
-      <div class="employee-meta-item">
-        <p class="meta-label">Position</p>
-        <p class="meta-value">
-          {{ employee.position if employee and employee.position else "N/A" }}
-        </p>
-      </div>
-
-    </div>
-
-  </article>
-
-
-  <!-- QUICK ACTIONS -->
-  <article class="card quick-card">
-
-    <h2 class="section-title">Quick Actions</h2>
-
-    <div class="quick-actions">
-
-      {% if employee %}
-      <a class="action-btn"
-         href="{{ url_for('employee.view_employee', employee_id=employee.id) }}">
-        <i class="fa-solid fa-user"></i>
-        My Profile
-      </a>
-      {% endif %}
-
-      <a class="action-btn" href="{{ url_for('employee.esarf') }}">
-        <i class="fa-solid fa-file-signature"></i>
-        ESARF Requests
-      </a>
-
-      <a class="action-btn" href="{{ url_for('views.attendance') }}">
-        <i class="fa-solid fa-clock"></i>
-        Attendance
-      </a>
-
-      <a class="action-btn" href="{{ url_for('employee.leaves') }}">
-        <i class="fa-solid fa-calendar-day"></i>
-        Leaves
-      </a>
-
-    </div>
-
-  </article>
-
-</section>
-
-
-<!-- ================= RECENT ACTIVITY ================= -->
-<section class="card activity-card">
-
-  <div class="section-header">
-    <h2 class="section-title">Recent Activity</h2>
+  {% if employee and employee.department %}
+  <div class="info-chip">
+    <i class="fa-solid fa-building"></i>
+    <span>{{ employee.department }}</span>
   </div>
+  {% endif %}
 
-  <ul class="activity-list">
+  {% if employee and employee.employment_status %}
+  <div class="info-chip">
+    <i class="fa-solid fa-circle-check"></i>
+    <span>{{ employee.employment_status }}</span>
+  </div>
+  {% endif %}
 
-    <li>
-      <i class="fa-solid fa-file-signature"></i>
-      <div>
-        <p>ESARF Request Submitted</p>
-        <span>2 hours ago</span>
-      </div>
-    </li>
-
-    <li>
-      <i class="fa-solid fa-calendar-day"></i>
-      <div>
-        <p>Leave Approved</p>
-        <span>Yesterday</span>
-      </div>
-    </li>
-
-    <li>
-      <i class="fa-solid fa-clock"></i>
-      <div>
-        <p>Attendance Logged</p>
-        <span>Today 8:02 AM</span>
-      </div>
-    </li>
-
-  </ul>
-
+  {% if employee and employee.company %}
+  <div class="info-chip">
+    <i class="fa-solid fa-briefcase"></i>
+    <span>{{ employee.company }}</span>
+  </div>
+  {% endif %}
 </section>
 
 {% endblock %}

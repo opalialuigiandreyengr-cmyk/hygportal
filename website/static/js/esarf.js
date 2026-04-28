@@ -120,7 +120,7 @@
 
   function validateAutoCalculationState(mode) {
     if (mode !== "ot" && mode !== "ut") {
-      return true;
+      updateBaseTotalHours();
     }
 
     calculateAutoHours();
@@ -340,6 +340,24 @@
     return "none";
   }
 
+  function updateBaseTotalHours() {
+    const workStart = parseTimeInput(timeFromEl.value);
+    const workEnd = parseTimeInput(timeToEl.value);
+
+    if (workStart === null || workEnd === null) {
+      totalHoursEl.value = "";
+      return;
+    }
+
+    const workedMinutes = computeWorkedMinutes(workStart, workEnd);
+    if (workedMinutes <= 0) {
+      totalHoursEl.value = "";
+      return;
+    }
+
+    totalHoursEl.value = (workedMinutes / 60).toFixed(2);
+  }
+
   function calculateAutoHours() {
     const mode = getCalculationMode();
     if (mode !== "ot" && mode !== "ut") return;
@@ -429,7 +447,8 @@
       totalHoursEl.readOnly = false;
       totalHoursEl.classList.remove("esarf-auto-field");
       totalHoursEl.placeholder = "";
-      setAutoHint("OT and UT both selected. Enter total hours manually.", true);
+      updateBaseTotalHours();
+      setAutoHint("Total hours are auto-saved from the selected time range.", true);
       return;
     }
 
@@ -439,9 +458,7 @@
     totalHoursEl.placeholder = "";
     setAutoHint("", false);
 
-    if (!totalHoursEl.value && manualTotalHoursValue) {
-      totalHoursEl.value = manualTotalHoursValue;
-    }
+    updateBaseTotalHours();
   }
 
   totalHoursEl.addEventListener("input", function () {

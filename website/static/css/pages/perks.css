@@ -1,0 +1,590 @@
+/* ================= PERKS PAGE ================= */
+
+/* ================= FORMS GRID ================= */
+
+.perks-mobile-selector {
+  display: none;
+}
+
+.perks-forms-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+}
+
+.perks-form-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.perks-select-card {
+  appearance: none;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  border-radius: 14px;
+  padding: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05);
+  cursor: pointer;
+}
+
+.perks-select-card.active {
+  border-color: #f59e0b;
+  background: #fffbeb;
+  box-shadow: 0 10px 24px rgba(245, 158, 11, 0.14);
+}
+
+.perks-select-card[data-perk-select="charge"].active {
+  border-color: #3b82f6;
+  background: #eff6ff;
+  box-shadow: 0 10px 24px rgba(59, 130, 246, 0.14);
+}
+
+.perks-select-card:focus-visible {
+  outline: 3px solid rgba(59, 130, 246, 0.28);
+  outline-offset: 2px;
+}
+
+.perks-select-card strong,
+.perks-select-card small {
+  display: block;
+}
+
+.perks-select-card strong {
+  font-size: 0.82rem;
+  line-height: 1.15;
+  color: #0f172a;
+}
+
+.perks-select-card small {
+  margin-top: 0.12rem;
+  font-size: 0.72rem;
+  color: #64748b;
+}
+
+.perks-select-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  font-size: 0.86rem;
+}
+
+
+/* ================= FORM HEADER ================= */
+
+.perks-form-header {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.perks-form-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.goldilocks-icon {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.charge-icon {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.perks-form-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.perks-form-sub {
+  font-size: 0.8rem;
+  color: #64748b;
+  margin: 0;
+}
+
+
+/* ================= LIMIT BAR ================= */
+
+.perks-limit-bar {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0.65rem 0.85rem;
+}
+
+.perks-limit-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.82rem;
+  color: #475569;
+  margin-bottom: 0.4rem;
+}
+
+.perks-limit-info strong {
+  color: #0f172a;
+}
+
+.perks-limit-track {
+  width: 100%;
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.perks-limit-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #fde047, #f59e0b);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.charge-track .charge-fill {
+  background: linear-gradient(90deg, #93c5fd, #3b82f6);
+}
+
+
+/* ================= LIMIT REACHED ================= */
+
+.perks-limit-reached {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  padding: 0.7rem 0.85rem;
+  font-size: 0.85rem;
+  color: #991b1b;
+}
+
+.perks-limit-reached i {
+  margin-top: 2px;
+  color: #dc2626;
+}
+
+
+/* ================= PENDING NOTICE ================= */
+
+.perks-pending-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  background: #fefce8;
+  border: 1px solid #fde68a;
+  border-radius: 10px;
+  padding: 0.7rem 0.85rem;
+  font-size: 0.85rem;
+  color: #713f12;
+}
+
+.perks-pending-notice i {
+  margin-top: 3px;
+  color: #d97706;
+  font-size: 1.1rem;
+}
+
+.perks-pending-notice strong {
+  color: #92400e;
+}
+
+.perks-pending-notice p {
+  margin: 0.15rem 0 0;
+  font-weight: 600;
+}
+
+.perks-pending-notice small {
+  color: #a16207;
+}
+
+
+/* ================= QTY + PRICE ROW ================= */
+
+.perks-qty-price-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.7rem;
+}
+
+
+/* ================= CALC PREVIEW ================= */
+
+.perks-calc-preview {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0.7rem 0.85rem;
+  font-size: 0.85rem;
+  color: #475569;
+  margin-bottom: 0.75rem;
+}
+
+.perks-calc-preview strong {
+  font-size: 1.1rem;
+  color: #0f172a;
+}
+
+.perks-limit-warn {
+  display: none;
+  color: #dc2626;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-left: 0.5rem;
+}
+
+
+/* ================= SUBMIT BUTTON ================= */
+
+.perks-submit-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+
+/* ================= HISTORY ================= */
+
+.perks-history {
+  margin-top: 0.2rem;
+}
+
+.perks-history-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 600px;
+}
+
+.perks-history-table th {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.11em;
+  color: #475569;
+  font-weight: 700;
+  text-align: left;
+  padding: 0.8rem;
+  border-bottom: 1px solid #cbd5e1;
+}
+
+.perks-history-table td {
+  padding: 0.7rem 0.8rem;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 0.88rem;
+  color: #334155;
+}
+
+
+/* ================= TYPE BADGES ================= */
+
+.perk-type-badge {
+  display: inline-block;
+  padding: 0.18rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.discount-badge {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.charge-badge {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+
+/* ================= AMOUNT ================= */
+
+.perk-amount-original {
+  color: #94a3b8;
+  text-decoration: line-through;
+  font-size: 0.82rem;
+}
+
+
+/* ================= EMPTY STATE ================= */
+
+.perks-empty {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: #94a3b8;
+}
+
+.perks-empty i {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+  display: block;
+}
+
+.perks-empty p {
+  font-size: 0.9rem;
+}
+
+
+/* ================= MOBILE CARDS ================= */
+
+.perks-cards-mobile {
+  display: none;
+}
+
+.perk-history-card {
+  background: #fff;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 14px;
+  padding: 0.85rem;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.perk-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.perk-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.perk-card-body strong {
+  font-size: 0.95rem;
+  color: #0f172a;
+}
+
+.perk-card-meta {
+  font-size: 0.82rem;
+  color: #64748b;
+}
+
+.perk-card-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.perk-card-amount {
+  font-size: 0.92rem;
+  color: #334155;
+}
+
+.perk-card-date {
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+.perk-card-reason {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  padding-top: 0.25rem;
+  border-top: 1px solid #f1f5f9;
+}
+
+
+/* ================= RESPONSIVE ================= */
+
+@media (max-width: 900px) {
+  .perks-forms-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .perks-mobile-selector {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.65rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .perks-forms-grid {
+    display: block;
+  }
+
+  .perks-form-card {
+    display: none;
+  }
+
+  .perks-form-card.active {
+    display: flex;
+    margin-bottom: 0.75rem;
+  }
+
+  .perks-table-desktop {
+    display: none;
+  }
+
+  .perks-cards-mobile {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+  }
+
+  /* ---------- FORM CARD ---------- */
+  .perks-form-card {
+    border-radius: 16px;
+    padding: 1rem;
+    gap: 0.65rem;
+  }
+
+  .perks-form-header {
+    gap: 0.6rem;
+  }
+
+  .perks-form-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    font-size: 0.9rem;
+  }
+
+  .perks-form-title {
+    font-size: 0.92rem;
+  }
+
+  .perks-form-sub {
+    font-size: 0.75rem;
+  }
+
+  .perks-limit-bar {
+    border-radius: 12px;
+    padding: 0.55rem 0.7rem;
+  }
+
+  .perks-limit-info {
+    font-size: 0.78rem;
+  }
+
+  .perks-limit-track {
+    height: 5px;
+  }
+
+  .perks-pending-notice {
+    border-radius: 12px;
+    padding: 0.6rem 0.7rem;
+    font-size: 0.8rem;
+    gap: 0.5rem;
+  }
+
+  .perks-pending-notice i {
+    font-size: 0.95rem;
+  }
+
+  .perks-limit-reached {
+    border-radius: 12px;
+    padding: 0.6rem 0.7rem;
+    font-size: 0.8rem;
+  }
+
+  .perks-qty-price-row {
+    gap: 0.5rem;
+  }
+
+  .perks-calc-preview {
+    border-radius: 12px;
+    padding: 0.6rem 0.7rem;
+    font-size: 0.82rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .perks-calc-preview strong {
+    font-size: 1rem;
+  }
+
+  .perks-submit-btn {
+    border-radius: 12px;
+    height: 44px;
+    font-size: 0.88rem;
+  }
+
+  .perks-form-card .field input,
+  .perks-form-card .field select {
+    height: 44px;
+    border-radius: 12px;
+    font-size: 0.85rem;
+  }
+
+  /* ---------- HISTORY CARDS ---------- */
+  .perk-history-card {
+    border-radius: 16px;
+    padding: 0.85rem 1rem;
+    gap: 0.45rem;
+  }
+
+  .perk-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .perk-card-body strong {
+    font-size: 0.9rem;
+  }
+
+  .perk-card-meta {
+    font-size: 0.78rem;
+  }
+
+  .perk-card-bottom {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+
+  .perk-card-amount {
+    font-size: 0.88rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.05rem;
+  }
+
+  .perk-card-amount .perk-amount-original {
+    font-size: 0.76rem;
+    text-decoration: line-through;
+  }
+
+  .perk-card-amount strong {
+    font-size: 0.95rem;
+  }
+
+  .perk-card-date {
+    font-size: 0.76rem;
+  }
+
+  .perk-card-reason {
+    font-size: 0.75rem;
+    border-radius: 0;
+  }
+}
+

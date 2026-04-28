@@ -1,19 +1,117 @@
 {% extends "base.html" %}
-{% block title %}Employees | HYG Employee Portal{% endblock %}
+{% block title %} Employees | HYG Employee Portal{% endblock %}
 
 {% block extra_head %}
   <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/employee.css') }}">
 {% endblock %}
 
 {% block page_content %}
-  <section class="hero employees-hero">
+  {% macro extended_employee_fields(employee=None, add_form=None) %}
+    {% set form = add_form or {} %}
+
+    <div class="form-section-card">
+      <h3 class="form-section-title">Additional Personal Details</h3>
+      <div class="grid-4">
+        <div class="field"><label>Birthplace</label><input type="text" name="birth_place" value="{{ employee.birth_place if employee else form.get('birth_place', '') }}"></div>
+        <div class="field"><label>Nationality</label><input type="text" name="nationality" value="{{ employee.nationality if employee else form.get('nationality', '') }}"></div>
+        <div class="field"><label>Height</label><input type="text" name="height" value="{{ employee.height if employee else form.get('height', '') }}"></div>
+        <div class="field"><label>Weight</label><input type="text" name="weight" value="{{ employee.weight if employee else form.get('weight', '') }}"></div>
+      </div>
+      <div class="grid-3">
+        <div class="field"><label>Civil Status</label><input type="text" name="civil_status" value="{{ employee.civil_status if employee else form.get('civil_status', '') }}"></div>
+        <div class="field"><label>House Phone No.</label><input type="text" name="house_phone" value="{{ employee.house_phone if employee else form.get('house_phone', '') }}"></div>
+        <div class="field"><label>Social Media Accounts</label><input type="text" name="social_media_accounts" value="{{ employee.social_media_accounts if employee else form.get('social_media_accounts', '') }}" placeholder="FB, IG, TikTok, WhatsApp, Viber"></div>
+      </div>
+      <div class="grid-2">
+        <div class="field"><label>Permanent Address</label><textarea name="permanent_address" rows="2">{{ employee.permanent_address if employee else form.get('permanent_address', '') }}</textarea></div>
+      </div>
+    </div>
+
+    <div class="form-section-card">
+      <h3 class="form-section-title">Educational Attainment</h3>
+      <div class="grid-3">
+        <div class="field"><label>Elementary School</label><input type="text" name="elementary_school" value="{{ employee.elementary_school if employee else form.get('elementary_school', '') }}"></div>
+        <div class="field"><label>Year Attended</label><input type="text" name="elementary_year_attended" value="{{ employee.elementary_year_attended if employee else form.get('elementary_year_attended', '') }}"></div>
+        <div class="field"><label>College Course</label><input type="text" name="college_course" value="{{ employee.college_course if employee else form.get('college_course', '') }}"></div>
+      </div>
+      <div class="grid-3">
+        <div class="field"><label>Secondary School</label><input type="text" name="secondary_school" value="{{ employee.secondary_school if employee else form.get('secondary_school', '') }}"></div>
+        <div class="field"><label>Year Attended</label><input type="text" name="secondary_year_attended" value="{{ employee.secondary_year_attended if employee else form.get('secondary_year_attended', '') }}"></div>
+        <div class="field"><label>Year Graduated</label><input type="text" name="year_graduated" value="{{ employee.year_graduated if employee else form.get('year_graduated', '') }}"></div>
+      </div>
+      <div class="grid-2">
+        <div class="field"><label>College School</label><input type="text" name="college_school" value="{{ employee.college_school if employee else form.get('college_school', '') }}"></div>
+        <div class="field"><label>Year Attended</label><input type="text" name="college_year_attended" value="{{ employee.college_year_attended if employee else form.get('college_year_attended', '') }}"></div>
+      </div>
+    </div>
+
+    <div class="form-section-card">
+      <h3 class="form-section-title">Family Details</h3>
+      <div class="grid-2">
+        <div class="field"><label>Father's Name</label><input type="text" name="father_name" value="{{ employee.father_name if employee else form.get('father_name', '') }}"></div>
+        <div class="field"><label>Father's Occupation</label><input type="text" name="father_occupation" value="{{ employee.father_occupation if employee else form.get('father_occupation', '') }}"></div>
+      </div>
+      <div class="grid-2">
+        <div class="field"><label>Mother's Maiden Name</label><input type="text" name="mother_maiden_name" value="{{ employee.mother_maiden_name if employee else form.get('mother_maiden_name', '') }}"></div>
+        <div class="field"><label>Mother's Occupation</label><input type="text" name="mother_occupation" value="{{ employee.mother_occupation if employee else form.get('mother_occupation', '') }}"></div>
+      </div>
+      <div class="grid-2">
+        <div class="field"><label>No. of Siblings</label><input type="text" name="no_of_siblings" value="{{ employee.no_of_siblings if employee else form.get('no_of_siblings', '') }}"></div>
+        <div class="field"><label>Birth Order Among Siblings</label><input type="text" name="sibling_birth_order" value="{{ employee.sibling_birth_order if employee else form.get('sibling_birth_order', '') }}"></div>
+      </div>
+    </div>
+
+    <div class="form-section-card">
+      <h3 class="form-section-title">Spouse Details</h3>
+      <div class="grid-3">
+        <div class="field"><label>Spouse Full Name</label><input type="text" name="spouse_full_name" value="{{ employee.spouse_full_name if employee else form.get('spouse_full_name', '') }}"></div>
+        <div class="field"><label>Age</label><input type="number" name="spouse_age" value="{{ employee.spouse_age if employee else form.get('spouse_age', '') }}"></div>
+        <div class="field"><label>Birth Date</label><input type="date" name="spouse_birth_date" value="{{ employee.spouse_birth_date if employee else form.get('spouse_birth_date', '') }}"></div>
+      </div>
+      <div class="grid-3">
+        <div class="field"><label>Name of School</label><input type="text" name="spouse_school" value="{{ employee.spouse_school if employee else form.get('spouse_school', '') }}"></div>
+        <div class="field"><label>Course/Degree</label><input type="text" name="spouse_course_degree" value="{{ employee.spouse_course_degree if employee else form.get('spouse_course_degree', '') }}"></div>
+        <div class="field"><label>Occupation</label><input type="text" name="spouse_occupation" value="{{ employee.spouse_occupation if employee else form.get('spouse_occupation', '') }}"></div>
+      </div>
+    </div>
+
+    <div class="form-section-card">
+      <h3 class="form-section-title">Children Details</h3>
+      {% set children = employee.children_details_list if employee else [] %}
+      <div class="grid-3">
+        <div class="field"><label>No. of Children</label><input type="number" name="no_of_children" min="0" class="js-child-count" value="{{ employee.no_of_children if employee else form.get('no_of_children', '') }}"></div>
+        <div class="field"><label>No. of Male Children</label><input type="number" name="no_of_male_children" value="{{ employee.no_of_male_children if employee else form.get('no_of_male_children', '') }}"></div>
+        <div class="field"><label>No. of Female Children</label><input type="number" name="no_of_female_children" value="{{ employee.no_of_female_children if employee else form.get('no_of_female_children', '') }}"></div>
+      </div>
+
+      <div class="js-children-container">
+        {% for child in children %}
+          <div class="employee-child-group">
+            <h4 class="form-section-title">Child {{ loop.index }}</h4>
+            <div class="grid-3">
+              <div class="field"><label>Full Name</label><input type="text" name="child_full_name[]" value="{{ child.full_name or '' }}"></div>
+              <div class="field"><label>Age</label><input type="number" name="child_age[]" value="{{ child.age or '' }}"></div>
+              <div class="field"><label>Birth Date</label><input type="date" name="child_birth_date[]" value="{{ child.birth_date or '' }}"></div>
+            </div>
+            <div class="grid-3">
+              <div class="field"><label>Name of School</label><input type="text" name="child_school[]" value="{{ child.school or '' }}"></div>
+              <div class="field"><label>School Level</label><input type="text" name="child_school_level[]" value="{{ child.school_level or '' }}"></div>
+              <div class="field"><label>Occupation</label><input type="text" name="child_occupation[]" value="{{ child.occupation or '' }}"></div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  {% endmacro %}
+
+  <section class="page-header employees-hero">
     <div class="employees-hero-head">
       <div class="employees-hero-copy">
         <h1>Employees</h1>
         <p class="employees-hero-subtitle">Manage employee records and quickly find team members.</p>
       </div>
-    <div class="employees-hero-actions" style="display: flex; gap: 8px; flex-wrap: wrap;">
-  
+    <div class="page-header-actions employees-hero-actions" style="display: flex; gap: 8px; flex-wrap: wrap;">
+ 
   <!-- ADD BUTTON -->
   <button type="button"
           data-bs-toggle="modal"
@@ -25,7 +123,7 @@
   <!-- PENDING BUTTON -->
   <a href="{{ url_for('admin.employees', status='Pending') }}"
      class="primary-btn btn-mini"
-     style="background:#f59e0b;">
+     style="background:#ef4444;color:#fff;">
     <i class="fa-solid fa-clock"></i> Pending
   </a>
 
@@ -50,6 +148,7 @@
       <select name="status" class="employees-filter-select" aria-label="Filter by status">
         <option value="">All Statuses</option>
         <option value="Active" {% if employee_filters.status == 'Active' %}selected{% endif %}>Active</option>
+        <option value="Pending" {% if employee_filters.status == 'Pending' %}selected{% endif %}>Pending</option>
         <option value="Resigned" {% if employee_filters.status == 'Resigned' %}selected{% endif %}>Resigned</option>
         <option value="Suspended" {% if employee_filters.status == 'Suspended' %}selected{% endif %}>Suspended</option>
         <option value="On Leave" {% if employee_filters.status == 'On Leave' %}selected{% endif %}>On Leave</option>
@@ -165,11 +264,11 @@
                 data-confirm-message="Please confirm you want to save the updated employee details."
                 data-confirm-confirm-text="Update Employee"
                 data-confirm-variant="success">
-            
+           
             <!-- 1. PERSONAL INFORMATION & PHOTO -->
             <div class="form-section-card">
               <h3 class="form-section-title">Personal Information</h3>
-              
+             
               <div class="personal-info-layout">
                 <!-- Box-Type Photo Upload -->
                 <div class="profile-upload-wrapper">
@@ -204,8 +303,8 @@
                     <div class="field"><label>Age </label><input type="number" name="age" min="15" max="100" value="{{ employee.age }}" required></div>
                     <div class="field">
                       <label>Gender </label>
-                      <select name="gender" required>
-                        <option value="" disabled>Select</option>
+                      <select name="gender">
+                        <option value="" disabled {% if not employee.gender %}selected{% endif %}>Select</option>
                         <option value="Male" {% if employee.gender == 'Male' %}selected{% endif %}>Male</option>
                         <option value="Female" {% if employee.gender == 'Female' %}selected{% endif %}>Female</option>
                         <option value="Other" {% if employee.gender == 'Other' %}selected{% endif %}>Other</option>
@@ -217,12 +316,13 @@
                     <div class="field"><label>Biometric No.</label><input type="text" name="biometric_no" value="{{ employee.biometric_no }}"></div>
                     <div class="field">
                       <label>Educational Attainment </label>
-                      <select name="educational_attainment" required>
-                        <option value="" disabled>Select Attainment</option>
-                        <option value="High School" {% if employee.educational_attainment == 'High School' %}selected{% endif %}>High School Graduate</option>
-                        <option value="Associate Degree" {% if employee.educational_attainment == 'Associate Degree' %}selected{% endif %}>Associate Degree</option>
-                        <option value="Bachelor's Degree" {% if employee.educational_attainment == "Bachelor's Degree" %}selected{% endif %}>Bachelor's Degree</option>
-                        <option value="Master's Degree" {% if employee.educational_attainment == "Master's Degree" %}selected{% endif %}>Master's Degree</option>
+                      <select name="educational_attainment">
+                        <option value="" disabled {% if not employee.educational_attainment %}selected{% endif %}>Select Attainment</option>
+                        <option value="Elementary" {% if employee.educational_attainment == 'Elementary' %}selected{% endif %}>Elementary</option>
+                        <option value="Secondary" {% if employee.educational_attainment == 'Secondary' %}selected{% endif %}>Secondary</option>
+                        <option value="Vocational" {% if employee.educational_attainment == 'Vocational' %}selected{% endif %}>Vocational</option>
+                        <option value="College" {% if employee.educational_attainment == 'College' %}selected{% endif %}>College</option>
+                        <option value="Postgraduate" {% if employee.educational_attainment == 'Postgraduate' %}selected{% endif %}>Postgraduate</option>
                         <option value="Doctorate" {% if employee.educational_attainment == 'Doctorate' %}selected{% endif %}>Doctorate</option>
                       </select>
                     </div>
@@ -234,15 +334,14 @@
             <!-- CONTACT & ADDRESS -->
             <div class="form-section-card">
               <h3 class="form-section-title">Contact & Address</h3>
-              <div class="grid-4">
-                <div class="field"><label>Email Address </label><input type="email" name="email" value="{{ employee.email }}" placeholder="employee@company.com" required></div>
-                <div class="field"><label>Phone Number </label><input type="tel" name="phone" value="{{ employee.phone }}" placeholder="+63 900 000 0000" required></div>
+              <div class="grid-3">
+                <div class="field"><label>Email Address </label><input type="text" name="email" value="{{ employee.email }}" placeholder="employee@company.com"></div>
+                <div class="field"><label>Phone Number </label><input type="tel" name="phone" value="{{ employee.phone }}" placeholder="+63 900 000 0000"></div>
                 <div class="field"><label>Zip Code </label><input type="text" name="zipCode" value="{{ employee.zipCode }}" required></div>
-                <div class="field"><label>Facebook Profile </label><input type="text" name="facebook" value="{{ employee.facebook }}" placeholder="URL or Username" required></div>
               </div>
               <div class="field">
                 <label>Present Address </label>
-                <textarea name="present_address" rows="2" placeholder="Full street, barangay, city/municipality" required>{{ employee.present_address }}</textarea>
+                <textarea name="present_address" rows="2" placeholder="Full street, barangay, city/municipality">{{ employee.present_address }}</textarea>
               </div>
             </div>
 
@@ -252,11 +351,11 @@
               <div class="form-section-card">
                 <h3 class="form-section-title">Employment Details</h3>
                 <div class="grid-2">
-                  <div class="field"><label>Employee ID No. </label><input type="text" name="employee_no" value="{{ employee.employee_no }}" required></div>
+                  <div class="field"><label>Employee ID No. </label><input type="text" name="employee_no" value="{{ employee.employee_no }}"></div>
                   <div class="field">
                     <label>Company </label>
-                    <select name="company" required>
-                      <option value="" disabled>Select Company</option>
+                    <select name="company">
+                        <option value="" disabled {% if not employee.company %}selected{% endif %}>Select Company</option>
                       {% for company in companies %}
                       <option value="{{ company.company_name }}" {% if employee.company == company.company_name %}selected{% endif %}>{{ company.company_name }}</option>
                       {% endfor %}
@@ -271,8 +370,8 @@
                   <div class="field"><label>Hired Date </label><input type="date" name="hired_date" value="{{ employee.hired_date }}" required></div>
                   <div class="field">
                     <label>Employee Type </label>
-                    <select name="employee_type" required>
-                      <option value="" disabled>Select Type</option>
+                    <select name="employee_type">
+                      <option value="" disabled {% if not employee.employee_type %}selected{% endif %}>Select Type</option>
                       <option value="Regular" {% if employee.employee_type == 'Regular' %}selected{% endif %}>Regular</option>
                       <option value="Probationary" {% if employee.employee_type == 'Probationary' %}selected{% endif %}>Probationary</option>
                       <option value="Trainee" {% if employee.employee_type == 'Trainee' %}selected{% endif %}>Trainee</option>
@@ -281,7 +380,7 @@
                 </div>
                 <div class="field">
                   <label>Employment Status </label>
-                  <select name="employment_status" required>
+                  <select name="employment_status">
                     <option value="" disabled>Select Status</option>
                     <option value="Active" {% if employee.employment_status == 'Active' %}selected{% endif %}>Active</option>
                     <option value="Resigned" {% if employee.employment_status == 'Resigned' %}selected{% endif %}>Resigned</option>
@@ -310,6 +409,8 @@
                 </div>
               </div>
             </div>
+
+            {{ extended_employee_fields(employee=employee) }}
 
             <!-- MODAL FOOTER -->
             <div class="form-actions">
@@ -390,10 +491,11 @@
                       <label>Educational Attainment <span class="req">*</span></label>
                       <select name="educational_attainment" required>
                         <option value="" {% if not add_form.get('educational_attainment') %}selected{% endif %} disabled>Select Attainment</option>
-                        <option value="High School" {% if add_form.get('educational_attainment') == 'High School' %}selected{% endif %}>High School Graduate</option>
-                        <option value="Associate Degree" {% if add_form.get('educational_attainment') == 'Associate Degree' %}selected{% endif %}>Associate Degree</option>
-                        <option value="Bachelor's Degree" {% if add_form.get('educational_attainment') == "Bachelor's Degree" %}selected{% endif %}>Bachelor's Degree</option>
-                        <option value="Master's Degree" {% if add_form.get('educational_attainment') == "Master's Degree" %}selected{% endif %}>Master's Degree</option>
+                        <option value="Elementary" {% if add_form.get('educational_attainment') == 'Elementary' %}selected{% endif %}>Elementary</option>
+                        <option value="Secondary" {% if add_form.get('educational_attainment') == 'Secondary' %}selected{% endif %}>Secondary</option>
+                        <option value="Vocational" {% if add_form.get('educational_attainment') == 'Vocational' %}selected{% endif %}>Vocational</option>
+                        <option value="College" {% if add_form.get('educational_attainment') == 'College' %}selected{% endif %}>College</option>
+                        <option value="Postgraduate" {% if add_form.get('educational_attainment') == 'Postgraduate' %}selected{% endif %}>Postgraduate</option>
                         <option value="Doctorate" {% if add_form.get('educational_attainment') == 'Doctorate' %}selected{% endif %}>Doctorate</option>
                       </select>
                     </div>
@@ -405,11 +507,10 @@
             <!-- 2. CONTACT & ADDRESS -->
             <div class="form-section-card">
               <h3 class="form-section-title">Contact & Address</h3>
-              <div class="grid-4">
+              <div class="grid-3">
                 <div class="field"><label>Email Address <span class="req">*</span></label><input type="email" name="email" value="{{ add_form.get('email', '') }}" placeholder="employee@company.com" required></div>
                 <div class="field"><label>Phone Number <span class="req">*</span></label><input type="tel" name="phone" value="{{ add_form.get('phone', '') }}" placeholder="+63 900 000 0000" required></div>
                 <div class="field"><label>Zip Code</label><input type="text" name="zipCode" value="{{ add_form.get('zipCode', '') }}"></div>
-                <div class="field"><label>Facebook Profile</label><input type="text" name="facebook" value="{{ add_form.get('facebook', '') }}" placeholder="URL or Username"></div>
               </div>
               <div class="field">
                 <label>Present Address <span class="req">*</span></label>
@@ -479,6 +580,8 @@
                 </div>
               </div>
             </div>
+
+            {{ extended_employee_fields(add_form=add_form) }}
 
             <div class="form-actions">
               <button type="button" class="primary-btn secondary-btn" data-bs-dismiss="modal">Cancel</button>

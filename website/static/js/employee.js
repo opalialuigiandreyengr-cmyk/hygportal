@@ -121,6 +121,66 @@ if (addEmployeeForm) {
   });
 }
 
+function initDynamicChildrenSections() {
+  const sections = document.querySelectorAll(".js-children-container");
+
+  sections.forEach((container) => {
+    const formSection = container.closest(".form-section-card");
+    const countInput = formSection ? formSection.querySelector(".js-child-count") : null;
+    if (!countInput) return;
+
+    const createChildGroup = (index) => {
+      const group = document.createElement("div");
+      group.className = "employee-child-group";
+      group.innerHTML = `
+        <h4 class="form-section-title">Child ${index}</h4>
+        <div class="grid-3">
+          <div class="field"><label>Full Name</label><input type="text" name="child_full_name[]"></div>
+          <div class="field"><label>Age</label><input type="number" name="child_age[]"></div>
+          <div class="field"><label>Birth Date</label><input type="date" name="child_birth_date[]"></div>
+        </div>
+        <div class="grid-3">
+          <div class="field"><label>Name of School</label><input type="text" name="child_school[]"></div>
+          <div class="field"><label>School Level</label><input type="text" name="child_school_level[]"></div>
+          <div class="field"><label>Occupation</label><input type="text" name="child_occupation[]"></div>
+        </div>
+      `;
+      return group;
+    };
+
+    const syncChildren = () => {
+      const requestedCount = Math.max(0, parseInt(countInput.value || "0", 10) || 0);
+      let groups = Array.from(container.querySelectorAll(".employee-child-group"));
+
+      while (groups.length < requestedCount) {
+        const nextGroup = createChildGroup(groups.length + 1);
+        container.appendChild(nextGroup);
+        groups.push(nextGroup);
+      }
+
+      while (groups.length > requestedCount) {
+        const group = groups.pop();
+        group.remove();
+      }
+
+      groups.forEach((group, index) => {
+        const title = group.querySelector(".form-section-title");
+        if (title) title.textContent = "Child " + (index + 1);
+      });
+    };
+
+    if (!countInput.value && container.querySelectorAll(".employee-child-group").length) {
+      countInput.value = String(container.querySelectorAll(".employee-child-group").length);
+    }
+
+    countInput.addEventListener("input", syncChildren);
+    countInput.addEventListener("change", syncChildren);
+    syncChildren();
+  });
+}
+
+initDynamicChildrenSections();
+
 function initEditEmployeeMissingDataHighlights() {
   const editModals = document.querySelectorAll('[id^="editEmployeeModal"]');
   if (!editModals.length) return;

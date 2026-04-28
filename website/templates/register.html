@@ -68,6 +68,8 @@
                   <input id="middle_name" name="middle_name" type="text" class="form-control" placeholder="De la">
                 </div>
               </div>
+            </div>
+            <div class="grid-2">
               <div class="field">
                 <label for="last_name">Last Name</label>
                 <div class="field-wrap has-icon">
@@ -75,13 +77,12 @@
                   <input id="last_name" name="last_name" type="text" class="form-control" placeholder="Cruz" required>
                 </div>
               </div>
-            </div>
-
-            <div class="field">
-              <label for="birth_date">Birth Date</label>
-              <div class="field-wrap has-icon">
-                <i class="fa-solid fa-cake-candles"></i>
-                <input id="birth_date" name="birth_date" type="date" class="form-control" required>
+              <div class="field">
+                <label for="birth_date">Birth Date</label>
+                <div class="field-wrap has-icon">
+                  <i class="fa-solid fa-cake-candles"></i>
+                  <input id="birth_date" name="birth_date" type="date" class="form-control" required>
+                </div>
               </div>
             </div>
 
@@ -89,7 +90,7 @@
               <label for="email">Email</label>
               <div class="field-wrap has-icon">
                 <i class="fa-solid fa-envelope"></i>
-                <input id="email" name="email" type="email" class="form-control" placeholder="juandelacruz@gmail.com" required>
+                <input id="email" name="email" type="email" class="form-control" placeholder="juandelacruz@gmail.com">
               </div>
             </div>
 
@@ -97,6 +98,7 @@
               <span class="btn-spacer"></span>
               <button class="primary-btn" id="verifyBtn" type="button" onclick="nextStep()">Verify</button>
             </div>
+            <p class="register-helper-note">Don't have employee data yet? <a href="{{ url_for('admin.register_employee') }}">Click here to create Employee Profile</a></p>
           </div>
 
           <!-- STEP 2 -->

@@ -1,0 +1,463 @@
+{% extends "base.html" %}
+{% block title %}Perk Requests | HYG Employee Portal{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pages/perk_requests.css') }}">
+{% endblock %}
+
+{% block page_content %}
+<section class="page-header">
+  <div>
+    <h1>Perk Requests</h1>
+    <p>Review and manage employee perk requests.</p>
+  </div>
+</section>
+
+<!-- ================= FILTERS ================= -->
+<section class="card pr-filters-card">
+  <form method="GET" action="{{ url_for('admin.perk_requests') }}" class="pr-filters-form" id="prFilterForm">
+    <div class="pr-filter-group pr-filter-type">
+      <label>Type</label>
+      <select name="type" onchange="this.form.submit()">
+        <option value="">All Types</option>
+        <option value="discount" {% if filter_type == 'discount' %}selected{% endif %}>Discount</option>
+        <option value="charge" {% if filter_type == 'charge' %}selected{% endif %}>Charge</option>
+      </select>
+    </div>
+    <div class="pr-filter-group pr-filter-status">
+      <label>Status</label>
+      <select name="status" onchange="this.form.submit()">
+        <option value="">All Status</option>
+        <option value="Pending" {% if filter_status == 'Pending' %}selected{% endif %}>Pending</option>
+        <option value="Approved" {% if filter_status == 'Approved' %}selected{% endif %}>Approved</option>
+        <option value="Rejected" {% if filter_status == 'Rejected' %}selected{% endif %}>Rejected</option>
+      </select>
+    </div>
+    <div class="pr-filter-group pr-filter-search">
+      <label>Search</label>
+      <div class="pr-search-row">
+        <div class="pr-search-wrap">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="text" name="search" value="{{ filter_search }}" placeholder="Search by employee or details...">
+        </div>
+        <div class="pr-search-type">
+          <select name="type_mobile" onchange="this.form.submit()">
+            <option value="">All Types</option>
+            <option value="discount" {% if filter_type == 'discount' %}selected{% endif %}>Discount</option>
+            <option value="charge" {% if filter_type == 'charge' %}selected{% endif %}>Charge</option>
+          </select>
+        </div>
+        <button type="submit" class="pr-filter-btn">
+          <i class="fa-solid fa-filter"></i>
+        </button>
+      </div>
+    </div>
+    <div class="pr-filter-group pr-filter-dates">
+      <label>Date Range</label>
+      <div class="pr-date-range">
+        <input type="date" name="date_from" value="{{ filter_date_from }}" onchange="this.form.submit()">
+        <span class="pr-date-sep">&ndash;</span>
+        <input type="date" name="date_to" value="{{ filter_date_to }}" onchange="this.form.submit()">
+      </div>
+    </div>
+    <div class="pr-filter-actions">
+      <button type="submit" class="pr-filter-btn pr-filter-btn-desktop">
+        <i class="fa-solid fa-filter"></i>
+      </button>
+      <a href="{{ url_for('admin.export_perk_requests', type=filter_type, status=filter_status, search=filter_search, date_from=filter_date_from, date_to=filter_date_to) }}" class="pr-export-btn">
+        <i class="fa-solid fa-download"></i> Export
+      </a>
+    </div>
+  </form>
+</section>
+
+<!-- ================= STATUS TABS ================= -->
+<div class="pr-status-tabs">
+  <a href="{{ url_for('admin.perk_requests', type=filter_type, search=filter_search, date_from=filter_date_from, date_to=filter_date_to) }}"
+     class="pr-status-tab {% if not filter_status %}active{% endif %}">
+    All <span class="pr-tab-count">{{ count_all }}</span>
+  </a>
+  <a href="{{ url_for('admin.perk_requests', type=filter_type, status='Pending', search=filter_search, date_from=filter_date_from, date_to=filter_date_to) }}"
+     class="pr-status-tab {% if filter_status == 'Pending' %}active{% endif %}">
+    Pending <span class="pr-tab-count pending">{{ count_pending }}</span>
+  </a>
+  <a href="{{ url_for('admin.perk_requests', type=filter_type, status='Approved', search=filter_search, date_from=filter_date_from, date_to=filter_date_to) }}"
+     class="pr-status-tab {% if filter_status == 'Approved' %}active{% endif %}">
+    Approved <span class="pr-tab-count approved">{{ count_approved }}</span>
+  </a>
+  <a href="{{ url_for('admin.perk_requests', type=filter_type, status='Rejected', search=filter_search, date_from=filter_date_from, date_to=filter_date_to) }}"
+     class="pr-status-tab {% if filter_status == 'Rejected' %}active{% endif %}">
+    Rejected <span class="pr-tab-count rejected">{{ count_rejected }}</span>
+  </a>
+</div>
+
+<!-- ================= TABLE ================= -->
+<section class="card pr-table-card">
+  {% if requests %}
+  <div class="pr-table-wrap">
+    <table class="pr-table">
+      <thead>
+        <tr>
+          <th>Employee</th>
+          <th>Type</th>
+          <th>Details</th>
+          <th>Amount</th>
+          <th>Date Requested</th>
+          <th>Status</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for req in requests %}
+        {% set user = req.submitted_by_user %}
+        {% set emp = user.employee if user and user.employee else None %}
+        {% set emp_name = (
+          emp.first_name ~
+          (' ' ~ emp.middle_name[:1] ~ '.' if emp.middle_name else '') ~
+          ' ' ~ emp.last_name ~
+          (' ' ~ emp.suffix if emp.suffix else '')
+        )|trim if emp else (user.username if user and user.username else 'N/A') %}
+        {% set initials = (
+          (emp.first_name[:1] if emp else '') ~ (emp.last_name[:1] if emp else '') ~ (user.username[:2] if not emp else '')
+        )|upper %}
+
+        <tr class="pr-row {% if req.status == 'Pending' %}pr-row-pending{% endif %}">
+          <td>
+            <div class="pr-employee">
+              <div class="pr-avatar pr-avatar-{{ loop.index0 % 5 }}">{{ initials[:2] }}</div>
+              <div class="pr-employee-info">
+                <strong>{{ emp_name }}</strong>
+                {% if emp and emp.department %}
+                <span>{{ emp.department }}</span>
+                {% endif %}
+              </div>
+            </div>
+          </td>
+          <td>
+            <span class="pr-type-badge pr-type-{{ req.type }}">{{ req.type|title }}</span>
+          </td>
+          <td>
+            <div class="pr-details">
+              {{ req.product_name }} x{{ req.quantity }} @ {{ '%.2f'|format(req.price) }}
+            </div>
+          </td>
+          <td>
+            <div class="pr-amount">
+              {% if req.type == 'discount' and req.discounted_amount %}
+              <span class="pr-amount-original">{{ '%.2f'|format(req.amount) }}</span>
+              <i class="fa-solid fa-arrow-right pr-amount-arrow"></i>
+              <strong>{{ '%.2f'|format(req.discounted_amount) }}</strong>
+              {% else %}
+              <strong>{{ '%.2f'|format(req.total_amount) }}</strong>
+              {% endif %}
+            </div>
+          </td>
+          <td>
+            <div class="pr-date">
+              <span>{{ req.created_at.strftime('%b %d, %Y') if req.created_at else '-' }}</span>
+              <span class="pr-time">{{ req.created_at.strftime('%I:%M %p') if req.created_at else '' }}</span>
+            </div>
+          </td>
+          <td>
+            <span class="pr-status pr-status-{{ req.status|lower }}">{{ req.status }}</span>
+            {% if req.declined_reason %}
+            <div class="pr-decline-reason">{{ req.declined_reason }}</div>
+            {% endif %}
+          </td>
+          <td>
+            <button type="button" class="pr-review-btn" onclick="openReviewPanel({{ loop.index0 }})">
+              <i class="fa-solid fa-eye"></i>
+              {% if req.status == 'Pending' %}Review{% else %}View{% endif %}
+            </button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <!-- Mobile card layout (outside table for valid HTML) -->
+    <div class="pr-mobile-cards">
+    {% for req in requests %}
+    {% set user = req.submitted_by_user %}
+    {% set emp = user.employee if user and user.employee else None %}
+    {% set emp_name = (
+          emp.first_name ~
+          (' ' ~ emp.middle_name[:1] ~ '.' if emp.middle_name else '') ~
+          ' ' ~ emp.last_name ~
+          (' ' ~ emp.suffix if emp.suffix else '')
+        )|trim if emp else (user.username if user and user.username else 'N/A') %}
+    {% set initials = (
+          (emp.first_name[:1] if emp else '') ~ (emp.last_name[:1] if emp else '') ~ (user.username[:2] if not emp else '')
+        )|upper %}
+      <div class="pr-mobile-card {% if req.status == 'Pending' %}pr-row-pending{% endif %}" data-idx="{{ loop.index0 }}">
+        <div class="pr-mc-row pr-mc-row1">
+          <div class="pr-employee">
+            <div class="pr-avatar pr-avatar-{{ loop.index0 % 5 }}">{{ initials[:2] }}</div>
+            <div class="pr-employee-info">
+              <strong>{{ emp_name }}</strong>
+              {% if emp and emp.department %}<span>{{ emp.department }}</span>{% endif %}
+            </div>
+          </div>
+          <div class="pr-date">
+            <span>{{ req.created_at.strftime('%b %d, %Y') if req.created_at else '-' }}</span>
+            <span class="pr-time">{{ req.created_at.strftime('%I:%M %p') if req.created_at else '' }}</span>
+          </div>
+        </div>
+        <div class="pr-mc-row pr-mc-row2">
+          <span class="pr-type-badge pr-type-{{ req.type }}">{{ req.type|title }}</span>
+          <span class="pr-status pr-status-{{ req.status|lower }}">{{ req.status }}</span>
+        </div>
+        <div class="pr-mc-row pr-mc-row3">
+          <div class="pr-mc-amount-details">
+            <span class="pr-details">{{ req.product_name }} x{{ req.quantity }} @ {{ '%.2f'|format(req.price) }}</span>
+            <div class="pr-amount">
+              {% if req.type == 'discount' and req.discounted_amount %}
+              <div class="pr-amount-stack">
+                <span class="pr-amount-original">{{ '%.2f'|format(req.amount) }}</span>
+                <strong class="pr-amount-discounted">{{ '%.2f'|format(req.discounted_amount) }}</strong>
+              </div>
+              {% else %}
+              <strong>{{ '%.2f'|format(req.total_amount) }}</strong>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        <div class="pr-mc-row pr-mc-row4">
+          <button type="button" class="pr-review-btn" onclick="openReviewPanel({{ loop.index0 }})">
+            <i class="fa-solid fa-eye"></i>
+            {% if req.status == 'Pending' %}Review{% else %}View{% endif %}
+          </button>
+        </div>
+      </div>
+    {% endfor %}
+    </div>
+  </div>
+
+  <!-- PAGINATION -->
+  {% if total_pages > 1 %}
+  <div class="pr-pagination">
+    <span class="pr-pagination-info">Showing {{ start }} to {{ end }} of {{ total }} requests</span>
+    <div class="pr-pagination-controls">
+      {% if page > 1 %}
+      <a href="{{ url_for('admin.perk_requests', type=filter_type, status=filter_status, search=filter_search, date_from=filter_date_from, date_to=filter_date_to, page=page-1) }}" class="pr-page-btn">
+        <i class="fa-solid fa-chevron-left"></i>
+      </a>
+      {% endif %}
+
+      {% for p in range(1, total_pages + 1) %}
+        {% if p == page %}
+        <span class="pr-page-btn active">{{ p }}</span>
+        {% else %}
+        <a href="{{ url_for('admin.perk_requests', type=filter_type, status=filter_status, search=filter_search, date_from=filter_date_from, date_to=filter_date_to, page=p) }}" class="pr-page-btn">{{ p }}</a>
+        {% endif %}
+      {% endfor %}
+
+      {% if page < total_pages %}
+      <a href="{{ url_for('admin.perk_requests', type=filter_type, status=filter_status, search=filter_search, date_from=filter_date_from, date_to=filter_date_to, page=page+1) }}" class="pr-page-btn">
+        <i class="fa-solid fa-chevron-right"></i>
+      </a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% else %}
+  <div class="pr-empty">
+    <i class="fa-regular fa-folder-open"></i>
+    <p>No perk requests found.</p>
+  </div>
+  {% endif %}
+</section>
+
+<!-- ================= SIDE PANEL ================= -->
+<div class="pr-overlay" id="prOverlay" onclick="closeReviewPanel()"></div>
+<div class="pr-panel" id="prPanel">
+  <div class="pr-panel-header">
+    <h2>Request Details</h2>
+    <button type="button" class="pr-panel-close" onclick="closeReviewPanel()">
+      <i class="fa-solid fa-xmark"></i>
+    </button>
+  </div>
+  <div class="pr-panel-body" id="prPanelBody">
+    <!-- Populated by JS -->
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const perkData = [
+  {% for req in requests %}
+  {% set user = req.submitted_by_user %}
+  {% set emp = user.employee if user and user.employee else None %}
+  {% set emp_name = (
+    emp.first_name ~
+    (' ' ~ emp.middle_name[:1] ~ '.' if emp.middle_name else '') ~
+    ' ' ~ emp.last_name ~
+    (' ' ~ emp.suffix if emp.suffix else '')
+  )|trim if emp else (user.username if user and user.username else 'N/A') %}
+  {% set initials = ((
+    (emp.first_name[:1] if emp else '') ~ (emp.last_name[:1] if emp else '') ~ (user.username[:2] if not emp else '')
+  )|upper)[:2] %}
+  {
+    id: {{ req.id }},
+    type: '{{ req.type }}',
+    status: '{{ req.status }}',
+    product_name: '{{ req.product_name }}',
+    quantity: {{ req.quantity }},
+    price: {{ '%.2f'|format(req.price) }},
+    amount: {{ '%.2f'|format(req.amount) }},
+    discounted_amount: {% if req.discounted_amount %}{{ '%.2f'|format(req.discounted_amount) }}{% else %}null{% endif %},
+    total_amount: {{ '%.2f'|format(req.total_amount) }},
+    transaction_date: '{{ req.transaction_date.strftime("%b %d, %Y") if req.transaction_date else "" }}',
+    created_at: '{{ req.created_at.strftime("%b %d, %Y %I:%M %p") if req.created_at else "" }}',
+    declined_reason: '{{ req.declined_reason|e if req.declined_reason else "" }}',
+    emp_name: '{{ emp_name|e }}',
+    emp_department: '{{ emp.department if emp and emp.department else "" }}',
+    emp_id: '{{ "EMP-" ~ "%05d"|format(emp.id) if emp else "" }}',
+    initials: '{{ initials }}',
+    avatar_idx: {{ loop.index0 % 5 }},
+    approve_url: '{{ url_for('admin.approve_perk', perk_type=req.type, perk_id=req.id) }}',
+    decline_url: '{{ url_for('admin.decline_perk', perk_type=req.type, perk_id=req.id) }}',
+  },
+  {% endfor %}
+];
+
+function openReviewPanel(idx) {
+  const r = perkData[idx];
+  if (!r) return;
+
+  const isPending = r.status === 'Pending';
+  const isDiscount = r.type === 'discount';
+  const statusClass = r.status.toLowerCase();
+
+  let html = '';
+
+  // Header: avatar + name + requested date
+  html += '<div class="pr-panel-header-row">';
+  html += '  <div class="pr-panel-employee">';
+  html += '    <div class="pr-panel-avatar">' + r.initials + '</div>';
+  html += '    <div class="pr-panel-emp-info">';
+  html += '      <strong>' + r.emp_name + '</strong>';
+  if (r.emp_department) html += '      <span>' + r.emp_department + '</span>';
+  if (r.emp_id) html += '      <span class="pr-panel-emp-id">Employee ID: ' + r.emp_id + '</span>';
+  html += '    </div>';
+  html += '  </div>';
+  html += '  <div class="pr-panel-requested-on">';
+  html += '    <span>Requested on</span>';
+  if (r.created_at) {
+    const parts = r.created_at.split(' ');
+    html += '    <strong>' + (parts[0] || '') + ' ' + (parts[1] || '') + ' ' + (parts[2] || '') + '</strong>';
+    html += '    <span>' + (parts[3] || '') + ' ' + (parts[4] || '') + '</span>';
+  }
+  html += '  </div>';
+  html += '</div>';
+
+  // Request type + status
+  html += '<div class="pr-panel-meta-row">';
+  html += '  <div class="pr-panel-meta-item">';
+  html += '    <span class="pr-panel-meta-label">Request Type</span>';
+  html += '    <span class="pr-type-badge pr-type-' + r.type + '">' + (isDiscount ? 'Discount' : 'Charge') + '</span>';
+  html += '  </div>';
+  html += '  <div class="pr-panel-meta-item">';
+  html += '    <span class="pr-panel-meta-label">Status</span>';
+  html += '    <span class="pr-panel-status-badge pr-panel-status-' + statusClass + '">' + r.status + '</span>';
+  html += '  </div>';
+  html += '</div>';
+
+  // Transaction details box
+  html += '<div class="pr-panel-section">';
+  html += '  <div class="pr-panel-txn-header">';
+  html += '    <h3>Transaction Details</h3>';
+  if (r.transaction_date) {
+    html += '    <span class="pr-panel-txn-header-date">' + r.transaction_date + '</span>';
+  }
+  html += '  </div>';
+  html += '  <div class="pr-panel-txn-box">';
+  html += '    <div class="pr-panel-txn-row"><span>Product</span><strong>' + r.product_name + ' x' + r.quantity + '</strong></div>';
+
+  if (isDiscount && r.discounted_amount) {
+    const discountVal = (r.amount - r.discounted_amount).toFixed(2);
+    html += '    <div class="pr-panel-txn-row"><span>Original Price</span><span>PHP ' + r.amount + '</span></div>';
+    html += '    <div class="pr-panel-txn-row pr-panel-txn-discount"><span>Discount (15%)</span><span>- PHP ' + discountVal + '</span></div>';
+    html += '    <div class="pr-panel-txn-row pr-panel-txn-total"><span>Amount to Deduct</span><strong>PHP ' + r.discounted_amount + '</strong></div>';
+  } else {
+    html += '    <div class="pr-panel-txn-row"><span>Unit Price</span><span>PHP ' + r.price + '</span></div>';
+    html += '    <div class="pr-panel-txn-row pr-panel-txn-total"><span>Total Amount</span><strong>PHP ' + r.total_amount + '</strong></div>';
+  }
+
+  html += '  </div>';
+  html += '</div>';
+
+  // Decline reason (if rejected)
+  if (r.declined_reason) {
+    html += '<div class="pr-panel-section">';
+    html += '  <h3>Decline Reason</h3>';
+    html += '  <div class="pr-panel-note-box pr-panel-note-rejected">' + r.declined_reason + '</div>';
+    html += '</div>';
+  }
+
+  // Approver notes (for pending)
+  if (isPending) {
+    html += '<div class="pr-panel-section">';
+    html += '  <h3>Approver Notes <span class="pr-panel-required-mark">*</span></h3>';
+    html += '  <textarea id="approverNote" class="pr-panel-textarea" placeholder="Write your notes here..." maxlength="500" oninput="updateCharCount()"></textarea>';
+    html += '  <div class="pr-panel-char-count"><span id="charCount">0</span> / 500</div>';
+    html += '  <div id="approverNoteError" class="pr-panel-field-error" style="display:none;">Please provide a reason for rejecting this request.</div>';
+    html += '</div>';
+  }
+
+  // Action buttons
+  html += '<div class="pr-panel-actions">';
+  if (isPending) {
+    html += '  <form action="' + r.decline_url + '" method="POST" class="pr-panel-form" id="declineForm">';
+    html += '    <input type="hidden" name="decline_reason" id="declineReasonInput" value="">';
+    html += '    <button type="submit" class="pr-panel-btn pr-panel-btn-reject" onclick="return submitDecline()">';
+    html += '      <i class="fa-solid fa-xmark"></i> Reject';
+    html += '    </button>';
+    html += '  </form>';
+    html += '  <form action="' + r.approve_url + '" method="POST" class="pr-panel-form" data-confirm-action="true" data-confirm-message="Approve this ' + r.type + ' request?">';
+    html += '    <button type="submit" class="pr-panel-btn pr-panel-btn-approve">';
+    html += '      <i class="fa-solid fa-check"></i> Approve';
+    html += '    </button>';
+    html += '  </form>';
+  } else {
+    html += '  <span class="pr-processed">This request has been processed.</span>';
+  }
+  html += '</div>';
+
+  document.getElementById('prPanelBody').innerHTML = html;
+  document.getElementById('prPanel').classList.add('open');
+  document.getElementById('prOverlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeReviewPanel() {
+  document.getElementById('prPanel').classList.remove('open');
+  document.getElementById('prOverlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+function updateCharCount() {
+  const ta = document.getElementById('approverNote');
+  const counter = document.getElementById('charCount');
+  if (ta && counter) counter.textContent = ta.value.length;
+}
+
+function submitDecline() {
+  const note = document.getElementById('approverNote');
+  const reasonInput = document.getElementById('declineReasonInput');
+  const errorEl = document.getElementById('approverNoteError');
+  const reason = note ? note.value.trim() : '';
+  if (!reason) {
+    if (errorEl) errorEl.style.display = 'block';
+    if (note) { note.classList.add('pr-panel-textarea-error'); note.focus(); }
+    return false;
+  }
+  if (errorEl) errorEl.style.display = 'none';
+  if (note) note.classList.remove('pr-panel-textarea-error');
+  reasonInput.value = reason;
+  return true;
+}
+</script>
+{% endblock %}

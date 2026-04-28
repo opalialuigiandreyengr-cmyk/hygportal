@@ -227,7 +227,13 @@
 
 .name-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.6rem;
 }
 
@@ -448,19 +454,38 @@
   }
 
   .name-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .step-buttons {
-    flex-direction: column-reverse;
+    flex-direction: row;
   }
 
   .register-card .primary-btn,
   .register-card .secondary-btn {
-    width: 100%;
+    width: auto;
+    flex: 1;
   }
 
   .step-buttons .btn-spacer {
-    display: none;
+    display: block;
   }
+}
+
+.register-helper-note {
+  text-align: center;
+  font-size: 0.8rem;
+  color: #64748b;
+  margin-top: 0.75rem;
+  font-weight: 600;
+}
+
+.register-helper-note a {
+  color: #3b82f6;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.register-helper-note a:hover {
+  text-decoration: underline;
 }

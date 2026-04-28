@@ -58,26 +58,34 @@ def verify_employee():
     email = data.get('email', '').strip()
     birth_date_str = data.get('birth_date') 
 
-    if not all([first_name, last_name, email, birth_date_str]):
-        return jsonify({'status': 'error', 'message': 'Please fill in required fields (First, Last, Email, Birthday).'}), 400
+    if not first_name or not last_name or not birth_date_str:
+        return jsonify({'status': 'error', 'message': 'First Name, Last Name, and Birth Date are required.'}), 400
 
     try:
+        # Step 1: Find by first + last name
         query = Employee.query.filter(
-            func.lower(Employee.email) == email.lower(),
             func.lower(Employee.first_name) == first_name.lower(),
-            func.lower(Employee.last_name) == last_name.lower(),
-            Employee.birth_date == birth_date_str
+            func.lower(Employee.last_name) == last_name.lower()
         )
 
         if middle_name:
             query = query.filter(func.lower(Employee.middle_name) == middle_name.lower())
-        else:
-            query = query.filter((Employee.middle_name == '') | (Employee.middle_name.is_(None)))
+        
+        if email:
+            query = query.filter(func.lower(Employee.email) == email.lower())
         
         employee = query.first()
 
         if not employee:
-            return jsonify({'status': 'error', 'message': 'No employee record found with these details.'}), 404
+            return jsonify({'status': 'error', 'message': 'No employee record found with the provided First and Last Name.'}), 404
+
+        # Step 2: Check birth date if employee has one stored
+        if employee.birth_date and birth_date_str:
+            # Convert DB date to string for comparison (handles Date objects)
+            db_birth_str = employee.birth_date.strftime('%Y-%m-%d') if hasattr(employee.birth_date, 'strftime') else str(employee.birth_date)
+            if db_birth_str != birth_date_str:
+                return jsonify({'status': 'error', 'message': 'Birth Date does not match our records.'}), 404
+        # If employee.birth_date is NULL, skip birth date check
 
         existing_user = User.query.filter_by(employee_id=employee.id).first()
         if existing_user:
@@ -143,7 +151,7 @@ def complete_registration():
         return jsonify({
             'status': 'success', 
             'message': 'Registration successful!',
-            'redirect_url': url_for('employee.employee_dashboard')
+            'redirect_url': url_for('employee.view_employee', employee_id=employee.id)
         })
 
     except Exception as e:

@@ -1,11 +1,14 @@
 import re
-from datetime import date
+import csv
+import io
+from datetime import date, datetime
 
-from flask import Blueprint, flash, redirect, render_template, request, session, url_for
+from flask import Blueprint, flash, redirect, render_template, request, session, url_for, Response
 from flask_login import current_user
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from flask_login import login_required
+from werkzeug.security import generate_password_hash
 
 from . import db
 from .helpers import (
@@ -15,7 +18,7 @@ from .helpers import (
     _save_employee_photo,
     roles_required,
 )
-from .models import Company, Employee, User, EsarfRequest
+from .models import Company, Employee, User, EsarfRequest, DiscountRequest, ProductChargeRequest, PerkApprover
 
 admin = Blueprint("admin", __name__)
 
@@ -35,6 +38,97 @@ def _compute_age_from_birth_date(birth_date):
         (today.month, today.day) < (birth_date.month, birth_date.day)
     )
     return age if age >= 0 else None
+
+
+EMPLOYEE_TEXT_FIELDS = [
+    "birth_place",
+    "nationality",
+    "height",
+    "weight",
+    "civil_status",
+    "house_phone",
+    "social_media_type",
+    "social_media_detail",
+    "permanent_address",
+    "elementary_school",
+    "elementary_year_attended",
+    "secondary_school",
+    "secondary_year_attended",
+    "college_school",
+    "college_year_attended",
+    "college_course",
+    "year_graduated",
+    "father_name",
+    "father_occupation",
+    "mother_maiden_name",
+    "mother_occupation",
+    "no_of_siblings",
+    "sibling_birth_order",
+    "spouse_full_name",
+    "spouse_school",
+    "spouse_course_degree",
+    "spouse_occupation",
+    "bank_type",
+    "valid_id_type",
+]
+
+EMPLOYEE_INT_FIELDS = [
+    "spouse_age",
+    "no_of_children",
+    "no_of_male_children",
+    "no_of_female_children",
+]
+
+EMPLOYEE_DATE_FIELDS = [
+    "spouse_birth_date",
+]
+
+
+def _apply_extended_employee_fields(employee):
+    for field in EMPLOYEE_TEXT_FIELDS:
+        setattr(employee, field, (request.form.get(field) or "").strip())
+
+    for field in EMPLOYEE_INT_FIELDS:
+        setattr(employee, field, _parse_int(request.form.get(field)))
+
+    for field in EMPLOYEE_DATE_FIELDS:
+        setattr(employee, field, _parse_date(request.form.get(field)))
+
+    employee.children_details = _parse_children_details()
+
+
+def _parse_children_details():
+    names = request.form.getlist("child_full_name[]")
+    ages = request.form.getlist("child_age[]")
+    birth_dates = request.form.getlist("child_birth_date[]")
+    schools = request.form.getlist("child_school[]")
+    school_levels = request.form.getlist("child_school_level[]")
+    occupations = request.form.getlist("child_occupation[]")
+
+    children = []
+    total = max(
+        len(names),
+        len(ages),
+        len(birth_dates),
+        len(schools),
+        len(school_levels),
+        len(occupations),
+    )
+
+    for index in range(total):
+        child = {
+            "label": f"Child {index + 1}",
+            "full_name": names[index].strip() if index < len(names) else "",
+            "age": _parse_int(ages[index]) if index < len(ages) else None,
+            "birth_date": birth_dates[index].strip() if index < len(birth_dates) else "",
+            "school": schools[index].strip() if index < len(schools) else "",
+            "school_level": school_levels[index].strip() if index < len(school_levels) else "",
+            "occupation": occupations[index].strip() if index < len(occupations) else "",
+        }
+        if any(value for key, value in child.items() if key != "label"):
+            children.append(child)
+
+    return children
 
 
 @admin.route("/employees")
@@ -63,12 +157,18 @@ def employees():
             )
         )
 
+    # Default: exclude Pending employees unless explicitly filtered
     if status:
         employee_query = employee_query.filter(
             or_(
                 Employee.employment_status.ilike(status),
                 Employee.status.ilike(status),
             )
+        )
+    else:
+        employee_query = employee_query.filter(
+            Employee.employment_status != "Pending",
+            Employee.status != "Pending",
         )
 
     if company:
@@ -147,10 +247,34 @@ def companies():
         },
     )
 
+# from sqlalchemy import or_
+
+@admin.route("/dashboard")
+@roles_required("admin", "hr")
+def dashboard():
+
+    # Total employees
+    total_employees = Employee.query.count()
+
+    # Pending employees (from your system: status or employment_status = "Pending")
+    pending_employees = Employee.query.filter(
+        or_(
+            Employee.status == "Pending",
+            Employee.employment_status == "Pending"
+        )
+    ).count()
+
+    return render_template(
+        "admin/dashboard.html",
+        total_employees=total_employees,
+        pending_employees=pending_employees
+    )
+
 
 @admin.route('/register_employee')
 def register_employee():
-    return render_template('admin/register_employee.html')
+    companies = Company.query.order_by(Company.company_name.asc()).all()
+    return render_template('admin/register_employee.html', companies=companies)
 
 @admin.route("/add-employee", methods=["POST"])
 def add_employee():
@@ -194,6 +318,8 @@ def add_employee():
         age=age,
         gender=request.form.get("gender"),
         religion=request.form.get("religion"),
+        birth_date=birth_date,
+        educational_attainment=request.form.get("educational_attainment"),
 
         # Contact Info
         email=request.form.get("email"),
@@ -202,31 +328,76 @@ def add_employee():
         present_address=request.form.get("present_address"),
 
         # Employment Info
-        employee_no=None,
+        employee_no=(request.form.get("employee_no") or "").strip(),
         company=(request.form.get("company") or "").strip(),
-        department=None,
-        position=request.form.get("position"),
+        department=(request.form.get("department") or "").strip(),
         hired_date=_parse_date(request.form.get("hired_date")),
         employee_type=request.form.get("employee_type"),
+
+        # Government IDs & Bank
+        sss_no=(request.form.get("sss_no") or "").strip(),
+        philhealth_no=(request.form.get("philhealth_no") or "").strip(),
+        pagibig_no=(request.form.get("pagibig_no") or "").strip(),
+        tin_no=(request.form.get("tin_no") or "").strip(),
+        valid_id_no=(request.form.get("valid_id_no") or "").strip(),
+        account_no=(request.form.get("account_no") or "").strip(),
 
         # Photo
         photopath=employee_photo_path,
 
         # DEFAULT STATUS (NO USER INPUT)
-        status="Pending",
-        employment_status="Pending",
+        status=(request.form.get("employment_status") or "Active"),
+        employment_status=(request.form.get("employment_status") or "Active"),
     )
+    _apply_extended_employee_fields(new_employee)
 
     try:
         db.session.add(new_employee)
+        db.session.flush()  # get new_employee.id before creating user
+
+        # Create user account if username is provided
+        reg_username = (request.form.get("reg_username") or "").strip()
+        reg_password = request.form.get("reg_password") or ""
+        reg_confirm = request.form.get("reg_confirm_password") or ""
+        reg_role = "user"
+
+        if reg_username:
+            if len(reg_username) < 4:
+                db.session.rollback()
+                flash("Username must be at least 4 characters.", "error")
+                return redirect(url_for("admin.employees"))
+            if not reg_password or len(reg_password) < 7:
+                db.session.rollback()
+                flash("Password must be at least 7 characters when creating an account.", "error")
+                return redirect(url_for("admin.employees"))
+            if reg_password != reg_confirm:
+                db.session.rollback()
+                flash("Passwords do not match.", "error")
+                return redirect(url_for("admin.employees"))
+
+            existing_user = User.query.filter_by(username=reg_username).first()
+            if existing_user:
+                db.session.rollback()
+                flash(f"Username '{reg_username}' is already taken.", "error")
+                return redirect(url_for("admin.employees"))
+
+            new_user = User(
+                username=reg_username,
+                password=generate_password_hash(reg_password, method="pbkdf2:sha256"),
+                role=reg_role,
+                employee_id=new_employee.id,
+            )
+            db.session.add(new_user)
+
         db.session.commit()
-        # flash("Employee added successfully.", "success")
+        flash("Employee added successfully.", "success")
 
     except Exception:
         db.session.rollback()
         flash("Error saving employee.", "error")
+        return redirect(url_for("admin.employees"))
 
-    return redirect(url_for("admin.employees"))
+    return redirect(url_for("employee.view_employee", employee_id=new_employee.id))
 # EDIT EMPLOYEE
 @admin.route("/edit-employee/<int:employee_id>", methods=["POST"])
 @roles_required("admin", "hr")
@@ -260,10 +431,18 @@ def edit_employee(employee_id):
 
         for emp in existing_employees:
             emp_val = getattr(emp, field, "") or ""
+
+            # ✅ FORCE STRING SAFETY
+            emp_val = str(emp_val)
+
             if not emp_val:
                 continue
 
-            clean_emp = emp_val.lower() if field == "email" else re.sub(r"[^a-zA-Z0-9]", "", emp_val).lower()
+            if field == "email":
+                clean_emp = emp_val.lower()
+            else:
+                clean_emp = re.sub(r"[^a-zA-Z0-9]", "", emp_val).lower()
+
             if clean_form == clean_emp:
                 duplicates.append(label)
                 break
@@ -309,7 +488,6 @@ def edit_employee(employee_id):
     employee.email = email
     employee.phone = (request.form.get("phone") or "").strip()
     employee.zipCode = (request.form.get("zipCode") or "").strip()
-    employee.facebook = (request.form.get("facebook") or "").strip()
     employee.present_address = (request.form.get("present_address") or "").strip()
 
     # 3. Employment Details
@@ -329,6 +507,7 @@ def edit_employee(employee_id):
     employee.tin_no = (request.form.get("tin_no") or "").strip()
     employee.valid_id_no = (request.form.get("valid_id_no") or "").strip()
     employee.account_no = (request.form.get("account_no") or "").strip()
+    _apply_extended_employee_fields(employee)
 
     try:
         db.session.commit()
@@ -634,3 +813,422 @@ def update_esarf_status(esarf_id):
 def leave_requests():
 
     return render_template('admin/leave_requests.html', )
+
+
+@admin.route('/perk_requests', methods=['GET'])
+@login_required
+def perk_requests():
+    # Allow admin, hr, or assigned perk approvers
+    is_approver = PerkApprover.query.filter_by(user_id=current_user.id).first()
+    if not is_approver and current_user.role not in ('admin', 'hr'):
+        flash('You do not have permission to view perk requests.', category='error')
+        return redirect(url_for('views.home'))
+
+    # Build combined list
+    all_requests = []
+    for d in DiscountRequest.query.order_by(DiscountRequest.created_at.desc()).all():
+        all_requests.append({
+            'id': d.id,
+            'type': 'discount',
+            'status': d.status,
+            'product_name': d.product_name,
+            'quantity': d.quantity,
+            'price': d.price,
+            'amount': d.amount,
+            'discounted_amount': d.discounted_amount,
+            'total_amount': d.discounted_amount,
+            'transaction_date': d.transaction_date,
+            'created_at': d.created_at,
+            'declined_reason': d.declined_reason,
+            'submitted_by_user': d.submitted_by_user,
+        })
+    for c in ProductChargeRequest.query.order_by(ProductChargeRequest.created_at.desc()).all():
+        all_requests.append({
+            'id': c.id,
+            'type': 'charge',
+            'status': c.status,
+            'product_name': c.product_name,
+            'quantity': c.quantity,
+            'price': c.price,
+            'amount': c.total_amount,
+            'discounted_amount': None,
+            'total_amount': c.total_amount,
+            'transaction_date': c.transaction_date,
+            'created_at': c.created_at,
+            'declined_reason': c.declined_reason,
+            'submitted_by_user': c.submitted_by_user,
+        })
+
+    # Sort by created_at desc
+    all_requests.sort(key=lambda x: x['created_at'] if x['created_at'] else date.min, reverse=True)
+
+    # Counters
+    count_all = len(all_requests)
+    count_pending = sum(1 for r in all_requests if r['status'] == 'Pending')
+    count_approved = sum(1 for r in all_requests if r['status'] == 'Approved')
+    count_rejected = sum(1 for r in all_requests if r['status'] == 'Rejected')
+
+    # Filters
+    filter_type = request.args.get('type', '') or request.args.get('type_mobile', '')
+    filter_status = request.args.get('status', '')
+    filter_search = request.args.get('search', '').strip().lower()
+    filter_date_from = request.args.get('date_from', '').strip()
+    filter_date_to = request.args.get('date_to', '').strip()
+
+    # Parse date range
+    date_from = None
+    date_to = None
+    try:
+        if filter_date_from:
+            date_from = datetime.strptime(filter_date_from, '%Y-%m-%d').date()
+    except ValueError:
+        pass
+    try:
+        if filter_date_to:
+            date_to = datetime.strptime(filter_date_to, '%Y-%m-%d').date()
+    except ValueError:
+        pass
+
+    filtered = all_requests
+    if filter_type:
+        filtered = [r for r in filtered if r['type'] == filter_type]
+    if filter_status:
+        filtered = [r for r in filtered if r['status'] == filter_status]
+    if filter_search:
+        filtered = [r for r in filtered if (
+            filter_search in (r['product_name'] or '').lower() or
+            filter_search in (r['submitted_by_user'].username or '').lower() or
+            (r['submitted_by_user'].employee and filter_search in (
+                (r['submitted_by_user'].employee.first_name or '').lower() + ' ' +
+                (r['submitted_by_user'].employee.last_name or '').lower()
+            ))
+        )]
+    if date_from:
+        filtered = [r for r in filtered if r['created_at'] and r['created_at'].date() >= date_from]
+    if date_to:
+        filtered = [r for r in filtered if r['created_at'] and r['created_at'].date() <= date_to]
+
+    # Pagination
+    per_page = 5
+    page = request.args.get('page', 1, type=int)
+    total = len(filtered)
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    page = max(1, min(page, total_pages))
+    start = (page - 1) * per_page
+    end = start + per_page
+    page_requests = filtered[start:end]
+
+    return render_template(
+        'admin/perk_requests.html',
+        is_approver=is_approver,
+        requests=page_requests,
+        count_all=count_all,
+        count_pending=count_pending,
+        count_approved=count_approved,
+        count_rejected=count_rejected,
+        filter_type=filter_type,
+        filter_status=filter_status,
+        filter_search=filter_search,
+        filter_date_from=filter_date_from,
+        filter_date_to=filter_date_to,
+        page=page,
+        total_pages=total_pages,
+        total=total,
+        per_page=per_page,
+        start=start + 1 if total > 0 else 0,
+        end=min(end, total),
+    )
+
+
+@admin.route('/perk_requests/export', methods=['GET'])
+@login_required
+def export_perk_requests():
+    # Permission check
+    is_approver = PerkApprover.query.filter_by(user_id=current_user.id).first()
+    if not is_approver and current_user.role not in ('admin', 'hr'):
+        flash('You do not have permission to export perk requests.', category='error')
+        return redirect(url_for('views.home'))
+
+    # Build combined list (same logic as perk_requests)
+    all_requests = []
+    for d in DiscountRequest.query.order_by(DiscountRequest.created_at.desc()).all():
+        all_requests.append({
+            'id': d.id,
+            'type': 'discount',
+            'status': d.status,
+            'product_name': d.product_name,
+            'quantity': d.quantity,
+            'price': d.price,
+            'amount': d.amount,
+            'discounted_amount': d.discounted_amount,
+            'total_amount': d.discounted_amount,
+            'transaction_date': d.transaction_date,
+            'created_at': d.created_at,
+            'declined_reason': d.declined_reason,
+            'submitted_by_user': d.submitted_by_user,
+        })
+    for c in ProductChargeRequest.query.order_by(ProductChargeRequest.created_at.desc()).all():
+        all_requests.append({
+            'id': c.id,
+            'type': 'charge',
+            'status': c.status,
+            'product_name': c.product_name,
+            'quantity': c.quantity,
+            'price': c.price,
+            'amount': c.total_amount,
+            'discounted_amount': None,
+            'total_amount': c.total_amount,
+            'transaction_date': c.transaction_date,
+            'created_at': c.created_at,
+            'declined_reason': c.declined_reason,
+            'submitted_by_user': c.submitted_by_user,
+        })
+
+    all_requests.sort(key=lambda x: x['created_at'] if x['created_at'] else date.min, reverse=True)
+
+    # Apply same filters
+    filter_type = request.args.get('type', '') or request.args.get('type_mobile', '')
+    filter_status = request.args.get('status', '')
+    filter_search = request.args.get('search', '').strip().lower()
+    filter_date_from = request.args.get('date_from', '').strip()
+    filter_date_to = request.args.get('date_to', '').strip()
+
+    date_from = None
+    date_to = None
+    try:
+        if filter_date_from:
+            date_from = datetime.strptime(filter_date_from, '%Y-%m-%d').date()
+    except ValueError:
+        pass
+    try:
+        if filter_date_to:
+            date_to = datetime.strptime(filter_date_to, '%Y-%m-%d').date()
+    except ValueError:
+        pass
+
+    filtered = all_requests
+    if filter_type:
+        filtered = [r for r in filtered if r['type'] == filter_type]
+    if filter_status:
+        filtered = [r for r in filtered if r['status'] == filter_status]
+    if filter_search:
+        filtered = [r for r in filtered if (
+            filter_search in (r['product_name'] or '').lower() or
+            filter_search in (r['submitted_by_user'].username or '').lower() or
+            (r['submitted_by_user'].employee and filter_search in (
+                (r['submitted_by_user'].employee.first_name or '').lower() + ' ' +
+                (r['submitted_by_user'].employee.last_name or '').lower()
+            ))
+        )]
+    if date_from:
+        filtered = [r for r in filtered if r['created_at'] and r['created_at'].date() >= date_from]
+    if date_to:
+        filtered = [r for r in filtered if r['created_at'] and r['created_at'].date() <= date_to]
+
+    # Generate CSV
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['ID', 'Type', 'Employee', 'Product', 'Qty', 'Unit Price', 'Amount', 'Discounted/Total', 'Transaction Date', 'Date Requested', 'Status', 'Decline Reason'])
+
+    for r in filtered:
+        user = r['submitted_by_user']
+        emp = user.employee if user and user.employee else None
+        emp_name = (
+            (emp.first_name or '') +
+            (' ' + emp.middle_name[:1] + '.' if emp and emp.middle_name else '') +
+            ' ' + (emp.last_name or '') +
+            (' ' + emp.suffix if emp and emp.suffix else '')
+        ).strip() if emp else (user.username if user else 'N/A')
+
+        final_amount = r['discounted_amount'] if r['discounted_amount'] else r['total_amount']
+        writer.writerow([
+            r['id'],
+            r['type'].title(),
+            emp_name,
+            r['product_name'],
+            r['quantity'],
+            f"{r['price']:.2f}",
+            f"{r['amount']:.2f}",
+            f"{final_amount:.2f}",
+            r['transaction_date'].strftime('%Y-%m-%d') if r['transaction_date'] else '',
+            r['created_at'].strftime('%Y-%m-%d %H:%M') if r['created_at'] else '',
+            r['status'],
+            r['declined_reason'] or '',
+        ])
+
+    output.seek(0)
+    return Response(
+        output.getvalue(),
+        mimetype='text/csv',
+        headers={'Content-Disposition': 'attachment; filename=perk_requests.csv'},
+    )
+
+
+@admin.route('/perk_requests/<string:perk_type>/<int:perk_id>/approve', methods=['POST'])
+@login_required
+def approve_perk(perk_type, perk_id):
+    # Check if user is admin/hr or assigned approver
+    is_approver = PerkApprover.query.filter_by(user_id=current_user.id).first()
+    if not is_approver and current_user.role not in ('admin', 'hr'):
+        flash('You do not have permission to approve perk requests.', category='error')
+        return redirect(url_for('admin.perk_requests'))
+
+    if perk_type == 'discount':
+        if is_approver and not is_approver.can_approve_discount and current_user.role not in ('admin', 'hr'):
+            flash('You are not authorized to approve discount requests.', category='error')
+            return redirect(url_for('admin.perk_requests'))
+        perk = DiscountRequest.query.get_or_404(perk_id)
+    elif perk_type == 'charge':
+        if is_approver and not is_approver.can_approve_charge and current_user.role not in ('admin', 'hr'):
+            flash('You are not authorized to approve charge requests.', category='error')
+            return redirect(url_for('admin.perk_requests'))
+        perk = ProductChargeRequest.query.get_or_404(perk_id)
+    else:
+        flash('Invalid perk type.', category='error')
+        return redirect(url_for('admin.perk_requests'))
+
+    if perk.status != 'Pending':
+        flash('Only pending requests can be approved.', category='error')
+        return redirect(url_for('admin.perk_requests'))
+
+    perk.status = 'Approved'
+    try:
+        db.session.commit()
+        flash(f'{perk_type.title()} request #{perk_id} approved.', category='success')
+    except Exception:
+        db.session.rollback()
+        flash('Failed to update request status.', category='error')
+
+    return redirect(url_for('admin.perk_requests'))
+
+
+@admin.route('/perk_requests/<string:perk_type>/<int:perk_id>/decline', methods=['POST'])
+@login_required
+def decline_perk(perk_type, perk_id):
+    # Check if user is admin/hr or assigned approver
+    is_approver = PerkApprover.query.filter_by(user_id=current_user.id).first()
+    if not is_approver and current_user.role not in ('admin', 'hr'):
+        flash('You do not have permission to decline perk requests.', category='error')
+        return redirect(url_for('admin.perk_requests'))
+
+    if perk_type == 'discount':
+        if is_approver and not is_approver.can_approve_discount and current_user.role not in ('admin', 'hr'):
+            flash('You are not authorized to decline discount requests.', category='error')
+            return redirect(url_for('admin.perk_requests'))
+        perk = DiscountRequest.query.get_or_404(perk_id)
+    elif perk_type == 'charge':
+        if is_approver and not is_approver.can_approve_charge and current_user.role not in ('admin', 'hr'):
+            flash('You are not authorized to decline charge requests.', category='error')
+            return redirect(url_for('admin.perk_requests'))
+        perk = ProductChargeRequest.query.get_or_404(perk_id)
+    else:
+        flash('Invalid perk type.', category='error')
+        return redirect(url_for('admin.perk_requests'))
+
+    if perk.status != 'Pending':
+        flash('Only pending requests can be declined.', category='error')
+        return redirect(url_for('admin.perk_requests'))
+
+    decline_reason = (request.form.get('decline_reason') or '').strip()
+    if not decline_reason:
+        flash('Decline reason is required.', category='error')
+        return redirect(url_for('admin.perk_requests'))
+
+    perk.status = 'Rejected'
+    perk.declined_reason = decline_reason
+    try:
+        db.session.commit()
+        flash(f'{perk_type.title()} request #{perk_id} declined.', category='success')
+    except Exception:
+        db.session.rollback()
+        flash('Failed to update request status.', category='error')
+
+    return redirect(url_for('admin.perk_requests'))
+
+
+# ================= SETTINGS =================
+
+@admin.route('/settings', methods=['GET', 'POST'])
+@roles_required("admin")
+def settings():
+    if request.method == 'POST':
+        action = request.form.get('action')
+
+        if action == 'add_approver':
+            user_id = request.form.get('user_id')
+            can_discount = 'can_approve_discount' in request.form
+            can_charge = 'can_approve_charge' in request.form
+
+            if not user_id:
+                flash('Please select a user.', category='error')
+                return redirect(url_for('admin.settings'))
+
+            user = User.query.get(user_id)
+            if not user:
+                flash('User not found.', category='error')
+                return redirect(url_for('admin.settings'))
+
+            existing = PerkApprover.query.filter_by(user_id=user.id).first()
+            if existing:
+                flash(f'{user.username} is already a perk approver.', category='error')
+                return redirect(url_for('admin.settings'))
+
+            new_approver = PerkApprover(
+                user_id=user.id,
+                can_approve_discount=can_discount,
+                can_approve_charge=can_charge,
+            )
+            db.session.add(new_approver)
+            try:
+                db.session.commit()
+                flash(f'{user.username} added as perk approver.', category='success')
+            except Exception:
+                db.session.rollback()
+                flash('Failed to add approver.', category='error')
+            return redirect(url_for('admin.settings'))
+
+        elif action == 'remove_approver':
+            approver_id = request.form.get('approver_id')
+            approver = PerkApprover.query.get(approver_id)
+            if approver:
+                db.session.delete(approver)
+                try:
+                    db.session.commit()
+                    flash('Approver removed.', category='success')
+                except Exception:
+                    db.session.rollback()
+                    flash('Failed to remove approver.', category='error')
+            else:
+                flash('Approver not found.', category='error')
+            return redirect(url_for('admin.settings'))
+
+        elif action == 'update_approver':
+            approver_id = request.form.get('approver_id')
+            approver = PerkApprover.query.get(approver_id)
+            if approver:
+                approver.can_approve_discount = 'can_approve_discount' in request.form
+                approver.can_approve_charge = 'can_approve_charge' in request.form
+                try:
+                    db.session.commit()
+                    flash('Approver permissions updated.', category='success')
+                except Exception:
+                    db.session.rollback()
+                    flash('Failed to update approver.', category='error')
+            else:
+                flash('Approver not found.', category='error')
+            return redirect(url_for('admin.settings'))
+
+    # GET
+    approvers = PerkApprover.query.order_by(PerkApprover.id.desc()).all()
+    approver_user_ids = [a.user_id for a in approvers]
+    # Users eligible to be approvers (non-admin users that are not already approvers)
+    eligible_users = User.query.filter(
+        User.id.notin_(approver_user_ids),
+        User.role != 'admin',
+    ).all()
+
+    return render_template(
+        'admin/settings.html',
+        approvers=approvers,
+        eligible_users=eligible_users,
+    )

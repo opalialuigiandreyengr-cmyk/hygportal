@@ -1,0 +1,274 @@
+/* ================= SETTINGS PAGE ================= */
+
+.settings-hero h1 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.settings-section {
+  padding: 1.5rem;
+}
+
+.settings-section-header h2 {
+  font-size: 1.15rem;
+  color: #0f172a;
+  margin-bottom: 0.15rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.settings-section-header h2 i {
+  color: #2563eb;
+}
+
+.settings-section-header p {
+  font-size: 0.88rem;
+  color: #64748b;
+  margin-bottom: 0;
+}
+
+/* ---- ADD APPROVER FORM ---- */
+
+.settings-add-form {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  margin: 1rem 0 1.5rem;
+}
+
+.settings-add-form h3 {
+  font-size: 0.92rem;
+  color: #334155;
+  margin-bottom: 0.75rem;
+}
+
+.add-approver-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.add-approver-row .field {
+  flex: 1;
+  min-width: 180px;
+}
+
+.add-approver-row .field label {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 0.3rem;
+}
+
+.add-approver-row select {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 0.88rem;
+  color: #0f172a;
+  background: #fff;
+}
+
+.add-approver-row select:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.85rem;
+  color: #475569;
+  cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #2563eb;
+  cursor: pointer;
+}
+
+.checkbox-label.compact {
+  font-size: 0.82rem;
+}
+
+.add-approver-row .primary-btn {
+  white-space: nowrap;
+  padding: 0.55rem 1.1rem;
+  font-size: 0.88rem;
+}
+
+.settings-no-eligible {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.85rem 1rem;
+  background: #eff6ff;
+  border-radius: 10px;
+  color: #3b82f6;
+  font-size: 0.88rem;
+  margin: 1rem 0;
+}
+
+.settings-no-eligible i {
+  font-size: 1.1rem;
+}
+
+/* ---- APPROVERS LIST ---- */
+
+.settings-approvers-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.approver-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  transition: box-shadow 0.15s;
+}
+
+.approver-card:hover {
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.06);
+}
+
+.approver-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.approver-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.approver-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.approver-details strong {
+  font-size: 0.92rem;
+  color: #0f172a;
+}
+
+.approver-role {
+  font-size: 0.78rem;
+  color: #64748b;
+  text-transform: capitalize;
+}
+
+.approver-employee {
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+.approver-permissions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.inline-form {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.approver-actions {
+  flex-shrink: 0;
+}
+
+.danger-btn-sm {
+  background: none;
+  border: 1px solid #fecaca;
+  color: #ef4444;
+  padding: 0.4rem 0.55rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.15s;
+}
+
+.danger-btn-sm:hover {
+  background: #fef2f2;
+  border-color: #ef4444;
+}
+
+/* ---- EMPTY STATE ---- */
+
+.settings-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 2rem 1rem;
+  color: #94a3b8;
+}
+
+.settings-empty i {
+  font-size: 2rem;
+}
+
+.settings-empty p {
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+/* ================= RESPONSIVE ================= */
+
+@media (max-width: 768px) {
+  .approver-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.65rem;
+  }
+
+  .approver-permissions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .add-approver-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .add-approver-row .primary-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}

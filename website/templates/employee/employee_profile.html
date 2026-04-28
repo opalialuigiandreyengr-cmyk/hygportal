@@ -41,8 +41,8 @@
         </div>
 
         <div class="emp-profile-actions">
-          <button class="primary-btn btn-mini" type="button" data-bs-toggle="modal" data-bs-target="#changePasswordModal">
-            <i class="fa-solid fa-key"></i> Change Password
+          <button class="primary-btn btn-mini" type="button" data-bs-toggle="modal" data-bs-target="#updateInfoModal">
+            <i class="fa-solid fa-pen-to-square"></i> Update Information
           </button>
         </div>
       </div>
@@ -50,169 +50,553 @@
 
     <section class="emp-profile-layout">
       <div class="emp-col">
-        <article class="card emp-section">
+        <article class="card emp-section" id="personalInfoSection">
           <div class="emp-section-head">
-            <i class="fa-solid fa-user"></i>
-            <h2>Personal Information</h2>
+            <div style="display:flex;align-items:center;gap:0.55rem;">
+              <i class="fa-solid fa-user"></i>
+              <h2>Personal Information</h2>
+            </div>
+            <div class="emp-section-actions">
+              <button type="button" class="emp-icon-btn btn-edit" title="Edit">
+                <i class="fa-solid fa-pencil"></i>
+              </button>
+              <button type="button" class="emp-icon-btn btn-cancel" title="Cancel" style="display:none;">
+                <i class="fa-solid fa-xmark"></i>
+              </button>
+              <button type="submit" class="emp-icon-btn btn-save" title="Save" style="display:none;">
+                <i class="fa-solid fa-check"></i>
+              </button>
+            </div>
           </div>
-          <div class="emp-fields">
+          <form method="post" action="{{ url_for('employee.update_section', employee_id=employee.id, section='personal') }}" class="emp-fields form-section">
             <div class="emp-field">
               <p class="emp-label">Birth Date</p>
-              <div class="emp-value">{{ employee.birth_date or 'N/A' }}</div>
+              <div class="emp-value view-mode">{{ employee.birth_date or 'N/A' }}</div>
+              <input type="date" name="birth_date" class="emp-input edit-mode" value="{{ employee.birth_date }}" style="display:none;">
             </div>
             <div class="emp-field">
               <p class="emp-label">Age</p>
-              <div class="emp-value">{{ (employee.age ~ ' yrs') if employee.age else 'N/A' }}</div>
+              <div class="emp-value view-mode">{{ (employee.age ~ ' yrs') if employee.age else 'N/A' }}</div>
+              <input type="number" name="age" class="emp-input edit-mode" value="{{ employee.age }}" style="display:none;">
             </div>
             <div class="emp-field">
               <p class="emp-label">Gender</p>
-              <div class="emp-value">{{ employee.gender or 'N/A' }}</div>
+              <div class="emp-value view-mode">{{ employee.gender or 'N/A' }}</div>
+              <select name="gender" class="emp-input edit-mode" style="display:none;">
+                <option value="">Select Gender</option>
+                <option value="Male" {% if employee.gender == 'Male' %}selected{% endif %}>Male</option>
+                <option value="Female" {% if employee.gender == 'Female' %}selected{% endif %}>Female</option>
+                <option value="Other" {% if employee.gender == 'Other' %}selected{% endif %}>Other</option>
+              </select>
             </div>
             <div class="emp-field">
               <p class="emp-label">Religion</p>
-              <div class="emp-value">{{ employee.religion or 'N/A' }}</div>
+              <div class="emp-value view-mode">{{ employee.religion or 'N/A' }}</div>
+              <input type="text" name="religion" class="emp-input edit-mode" value="{{ employee.religion or '' }}" style="display:none;">
+            </div>
+            <div class="emp-field full">
+              <p class="emp-label">Birthplace</p>
+              <div class="emp-value view-mode">{{ employee.birth_place or 'N/A' }}</div>
+              <input type="text" name="birth_place" class="emp-input edit-mode" value="{{ employee.birth_place or '' }}" style="display:none;">
+            </div>
+            <div class="emp-field">
+              <p class="emp-label">Nationality</p>
+              <div class="emp-value view-mode">{{ employee.nationality or 'N/A' }}</div>
+              <input type="text" name="nationality" class="emp-input edit-mode" value="{{ employee.nationality or '' }}" style="display:none;">
+            </div>
+            <div class="emp-field">
+              <p class="emp-label">Civil Status</p>
+              <div class="emp-value view-mode">{{ employee.civil_status or 'N/A' }}</div>
+              <select name="civil_status" class="emp-input edit-mode" style="display:none;">
+                <option value="">Select Status</option>
+                <option value="Single" {% if employee.civil_status == 'Single' %}selected{% endif %}>Single</option>
+                <option value="Married" {% if employee.civil_status == 'Married' %}selected{% endif %}>Married</option>
+                <option value="Widowed" {% if employee.civil_status == 'Widowed' %}selected{% endif %}>Widowed</option>
+                <option value="Separated" {% if employee.civil_status == 'Separated' %}selected{% endif %}>Separated</option>
+                <option value="Divorced" {% if employee.civil_status == 'Divorced' %}selected{% endif %}>Divorced</option>
+              </select>
+            </div>
+            <div class="emp-field">
+              <p class="emp-label">Height</p>
+              <div class="emp-value view-mode">{{ employee.height or 'N/A' }}</div>
+              <input type="text" name="height" class="emp-input edit-mode" value="{{ employee.height or '' }}" style="display:none;">
+            </div>
+            <div class="emp-field">
+              <p class="emp-label">Weight</p>
+              <div class="emp-value view-mode">{{ employee.weight or 'N/A' }}</div>
+              <input type="text" name="weight" class="emp-input edit-mode" value="{{ employee.weight or '' }}" style="display:none;">
             </div>
             <div class="emp-field full">
               <p class="emp-label">Educational Attainment</p>
-              <div class="emp-value">{{ employee.educational_attainment or 'N/A' }}</div>
+              <div class="emp-value view-mode">{{ employee.educational_attainment or 'N/A' }}</div>
+              <select name="educational_attainment" class="emp-input edit-mode" style="display:none;">
+                <option value="">Select</option>
+                <option value="Elementary" {% if employee.educational_attainment == 'Elementary' %}selected{% endif %}>Elementary</option>
+                <option value="Secondary" {% if employee.educational_attainment == 'Secondary' %}selected{% endif %}>Secondary</option>
+                <option value="Vocational" {% if employee.educational_attainment == 'Vocational' %}selected{% endif %}>Vocational</option>
+                <option value="College" {% if employee.educational_attainment == 'College' %}selected{% endif %}>College</option>
+                <option value="Postgraduate" {% if employee.educational_attainment == 'Postgraduate' %}selected{% endif %}>Postgraduate</option>
+                <option value="Doctorate" {% if employee.educational_attainment == 'Doctorate' %}selected{% endif %}>Doctorate</option>
+              </select>
             </div>
-          </div>
+          </form>
         </article>
 
-        <article class="card emp-section">
+        <article class="card emp-section" data-section="contact">
           <div class="emp-section-head">
-            <i class="fa-solid fa-address-book"></i>
-            <h2>Contact and Address</h2>
+            <div style="display:flex;align-items:center;gap:0.55rem;">
+              <i class="fa-solid fa-address-book"></i>
+              <h2>Contact and Address</h2>
+            </div>
+            <div class="emp-section-actions">
+              <button type="button" class="emp-icon-btn btn-edit" title="Edit"><i class="fa-solid fa-pencil"></i></button>
+              <button type="button" class="emp-icon-btn btn-cancel" title="Cancel" style="display:none;"><i class="fa-solid fa-xmark"></i></button>
+              <button type="submit" class="emp-icon-btn btn-save" title="Save" style="display:none;"><i class="fa-solid fa-check"></i></button>
+            </div>
           </div>
-          <div class="emp-fields">
+          <form method="post" action="{{ url_for('employee.update_section', employee_id=employee.id, section='contact') }}" class="emp-fields form-section">
             <div class="emp-field full">
               <p class="emp-label">Email Address</p>
-              <div class="emp-value">{{ employee.email or 'N/A' }}</div>
+              <div class="emp-value view-mode">{{ employee.email or 'N/A' }}</div>
+              <input type="email" name="email" class="emp-input edit-mode" value="{{ employee.email or '' }}" style="display:none;">
             </div>
             <div class="emp-field">
               <p class="emp-label">Phone Number</p>
-              <div class="emp-value">{{ employee.phone or 'N/A' }}</div>
+              <div class="emp-value view-mode">{{ employee.phone or 'N/A' }}</div>
+              <input type="text" name="phone" class="emp-input edit-mode" value="{{ employee.phone or '' }}" style="display:none;">
             </div>
             <div class="emp-field">
-              <p class="emp-label">Facebook</p>
-              <div class="emp-value">
-                {% if employee.facebook %}
-                  <a href="{{ employee.facebook }}" target="_blank" rel="noopener noreferrer">
-                    <i class="fa-solid fa-arrow-up-right-from-square"></i> View Profile
-                  </a>
-                {% else %}
-                  <span class="emp-empty">Not Provided</span>
-                {% endif %}
+              <p class="emp-label">Other Phone No.</p>
+              <div class="emp-value view-mode">{{ employee.house_phone or 'N/A' }}</div>
+              <input type="text" name="house_phone" class="emp-input edit-mode" value="{{ employee.house_phone or '' }}" style="display:none;">
+            </div>
+            <div class="emp-field">
+              <p class="emp-label">Social Media Type</p>
+              <div class="emp-value view-mode">{{ employee.social_media_type or 'N/A' }}</div>
+              <select name="social_media_type" class="emp-input edit-mode" style="display:none;">
+                <option value="">Select Platform</option>
+                <option value="Facebook" {% if employee.social_media_type == 'Facebook' %}selected{% endif %}>Facebook</option>
+                <option value="Instagram" {% if employee.social_media_type == 'Instagram' %}selected{% endif %}>Instagram</option>
+                <option value="TikTok" {% if employee.social_media_type == 'TikTok' %}selected{% endif %}>TikTok</option>
+                <option value="WhatsApp" {% if employee.social_media_type == 'WhatsApp' %}selected{% endif %}>WhatsApp</option>
+                <option value="Viber" {% if employee.social_media_type == 'Viber' %}selected{% endif %}>Viber</option>
+                <option value="Twitter / X" {% if employee.social_media_type == 'Twitter / X' %}selected{% endif %}>Twitter / X</option>
+                <option value="LinkedIn" {% if employee.social_media_type == 'LinkedIn' %}selected{% endif %}>LinkedIn</option>
+                <option value="Telegram" {% if employee.social_media_type == 'Telegram' %}selected{% endif %}>Telegram</option>
+                <option value="Other" {% if employee.social_media_type == 'Other' %}selected{% endif %}>Other</option>
+              </select>
+            </div>
+            <div class="emp-field">
+              <p class="emp-label">Social Media Detail</p>
+              <div class="emp-value view-mode">
+                {% if employee.social_media_detail %}
+                  <a href="{{ employee.social_media_detail }}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-arrow-up-right-from-square"></i> View Profile</a>
+                {% else %}<span class="emp-empty">Not Provided</span>{% endif %}
               </div>
+              <input type="text" name="social_media_detail" class="emp-input edit-mode" value="{{ employee.social_media_detail or '' }}" style="display:none;">
             </div>
             <div class="emp-field full">
               <p class="emp-label">Present Address</p>
-              <div class="emp-value">{{ employee.present_address or 'N/A' }}</div>
+              <div class="emp-value view-mode">{{ employee.present_address or 'N/A' }}</div>
+              <input type="text" name="present_address" class="emp-input edit-mode" value="{{ employee.present_address or '' }}" style="display:none;">
             </div>
             <div class="emp-field">
               <p class="emp-label">Zip Code</p>
-              <div class="emp-value">{{ employee.zipCode or 'N/A' }}</div>
+              <div class="emp-value view-mode">{{ employee.zipCode or 'N/A' }}</div>
+              <input type="text" name="zipCode" class="emp-input edit-mode" value="{{ employee.zipCode or '' }}" style="display:none;">
             </div>
-          </div>
+            <div class="emp-field full">
+              <p class="emp-label">Permanent Address</p>
+              <div class="emp-value view-mode">{{ employee.permanent_address or 'N/A' }}</div>
+              <input type="text" name="permanent_address" class="emp-input edit-mode" value="{{ employee.permanent_address or '' }}" style="display:none;">
+            </div>
+          </form>
         </article>
       </div>
 
       <div class="emp-col">
-        <article class="card emp-section">
+        <article class="card emp-section" data-section="employment">
           <div class="emp-section-head">
-            <i class="fa-solid fa-building-user"></i>
-            <h2>Employment Details</h2>
+            <div style="display:flex;align-items:center;gap:0.55rem;">
+              <i class="fa-solid fa-building-user"></i>
+              <h2>Employment Details</h2>
+            </div>
+            <div class="emp-section-actions">
+              <button type="button" class="emp-icon-btn btn-edit" title="Edit"><i class="fa-solid fa-pencil"></i></button>
+              <button type="button" class="emp-icon-btn btn-cancel" title="Cancel" style="display:none;"><i class="fa-solid fa-xmark"></i></button>
+              <button type="submit" class="emp-icon-btn btn-save" title="Save" style="display:none;"><i class="fa-solid fa-check"></i></button>
+            </div>
           </div>
-          <div class="emp-fields">
+          <form method="post" action="{{ url_for('employee.update_section', employee_id=employee.id, section='employment') }}" class="emp-fields form-section">
             <div class="emp-field full">
               <p class="emp-label">Company</p>
-              <div class="emp-value">{{ employee.company or 'N/A' }}</div>
+              <div class="emp-value view-mode">{{ employee.company or 'N/A' }}</div>
+              <input type="text" name="company" class="emp-input edit-mode" value="{{ employee.company or '' }}" style="display:none;">
             </div>
             <div class="emp-field">
               <p class="emp-label">Employee Type</p>
-              <div class="emp-value">{{ employee.employee_type or 'N/A' }}</div>
+              <div class="emp-value view-mode">{{ employee.employee_type or 'N/A' }}</div>
+              <select name="employee_type" class="emp-input edit-mode" style="display:none;">
+                <option value="">Select Type</option>
+                <option value="Regular" {% if employee.employee_type == 'Regular' %}selected{% endif %}>Regular</option>
+                <option value="Probationary" {% if employee.employee_type == 'Probationary' %}selected{% endif %}>Probationary</option>
+                <option value="Trainee" {% if employee.employee_type == 'Trainee' %}selected{% endif %}>Trainee</option>
+              </select>
             </div>
             <div class="emp-field">
               <p class="emp-label">Username</p>
-              <div class="emp-value">{{ username }}</div>
+              <div class="emp-value view-mode">{{ username }}</div>
+              <input type="text" class="emp-input edit-mode" value="{{ username }}" readonly style="display:none;">
             </div>
             <div class="emp-field">
               <p class="emp-label">Hired Date</p>
-              <div class="emp-value">{{ employee.hired_date or 'N/A' }}</div>
+              <div class="emp-value view-mode">{{ employee.hired_date or 'N/A' }}</div>
+              <input type="date" name="hired_date" class="emp-input edit-mode" value="{{ employee.hired_date }}" style="display:none;">
+            </div>
+            <div class="emp-field">
+              <p class="emp-label">Location</p>
+              <div class="emp-value view-mode">{{ employee.location or 'N/A' }}</div>
+              <input type="text" name="location" class="emp-input edit-mode" value="{{ employee.location or '' }}" style="display:none;">
             </div>
             <div class="emp-field">
               <p class="emp-label">Department</p>
-              <div class="emp-value">{{ employee.department or 'N/A' }}</div>
+              <div class="emp-value view-mode">{{ employee.department or 'N/A' }}</div>
+              <input type="text" name="department" class="emp-input edit-mode" value="{{ employee.department or '' }}" style="display:none;">
             </div>
             <div class="emp-field">
               <p class="emp-label">Position</p>
-              <div class="emp-value">{{ employee.position or 'N/A' }}</div>
+              <div class="emp-value view-mode">{{ employee.position or 'N/A' }}</div>
+              <input type="text" name="position" class="emp-input edit-mode" value="{{ employee.position or '' }}" style="display:none;">
             </div>
-          </div>
+          </form>
         </article>
 
-        <article class="card emp-section">
+        <article class="card emp-section" data-section="government">
           <div class="emp-section-head">
-            <i class="fa-solid fa-id-card-clip"></i>
-            <h2>Government and Bank</h2>
+            <div style="display:flex;align-items:center;gap:0.55rem;">
+              <i class="fa-solid fa-id-card-clip"></i>
+              <h2>Government and Bank</h2>
+            </div>
+            <div class="emp-section-actions">
+              <button type="button" class="emp-icon-btn btn-edit" title="Edit"><i class="fa-solid fa-pencil"></i></button>
+              <button type="button" class="emp-icon-btn btn-cancel" title="Cancel" style="display:none;"><i class="fa-solid fa-xmark"></i></button>
+              <button type="submit" class="emp-icon-btn btn-save" title="Save" style="display:none;"><i class="fa-solid fa-check"></i></button>
+            </div>
           </div>
-          <div class="emp-fields">
+          <form method="post" action="{{ url_for('employee.update_section', employee_id=employee.id, section='government') }}" class="emp-fields form-section">
             <div class="emp-field">
               <p class="emp-label">SSS No.</p>
-              <div class="emp-value">{{ employee.sss_no or 'N/A' }}</div>
+              <div class="emp-value view-mode">{{ employee.sss_no or 'N/A' }}</div>
+              <input type="text" name="sss_no" class="emp-input edit-mode" value="{{ employee.sss_no or '' }}" style="display:none;">
             </div>
             <div class="emp-field">
               <p class="emp-label">PhilHealth No.</p>
-              <div class="emp-value">{{ employee.philhealth_no or 'N/A' }}</div>
+              <div class="emp-value view-mode">{{ employee.philhealth_no or 'N/A' }}</div>
+              <input type="text" name="philhealth_no" class="emp-input edit-mode" value="{{ employee.philhealth_no or '' }}" style="display:none;">
             </div>
             <div class="emp-field">
               <p class="emp-label">Pag-IBIG No.</p>
-              <div class="emp-value">{{ employee.pagibig_no or 'N/A' }}</div>
+              <div class="emp-value view-mode">{{ employee.pagibig_no or 'N/A' }}</div>
+              <input type="text" name="pagibig_no" class="emp-input edit-mode" value="{{ employee.pagibig_no or '' }}" style="display:none;">
             </div>
             <div class="emp-field">
               <p class="emp-label">TIN No.</p>
-              <div class="emp-value">{{ employee.tin_no or 'N/A' }}</div>
+              <div class="emp-value view-mode">{{ employee.tin_no or 'N/A' }}</div>
+              <input type="text" name="tin_no" class="emp-input edit-mode" value="{{ employee.tin_no or '' }}" style="display:none;">
             </div>
             <div class="emp-field">
               <p class="emp-label">Valid ID No.</p>
-              <div class="emp-value">{{ employee.valid_id_no or 'N/A' }}</div>
+              <div class="emp-value view-mode">{{ employee.valid_id_no or 'N/A' }}</div>
+              <input type="text" name="valid_id_no" class="emp-input edit-mode" value="{{ employee.valid_id_no or '' }}" style="display:none;">
+            </div>
+            <div class="emp-field">
+              <p class="emp-label">Valid ID Type</p>
+              <div class="emp-value view-mode">{{ employee.valid_id_type or 'N/A' }}</div>
+              <select name="valid_id_type" class="emp-input edit-mode" style="display:none;">
+                <option value="">Select ID</option>
+                <option value="Passport" {% if employee.valid_id_type == 'Passport' %}selected{% endif %}>Passport</option>
+                <option value="Driver's License" {% if employee.valid_id_type == "Driver's License" %}selected{% endif %}>Driver's License</option>
+                <option value="UMID" {% if employee.valid_id_type == 'UMID' %}selected{% endif %}>UMID</option>
+                <option value="SSS ID" {% if employee.valid_id_type == 'SSS ID' %}selected{% endif %}>SSS ID</option>
+                <option value="PhilHealth ID" {% if employee.valid_id_type == 'PhilHealth ID' %}selected{% endif %}>PhilHealth ID</option>
+                <option value="TIN ID" {% if employee.valid_id_type == 'TIN ID' %}selected{% endif %}>TIN ID</option>
+                <option value="Postal ID" {% if employee.valid_id_type == 'Postal ID' %}selected{% endif %}>Postal ID</option>
+                <option value="Voter's ID" {% if employee.valid_id_type == "Voter's ID" %}selected{% endif %}>Voter's ID</option>
+                <option value="National ID" {% if employee.valid_id_type == 'National ID' %}selected{% endif %}>National ID</option>
+                <option value="Other" {% if employee.valid_id_type == 'Other' %}selected{% endif %}>Other</option>
+              </select>
+            </div>
+            <div class="emp-field">
+              <p class="emp-label">Bank Type</p>
+              <div class="emp-value view-mode">{{ employee.bank_type or 'N/A' }}</div>
+              <select name="bank_type" class="emp-input edit-mode" style="display:none;">
+                <option value="">Select Bank</option>
+                <option value="BDO" {% if employee.bank_type == 'BDO' %}selected{% endif %}>BDO</option>
+                <option value="BPI" {% if employee.bank_type == 'BPI' %}selected{% endif %}>BPI</option>
+                <option value="Metrobank" {% if employee.bank_type == 'Metrobank' %}selected{% endif %}>Metrobank</option>
+                <option value="LandBank" {% if employee.bank_type == 'LandBank' %}selected{% endif %}>LandBank</option>
+                <option value="Chinabank" {% if employee.bank_type == 'Chinabank' %}selected{% endif %}>Chinabank</option>
+                <option value="PNB" {% if employee.bank_type == 'PNB' %}selected{% endif %}>PNB</option>
+                <option value="Security Bank" {% if employee.bank_type == 'Security Bank' %}selected{% endif %}>Security Bank</option>
+                <option value="UnionBank" {% if employee.bank_type == 'UnionBank' %}selected{% endif %}>UnionBank</option>
+                <option value="RCBC" {% if employee.bank_type == 'RCBC' %}selected{% endif %}>RCBC</option>
+                <option value="EastWest" {% if employee.bank_type == 'EastWest' %}selected{% endif %}>EastWest</option>
+                <option value="Other" {% if employee.bank_type == 'Other' %}selected{% endif %}>Other</option>
+              </select>
             </div>
             <div class="emp-field">
               <p class="emp-label">Bank Account</p>
-              <div class="emp-value">{{ employee.account_no or 'N/A' }}</div>
+              <div class="emp-value view-mode">{{ employee.account_no or 'N/A' }}</div>
+              <input type="text" name="account_no" class="emp-input edit-mode" value="{{ employee.account_no or '' }}" style="display:none;">
+            </div>
+          </form>
+        </article>
+
+        <article class="card emp-section" data-section="education">
+          <div class="emp-section-head">
+            <div style="display:flex;align-items:center;gap:0.55rem;">
+              <i class="fa-solid fa-graduation-cap"></i>
+              <h2>Education</h2>
+            </div>
+            <div class="emp-section-actions">
+              <button type="button" class="emp-icon-btn btn-edit" title="Edit"><i class="fa-solid fa-pencil"></i></button>
+              <button type="button" class="emp-icon-btn btn-cancel" title="Cancel" style="display:none;"><i class="fa-solid fa-xmark"></i></button>
+              <button type="submit" class="emp-icon-btn btn-save" title="Save" style="display:none;"><i class="fa-solid fa-check"></i></button>
             </div>
           </div>
+          <form method="post" action="{{ url_for('employee.update_section', employee_id=employee.id, section='education') }}" class="emp-fields form-section">
+            <div class="emp-field"><p class="emp-label">Elementary</p><div class="emp-value view-mode">{{ employee.elementary_school or 'N/A' }}</div><input type="text" name="elementary_school" class="emp-input edit-mode" value="{{ employee.elementary_school or '' }}" style="display:none;"></div>
+            <div class="emp-field"><p class="emp-label">Elementary Year</p><div class="emp-value view-mode">{{ employee.elementary_year_attended or 'N/A' }}</div><input type="text" name="elementary_year_attended" class="emp-input edit-mode" value="{{ employee.elementary_year_attended or '' }}" style="display:none;"></div>
+            <div class="emp-field"><p class="emp-label">Secondary</p><div class="emp-value view-mode">{{ employee.secondary_school or 'N/A' }}</div><input type="text" name="secondary_school" class="emp-input edit-mode" value="{{ employee.secondary_school or '' }}" style="display:none;"></div>
+            <div class="emp-field"><p class="emp-label">Secondary Year</p><div class="emp-value view-mode">{{ employee.secondary_year_attended or 'N/A' }}</div><input type="text" name="secondary_year_attended" class="emp-input edit-mode" value="{{ employee.secondary_year_attended or '' }}" style="display:none;"></div>
+            <div class="emp-field"><p class="emp-label">College</p><div class="emp-value view-mode">{{ employee.college_school or 'N/A' }}</div><input type="text" name="college_school" class="emp-input edit-mode" value="{{ employee.college_school or '' }}" style="display:none;"></div>
+            <div class="emp-field"><p class="emp-label">College Year</p><div class="emp-value view-mode">{{ employee.college_year_attended or 'N/A' }}</div><input type="text" name="college_year_attended" class="emp-input edit-mode" value="{{ employee.college_year_attended or '' }}" style="display:none;"></div>
+            <div class="emp-field"><p class="emp-label">College Course</p><div class="emp-value view-mode">{{ employee.college_course or 'N/A' }}</div><input type="text" name="college_course" class="emp-input edit-mode" value="{{ employee.college_course or '' }}" style="display:none;"></div>
+            <div class="emp-field"><p class="emp-label">Year Graduated</p><div class="emp-value view-mode">{{ employee.year_graduated or 'N/A' }}</div><input type="text" name="year_graduated" class="emp-input edit-mode" value="{{ employee.year_graduated or '' }}" style="display:none;"></div>
+          </form>
+        </article>
+
+        <article class="card emp-section" data-section="family">
+          <div class="emp-section-head">
+            <div style="display:flex;align-items:center;gap:0.55rem;">
+              <i class="fa-solid fa-people-roof"></i>
+              <h2>Family</h2>
+            </div>
+            <div class="emp-section-actions">
+              <button type="button" class="emp-icon-btn btn-edit" title="Edit"><i class="fa-solid fa-pencil"></i></button>
+              <button type="button" class="emp-icon-btn btn-cancel" title="Cancel" style="display:none;"><i class="fa-solid fa-xmark"></i></button>
+              <button type="submit" class="emp-icon-btn btn-save" title="Save" style="display:none;"><i class="fa-solid fa-check"></i></button>
+            </div>
+          </div>
+          <form method="post" action="{{ url_for('employee.update_section', employee_id=employee.id, section='family') }}" class="emp-fields form-section">
+            <div class="emp-field"><p class="emp-label">Father's Name</p><div class="emp-value view-mode">{{ employee.father_name or 'N/A' }}</div><input type="text" name="father_name" class="emp-input edit-mode" value="{{ employee.father_name or '' }}" style="display:none;"></div>
+            <div class="emp-field"><p class="emp-label">Father's Occupation</p><div class="emp-value view-mode">{{ employee.father_occupation or 'N/A' }}</div><input type="text" name="father_occupation" class="emp-input edit-mode" value="{{ employee.father_occupation or '' }}" style="display:none;"></div>
+            <div class="emp-field"><p class="emp-label">Mother's Maiden Name</p><div class="emp-value view-mode">{{ employee.mother_maiden_name or 'N/A' }}</div><input type="text" name="mother_maiden_name" class="emp-input edit-mode" value="{{ employee.mother_maiden_name or '' }}" style="display:none;"></div>
+            <div class="emp-field"><p class="emp-label">Mother's Occupation</p><div class="emp-value view-mode">{{ employee.mother_occupation or 'N/A' }}</div><input type="text" name="mother_occupation" class="emp-input edit-mode" value="{{ employee.mother_occupation or '' }}" style="display:none;"></div>
+            <div class="emp-field"><p class="emp-label">No. of Siblings</p><div class="emp-value view-mode">{{ employee.no_of_siblings or 'N/A' }}</div><input type="number" name="no_of_siblings" class="emp-input edit-mode" value="{{ employee.no_of_siblings or '' }}" style="display:none;"></div>
+            <div class="emp-field"><p class="emp-label">Birth Order</p><div class="emp-value view-mode">{{ employee.sibling_birth_order or 'N/A' }}</div><input type="text" name="sibling_birth_order" class="emp-input edit-mode" value="{{ employee.sibling_birth_order or '' }}" style="display:none;"></div>
+          </form>
+        </article>
+
+        <article class="card emp-section" data-section="spouse">
+          <div class="emp-section-head">
+            <div style="display:flex;align-items:center;gap:0.55rem;">
+              <i class="fa-solid fa-ring"></i>
+              <h2>Spouse</h2>
+            </div>
+            <div class="emp-section-actions">
+              <button type="button" class="emp-icon-btn btn-edit" title="Edit"><i class="fa-solid fa-pencil"></i></button>
+              <button type="button" class="emp-icon-btn btn-cancel" title="Cancel" style="display:none;"><i class="fa-solid fa-xmark"></i></button>
+              <button type="submit" class="emp-icon-btn btn-save" title="Save" style="display:none;"><i class="fa-solid fa-check"></i></button>
+            </div>
+          </div>
+          <form method="post" action="{{ url_for('employee.update_section', employee_id=employee.id, section='spouse') }}" class="emp-fields form-section">
+            <div class="emp-field full"><p class="emp-label">Full Name</p><div class="emp-value view-mode">{{ employee.spouse_full_name or 'N/A' }}</div><input type="text" name="spouse_full_name" class="emp-input edit-mode" value="{{ employee.spouse_full_name or '' }}" style="display:none;"></div>
+            <div class="emp-field"><p class="emp-label">Age</p><div class="emp-value view-mode">{{ employee.spouse_age or 'N/A' }}</div><input type="number" name="spouse_age" class="emp-input edit-mode" value="{{ employee.spouse_age or '' }}" style="display:none;"></div>
+            <div class="emp-field"><p class="emp-label">Birth Date</p><div class="emp-value view-mode">{{ employee.spouse_birth_date or 'N/A' }}</div><input type="date" name="spouse_birth_date" class="emp-input edit-mode" value="{{ employee.spouse_birth_date }}" style="display:none;"></div>
+            <div class="emp-field"><p class="emp-label">School</p><div class="emp-value view-mode">{{ employee.spouse_school or 'N/A' }}</div><input type="text" name="spouse_school" class="emp-input edit-mode" value="{{ employee.spouse_school or '' }}" style="display:none;"></div>
+            <div class="emp-field"><p class="emp-label">Course/Degree</p><div class="emp-value view-mode">{{ employee.spouse_course_degree or 'N/A' }}</div><input type="text" name="spouse_course_degree" class="emp-input edit-mode" value="{{ employee.spouse_course_degree or '' }}" style="display:none;"></div>
+            <div class="emp-field"><p class="emp-label">Occupation</p><div class="emp-value view-mode">{{ employee.spouse_occupation or 'N/A' }}</div><input type="text" name="spouse_occupation" class="emp-input edit-mode" value="{{ employee.spouse_occupation or '' }}" style="display:none;"></div>
+          </form>
+        </article>
+
+        <article class="card emp-section" data-section="children">
+          <div class="emp-section-head">
+            <div style="display:flex;align-items:center;gap:0.55rem;">
+              <i class="fa-solid fa-children"></i>
+              <h2>Children</h2>
+            </div>
+            <div class="emp-section-actions">
+              <button type="button" class="emp-icon-btn btn-edit" title="Edit"><i class="fa-solid fa-pencil"></i></button>
+              <button type="button" class="emp-icon-btn btn-cancel" title="Cancel" style="display:none;"><i class="fa-solid fa-xmark"></i></button>
+              <button type="submit" class="emp-icon-btn btn-save" title="Save" style="display:none;"><i class="fa-solid fa-check"></i></button>
+            </div>
+          </div>
+          <form method="post" action="{{ url_for('employee.update_section', employee_id=employee.id, section='children') }}" class="emp-fields form-section">
+            <div class="emp-field"><p class="emp-label">No. of Children</p><div class="emp-value view-mode">{{ employee.no_of_children or 'N/A' }}</div><input type="number" name="no_of_children" class="emp-input edit-mode" value="{{ employee.no_of_children or '' }}" style="display:none;"></div>
+            <div class="emp-field"><p class="emp-label">Male Children</p><div class="emp-value view-mode">{{ employee.no_of_male_children or 'N/A' }}</div><input type="number" name="no_of_male_children" class="emp-input edit-mode" value="{{ employee.no_of_male_children or '' }}" style="display:none;"></div>
+            <div class="emp-field"><p class="emp-label">Female Children</p><div class="emp-value view-mode">{{ employee.no_of_female_children or 'N/A' }}</div><input type="number" name="no_of_female_children" class="emp-input edit-mode" value="{{ employee.no_of_female_children or '' }}" style="display:none;"></div>
+            {% for child in employee.children_details_list %}
+              <div class="emp-field full"><p class="emp-label">Child {{ loop.index }}</p><div class="emp-value view-mode">{{ child.full_name or 'N/A' }}</div><input type="text" name="child_full_name[]" class="emp-input edit-mode" value="{{ child.full_name or '' }}" style="display:none;"></div>
+              <div class="emp-field"><p class="emp-label">Age</p><div class="emp-value view-mode">{{ child.age or 'N/A' }}</div><input type="number" name="child_age[]" class="emp-input edit-mode" value="{{ child.age or '' }}" style="display:none;"></div>
+              <div class="emp-field"><p class="emp-label">Birth Date</p><div class="emp-value view-mode">{{ child.birth_date or 'N/A' }}</div><input type="date" name="child_birth_date[]" class="emp-input edit-mode" value="{{ child.birth_date }}" style="display:none;"></div>
+              <div class="emp-field"><p class="emp-label">School</p><div class="emp-value view-mode">{{ child.school or 'N/A' }}</div><input type="text" name="child_school[]" class="emp-input edit-mode" value="{{ child.school or '' }}" style="display:none;"></div>
+              <div class="emp-field"><p class="emp-label">School Level</p><div class="emp-value view-mode">{{ child.school_level or 'N/A' }}</div><input type="text" name="child_school_level[]" class="emp-input edit-mode" value="{{ child.school_level or '' }}" style="display:none;"></div>
+              <div class="emp-field"><p class="emp-label">Occupation</p><div class="emp-value view-mode">{{ child.occupation or 'N/A' }}</div><input type="text" name="child_occupation[]" class="emp-input edit-mode" value="{{ child.occupation or '' }}" style="display:none;"></div>
+            {% else %}
+              <div class="emp-field full"><p class="emp-label">Children Records</p><div class="emp-value view-mode">N/A</div><input type="text" class="emp-input edit-mode" value="N/A" readonly style="display:none;"></div>
+            {% endfor %}
+          </form>
         </article>
       </div>
     </section>
   </section>
 
-  <div class="modal fade" id="changePasswordModal" tabindex="-1" aria-hidden="true">
+  <div class="modal fade" id="updateInfoModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title section-title mb-0">Change Password</h5>
+        <div class="modal-header" style="padding:0.55rem 0.8rem;">
+          <h5 class="modal-title section-title mb-0" style="font-size:0.92rem;">Update Information</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
-        <div class="modal-body">
-          <div class="field">
-            <label>Current Password</label>
-            <input type="password" class="form-control" placeholder="Enter current password">
+        <form method="post" action="{{ url_for('employee.update_info', employee_id=employee.id) }}" enctype="multipart/form-data">
+          <div class="modal-body" style="padding:0.7rem 0.8rem;">
+            <div class="field" style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.4rem;">
+              <label id="photoLabel" style="cursor:pointer;">
+                <img id="photoPreview" src="{% if employee.photopath %}{{ url_for('static', filename=employee.photopath) }}{% endif %}" alt="Photo" style="width:64px;height:64px;border-radius:14px;object-fit:cover;border:2px solid #e2e8f0;{% if not employee.photopath %}display:none;{% endif %}">
+                <div id="photoPlaceholder" style="width:64px;height:64px;border-radius:14px;border:2px dashed #cbd5e1;background:#f8fafc;display:grid;place-items:center;color:#94a3b8;font-size:1.4rem;{% if employee.photopath %}display:none;{% endif %}"><i class="fa-regular fa-user"></i></div>
+                <input type="file" name="photo" accept=".png,.jpg,.jpeg,image/png,image/jpeg" hidden>
+              </label>
+              <div>
+                <strong style="font-size:0.85rem;">Profile Photo</strong>
+                <p style="margin:0;font-size:0.72rem;color:#94a3b8;">Click photo to change</p>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;">
+              <div class="field" style="gap:3px;">
+                <label style="font-size:0.75rem;">First Name</label>
+                <input type="text" name="first_name" class="form-control form-control-sm" value="{{ employee.first_name or '' }}" required>
+              </div>
+              <div class="field" style="gap:3px;">
+                <label style="font-size:0.75rem;">Last Name</label>
+                <input type="text" name="last_name" class="form-control form-control-sm" value="{{ employee.last_name or '' }}" required>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;">
+              <div class="field" style="gap:3px;">
+                <label style="font-size:0.75rem;">Middle Name</label>
+                <input type="text" name="middle_name" class="form-control form-control-sm" value="{{ employee.middle_name or '' }}">
+              </div>
+              <div class="field" style="gap:3px;">
+                <label style="font-size:0.75rem;">Username</label>
+                <input type="text" name="username" class="form-control form-control-sm" value="{{ employee.user.username if employee.user else '' }}" required>
+              </div>
+            </div>
+            <hr style="margin:0.4rem 0;">
+            <p style="font-size:0.72rem;color:#64748b;margin:0 0 0.3rem;">Leave password blank if you don't want to change it.</p>
+            <div class="field" style="gap:3px;">
+              <label style="font-size:0.75rem;">New Password</label>
+              <input type="password" name="new_password" class="form-control form-control-sm" placeholder="Enter new password">
+            </div>
+            <div class="field" style="gap:3px;">
+              <label style="font-size:0.75rem;">Confirm Password</label>
+              <input type="password" name="confirm_password" class="form-control form-control-sm" placeholder="Confirm new password">
+            </div>
+            <div class="emp-modal-actions" style="margin-top:0.5rem;">
+              <button type="button" class="primary-btn btn-neutral" data-bs-dismiss="modal">Cancel</button>
+              <button type="submit" class="primary-btn">Save Changes</button>
+            </div>
           </div>
-          <div class="field">
-            <label>New Password</label>
-            <input type="password" class="form-control" placeholder="Enter new password">
-          </div>
-          <div class="field">
-            <label>Confirm Password</label>
-            <input type="password" class="form-control" placeholder="Confirm new password">
-          </div>
-          <div class="emp-modal-actions">
-            <button type="button" class="primary-btn btn-neutral" data-bs-dismiss="modal">Cancel</button>
-            <button type="button" class="primary-btn">Save Changes</button>
-          </div>
-        </div>
+        </form>
       </div>
     </div>
   </div>
+
+  <script>
+    (function() {
+      document.querySelectorAll('.emp-section').forEach(function(section) {
+        var btnEdit = section.querySelector('.btn-edit');
+        var btnCancel = section.querySelector('.btn-cancel');
+        var btnSave = section.querySelector('.btn-save');
+        var form = section.querySelector('.form-section');
+        if (!btnEdit || !btnCancel || !btnSave || !form) return;
+
+        var originals = {};
+
+        function enterEditMode() {
+          btnEdit.style.display = 'none';
+          btnCancel.style.display = '';
+          btnSave.style.display = '';
+          btnSave.classList.add('save');
+          btnCancel.classList.add('cancel');
+
+          originals = {};
+          form.querySelectorAll('.edit-mode').forEach(function(el) {
+            if (el.name) originals[el.name] = el.value;
+          });
+
+          section.querySelectorAll('.view-mode').forEach(function(el) {
+            el.style.display = 'none';
+          });
+          section.querySelectorAll('.edit-mode').forEach(function(el) {
+            el.style.display = '';
+          });
+        }
+
+        function exitEditMode() {
+          btnEdit.style.display = '';
+          btnCancel.style.display = 'none';
+          btnSave.style.display = 'none';
+          btnSave.classList.remove('save');
+          btnCancel.classList.remove('cancel');
+
+          section.querySelectorAll('.view-mode').forEach(function(el) {
+            el.style.display = '';
+          });
+          section.querySelectorAll('.edit-mode').forEach(function(el) {
+            el.style.display = 'none';
+          });
+        }
+
+        function cancelEdit() {
+          form.querySelectorAll('.edit-mode').forEach(function(el) {
+            if (el.name && originals.hasOwnProperty(el.name)) {
+              el.value = originals[el.name];
+            }
+          });
+          exitEditMode();
+        }
+
+        btnEdit.addEventListener('click', enterEditMode);
+        btnCancel.addEventListener('click', cancelEdit);
+        btnSave.addEventListener('click', function(e) {
+          e.preventDefault();
+          form.submit();
+        });
+      });
+    })();
+
+    // Photo preview in update modal
+    (function() {
+      var photoInput = document.querySelector('#updateInfoModal input[name="photo"]');
+      if (!photoInput) return;
+      photoInput.addEventListener('change', function() {
+        var file = this.files && this.files[0];
+        if (!file) return;
+        var reader = new FileReader();
+        reader.onload = function(e) {
+          var img = document.getElementById('photoPreview');
+          var placeholder = document.getElementById('photoPlaceholder');
+          if (img) {
+            img.src = e.target.result;
+            img.style.display = '';
+          }
+          if (placeholder) {
+            placeholder.style.display = 'none';
+          }
+        };
+        reader.readAsDataURL(file);
+      });
+    })();
+  </script>
 {% endblock %}

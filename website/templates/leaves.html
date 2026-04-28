@@ -2,503 +2,422 @@
 {% block title %}Leaves | HYG Employee Portal{% endblock %}
 
 {% block extra_head %}
-
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
-
 <style>
-/* ===== RESET ===== */
-*, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
-
-body, .leave-page-root{
-  font-family:'DM Sans',sans-serif;
+/* ===== LAYOUT: FORM + OVERVIEW SIDE-BY-SIDE ===== */
+.leave-layout {
+  display: flex;
+  gap: 1.2rem;
+  align-items: flex-start;
 }
 
-/* ===== LAYOUT (FIXED FULL WIDTH) ===== */
-.lm-layout{
-  display:grid;
-  grid-template-columns:1fr; /* ✅ default for mobile */
-  gap:1.5rem;
-  align-items:start;
+.leave-form-card {
+  flex: 2;
 }
 
-/* ===== CARD ===== */
-.lm-card{
-  background:#fff;
-  border:1px solid #e5e5e5;
-  border-radius:12px;
-  padding:1.75rem;
+.leave-overview-card {
+  flex: 1;
+  max-width: 320px;
+  position: sticky;
+  top: 1rem;
 }
 
-/* ===== FORM ===== */
-.lm-section-label{
-  font-size:10px;
-  font-weight:600;
-  letter-spacing:.12em;
-  text-transform:uppercase;
-  margin-bottom:1rem;
+.leave-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.8rem;
 }
 
-.lm-row{
-  display:flex;
-  gap:1rem;
-  flex-wrap:wrap;
+/* Radio pills */
+.leave-pill-group {
+  display: flex;
+  gap: 8px;
 }
 
-.lm-field{
-  display:flex;
-  flex-direction:column;
-  gap:6px;
-  margin-bottom:1.25rem;
-  flex:1;
+.leave-pill-group input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
 }
 
-.lm-field label{
-  font-size:12px;
+.leave-pill-group label {
+  border: 1px solid var(--line);
+  padding: 8px 16px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 600;
+  transition: all 0.15s ease;
 }
 
-.lm-input{
-  padding:10px 14px;
-  border:1px solid #ddd;
-  border-radius:8px;
-  font-size:14px;
+.leave-pill-group input:checked + label {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
 }
 
-
-textarea.lm-input{
-  min-height:90px;
+/* Category grid */
+.leave-category-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 8px;
 }
 
-/* ===== RADIO PILLS ===== */
-.lm-pill-group{
-  display:flex;
-  gap:8px;
-  position:relative;
+.leave-category-grid input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
 }
 
-.lm-pill-group input[type="radio"]{
-  position:absolute;
-  opacity:0;
-  width:0;
-  height:0;
+.leave-category-grid label {
+  border: 1px solid var(--line);
+  padding: 8px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-align: center;
+  transition: all 0.15s ease;
 }
 
-.lm-pill-group label{
-  border:1px solid #ddd;
-  padding:7px 14px;
-  border-radius:10px;
-  cursor:pointer;
-  font-size:12px;
+.leave-category-grid input:checked + label {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
 }
 
-.lm-pill-group input:checked + label{
-  background:black;
-  color:white;
+/* Day counter chip */
+.leave-day-chip {
+  border: 1px solid var(--line);
+  padding: 6px 14px;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 0.85rem;
 }
 
-/* ===== CATEGORY GRID ===== */
-.lm-category-grid{
-  display:grid;
-  grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
-  gap:8px;
+/* Stat row */
+.leave-stat-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 1rem;
 }
 
-.lm-category-grid input[type="radio"]{
-  position:absolute;
-  opacity:0;
-  width:0;
-  height:0;
+.leave-stat {
+  background: var(--surface-2);
+  border-radius: 14px;
+  padding: 12px;
+  text-align: center;
 }
 
-.lm-category-grid label{
-  border:1px solid #ddd;
-  padding:8px;
-  border-radius:8px;
-  cursor:pointer;
-  font-size:13px;
-  text-align:center;
+.leave-stat-num {
+  font-size: 1.4rem;
+  font-weight: 800;
 }
 
-.lm-category-grid input:checked + label{
-  background-color:black;
-  color:white;
+.leave-stat span:last-child {
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
 }
 
-/* ===== BUTTON ===== */  
-.lm-btn-submit{
-  background:#ffd015;
-  border:none;
-  cursor:pointer;
-  font-size: 12px ;
-  padding: 6px 20px;
+/* Leave list items */
+.leave-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.leave-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 14px;
+  padding: 10px 14px;
+  background: var(--surface-2);
+}
+
+.leave-item strong {
+  font-size: 0.88rem;
+}
+
+.leave-item-date {
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+/* Pagination */
+.leave-pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  margin-top: 0.8rem;
+}
+
+.leave-pagination a,
+.leave-pagination span {
+  padding: 6px 10px;
   border-radius: 10px;
-  font-weight: bold;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-decoration: none;
+  color: var(--ink-soft);
+  border: 1px solid var(--line);
+  transition: all 0.15s ease;
 }
 
-/* ===== MODAL FULL WIDTH ===== */
-.lm-modal{
-  display:none;
-  position:fixed;
-  z-index:999;
-  left:0;
-  top:0;
-  width:100%;
-  height:100%;
-  background: rgba(0,0,0,0.4); /* dark transparent overlay */
-  overflow:auto;
+.leave-pagination a:hover {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
 }
 
-.lm-modal-content{
-  width:90%;
-  max-width:900px;   /* 👈 makes it smaller */
-  margin:0px auto;  /* 👈 centers it vertically + horizontally */
-  padding:20px;
-  background:#fff;   /* keep content readable */
-  border-radius:12px;
+.leave-pagination .active-page {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
 }
 
-.lm-close{
-  display:block;
-  text-align:right;
-  font-size:22px;
-  margin-bottom:10px;
-  cursor:pointer;
+.leave-pagination .disabled-page {
+  color: #cbd5e1;
+  border-color: #e2e8f0;
+  cursor: not-allowed;
 }
 
-/* ===== STATS ===== */
-.lm-stat-row{
-  display:grid;
-  grid-template-columns:1fr 1fr 1fr;
-  gap:8px;
-  margin-bottom:1rem;
+/* Mobile overview toggle */
+.leave-overview-toggle {
+  display: none;
 }
 
-.lm-stat{
-  background:#f7f6f3;
-  border-radius:8px;
-  padding:10px;
-  text-align:center;
-}
-
-.lm-stat-num{
-  font-size:20px;
-  font-weight:600;
-}
-
-.pending-c{color:#b45309;}
-.approved-c{color:#16a34a;}
-.rejected-c{color:#dc2626;}
-
-#leaveList{
-  display:flex;
-  flex-direction:column;
-  gap:8px;
-}
-
-.lm-leave-item{
-  display:flex;
-  justify-content:space-between;
-  border:1px solid #e5e5e5;
-  border-radius:8px;
-  padding:12px;
-}
-
-.lm-status{
-  padding:3px 9px;
-  border-radius:99px;
-  font-size:10px;
-  text-transform:uppercase;
-}
-#openOverview{
-  font-weight: bold;
-  background-color: black;
-  color: wheat;
-}
-
-.lm-status.pending{background:#fef3c7;color:#92400e;}
-.lm-status.approved{background:#dcfce7;color:#166534;}
-.lm-status.rejected{background:#fee2e2;color:#991b1b;}
-
-/* ===== DESKTOP LAYOUT: SHOW OVERVIEW ON THE RIGHT ===== */
-@media (min-width:1024px){
-  .lm-layout{
-    grid-template-columns:2fr 1fr; /* form left, overview right */
+/* ===== MOBILE ===== */
+@media (max-width: 860px) {
+  .leave-layout {
+    flex-direction: column;
   }
 
-  /* show overview div as normal, hide modal */
-  #overviewModal{
-    display:block;
-    position:relative;
-    background:transparent;
-    height:auto;
-    width:auto;
-    z-index:auto;
-    overflow:visible;
+  .leave-overview-card {
+    display: none;
   }
 
-
-  .lm-modal-content{
-    max-width:none;
-    margin:0;
-    background:#fff;
-    border-radius:12px;
-  }
-
-  #openOverview,
-  #closeOverview{
-    display:none; /* hide modal buttons on desktop */
-  }
-}
-.pagination {
-    display: flex;
-    justify-content: center; /* center the pagination */
+  .leave-overview-toggle {
+    display: inline-flex;
     align-items: center;
-    margin: 1.5rem 0;
-    font-family: Arial, sans-serif;
-}
+    gap: 0.4rem;
+  }
 
-.pagination a, 
-.pagination span {
-    margin: 0 0.25rem;
-    padding: 0.5rem 0.8rem;
-    text-decoration: none;
-    /* color: #007BFF; link color */
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    transition: all 0.2s;
-}
-
-.pagination a:hover {
-    background-color: #007BFF;
-    color: white;
-    border-color: #007BFF;
-}
-
-.pagination .disabled {
-    color: #999;
-    border-color: #ddd;
-    cursor: not-allowed;
-    background-color: #f9f9f9;
+  .leave-row {
+    grid-template-columns: 1fr;
+  }
 }
 </style>
-
 {% endblock %}
 
 {% block page_content %}
 
-<div class="leave-page-root">
+<section class="leave-layout">
 
-<div class="lm-layout">
+  <!-- ===== LEAVE FORM ===== -->
+  <article class="card leave-form-card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+      <h2 class="section-title" style="margin-bottom:0;">Leave Management</h2>
+      <button class="primary-btn btn-mini leave-overview-toggle" data-bs-toggle="modal" data-bs-target="#leaveOverviewModal">
+        <i class="fa-solid fa-chart-simple"></i> Overview
+      </button>
+    </div>
 
-<div class="lm-card">
+    <form method="POST" action="/submit_leave">
 
-  <div style="display: flex; align-items: center; justify-content: space-between;">
-    <p class="lm-section-label">Leave Management</p>
-    <button id="openOverview" style="
-  margin-bottom:10px;
-  padding:6px 12px;
-  border:1px solid #ddd;
-  border-radius:8px;
-  cursor:pointer;
-  font-size:12px;
-">
-  View Overview
-</button>
-  </div>
+      <div class="leave-row">
+        <div class="field">
+          <label>Full Name</label>
+          <input type="text" value="{{ current_user.employee.first_name }} {{ current_user.employee.last_name }}" disabled>
+        </div>
+        <div class="field">
+          <label>Position</label>
+          <input type="text" value="{{ current_user.employee.position }}" disabled>
+        </div>
+      </div>
 
-<form method="POST" action="/submit_leave">
+      <div class="leave-row">
+        <div class="field">
+          <label>Start Date</label>
+          <input type="date" name="start_date" id="leaveStart" required>
+        </div>
+        <div class="field">
+          <label>End Date</label>
+          <input type="date" name="end_date" id="leaveEnd" required>
+        </div>
+      </div>
 
-<div class="lm-row">
+      <div class="field">
+        <label>Leave Pay Type <span style="color:var(--danger);">*</span></label>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div class="leave-pill-group">
+            <input type="radio" name="leave_type" value="With Pay" id="payWith" required>
+            <label for="payWith">With Pay</label>
+            <input type="radio" name="leave_type" value="Without Pay" id="payWithout">
+            <label for="payWithout">Without Pay</label>
+          </div>
+          <div class="leave-day-chip">
+            <span id="leaveDays"><b>0 day/s</b></span>
+          </div>
+        </div>
+      </div>
 
-<div class="lm-field">
-<label>Full Name</label>
-<input type="text"
-value="{{current_user.employee.first_name}} {{current_user.employee.last_name}}"
-class="lm-input"
-disabled>
-</div>
+      <div class="field">
+        <label>Leave Category</label>
+        <div class="leave-category-grid">
+          <input type="radio" name="leave_category" value="Sick Leave" id="catSick" required>
+          <label for="catSick">Sick Leave</label>
+          <input type="radio" name="leave_category" value="Vacation Leave" id="catVacation">
+          <label for="catVacation">Vacation Leave</label>
+          <input type="radio" name="leave_category" value="Emergency Leave" id="catEmergency">
+          <label for="catEmergency">Emergency Leave</label>
+          <input type="radio" name="leave_category" value="Maternity Leave" id="catMaternity">
+          <label for="catMaternity">Maternity / Paternity</label>
+          <input type="radio" name="leave_category" value="Others" id="otherLeaveRadio">
+          <label for="otherLeaveRadio">Others</label>
+        </div>
+        <input type="text" name="other_leave" id="otherLeaveInput" placeholder="Please specify..." style="display:none;margin-top:8px;">
+      </div>
 
-<div class="lm-field">
-<label>Position</label>
-<input type="text"
-value="{{current_user.employee.position}}"
-class="lm-input"
-disabled>
-</div>
+      <div class="field">
+        <label>Reason</label>
+        <textarea name="reason" rows="3" required></textarea>
+      </div>
 
-</div>
+      <button type="submit" class="primary-btn">Submit Request</button>
+    </form>
+  </article>
 
-<div class="lm-row">
+  <!-- ===== DESKTOP OVERVIEW (always visible) ===== -->
+  <aside class="card leave-overview-card">
+    <h2 class="section-title">Overview</h2>
 
-<div class="lm-field">
-<label>Start Date</label>
-<input type="date" name="start_date" id="leaveStart" class="lm-input" required>
-</div>
+    <div class="leave-stat-row">
+      <div class="leave-stat">
+        <div class="leave-stat-num" style="color:#b45309;">{{ pending_count }}</div>
+        <span>Pending</span>
+      </div>
+      <div class="leave-stat">
+        <div class="leave-stat-num" style="color:#16a34a;">{{ approved_count }}</div>
+        <span>Approved</span>
+      </div>
+      <div class="leave-stat">
+        <div class="leave-stat-num" style="color:#dc2626;">{{ rejected_count }}</div>
+        <span>Rejected</span>
+      </div>
+    </div>
 
-<div class="lm-field">
-<label>End Date</label>
-<input type="date" name="end_date" id="leaveEnd" class="lm-input" required>
-</div>
+    <h2 class="section-title">Recent Leaves</h2>
 
-</div>
+    <div class="leave-list">
+      {% for leave in leaves %}
+      <div class="leave-item">
+        <div>
+          <strong>{{ leave.leave_category }}</strong>
+          <div class="leave-item-date">{{ leave.start_date }} &rarr; {{ leave.end_date }}</div>
+        </div>
+        <span class="status {{ leave.status }}">{{ leave.status }}</span>
+      </div>
+      {% endfor %}
+    </div>
 
-<div class="lm-field">
+    {% if pagination.pages > 1 %}
+    <div class="leave-pagination">
+      {% if pagination.has_prev %}
+        <a href="{{ url_for('employee.leaves', page=pagination.prev_num) }}">&laquo;</a>
+      {% else %}
+        <span class="disabled-page">&laquo;</span>
+      {% endif %}
 
-<label>Leave Pay Type <span style="color:red">*</span></label>
+      {% for p in range(1, pagination.pages + 1) %}
+        {% if p == pagination.page %}
+          <span class="active-page">{{ p }}</span>
+        {% else %}
+          <a href="{{ url_for('employee.leaves', page=p) }}">{{ p }}</a>
+        {% endif %}
+      {% endfor %}
 
-<div style="display:flex;justify-content:space-between; align-items:center">
-
-<div class="lm-pill-group">
-
-<input type="radio" name="leave_type" value="With Pay" id="payWith" required>
-<label for="payWith">With Pay</label>
-
-<input type="radio" name="leave_type" value="Without Pay" id="payWithout">
-<label for="payWithout">Without Pay</label>
-
-</div>
-
-<div style="border:1px solid gray;padding:6px 10px;border-radius:10px">
-<span id="leaveDays"><b>0 day/s</b></span>
-</div>
-
-</div>
-
-</div>
-
-<div class="lm-field">
-
-<label>Leave Category</label>
-
-<div class="lm-category-grid">
-
-<input type="radio" name="leave_category" value="Sick Leave" id="catSick" required>
-<label for="catSick">Sick Leave</label>
-
-<input type="radio" name="leave_category" value="Vacation Leave" id="catVacation">
-<label for="catVacation">Vacation Leave</label>
-
-<input type="radio" name="leave_category" value="Emergency Leave" id="catEmergency">
-<label for="catEmergency">Emergency Leave</label>
-
-<input type="radio" name="leave_category" value="Maternity Leave" id="catMaternity">
-<label for="catMaternity">Maternity / Paternity</label>
-
-<input type="radio" name="leave_category" value="Others" id="otherLeaveRadio">
-<label for="otherLeaveRadio">Others</label>
-
-</div>
-
-<input type="text"
-name="other_leave"
-id="otherLeaveInput"
-class="lm-input"
-placeholder="Please specify..."
-style="display:none;margin-top:10px">
-
-</div>
-
-<div class="lm-field">
-
-<label>Reason</label>
-<textarea name="reason" required class="lm-input"></textarea>
-
-</div>
-
-<button type="submit" class="lm-btn-submit">
-Submit Request
-</button>
-
-</form>
-
-</div>
-
-<!-- OVERVIEW: modal on mobile, sidebar on desktop -->
-<div id="overviewModal" class="lm-modal">
-<div class="lm-modal-content">
-<span id="closeOverview" class="lm-close">&times;</span>
-
-<p class="lm-section-label">Overview</p>
-
-<div class="lm-stat-row">
-<div class="lm-stat">
-<span class="lm-stat-num pending-c">{{ pending_count }}</span>
-<span>Pending</span>
-</div>
-<div class="lm-stat">
-<span class="lm-stat-num approved-c">{{ approved_count }}</span>
-<span>Approved</span>
-</div>
-<div class="lm-stat">
-<span class="lm-stat-num rejected-c">{{ rejected_count }}</span>
-<span>Rejected</span>
-</div>
-</div>
-
-<p class="lm-section-label">Recent Leaves</p>
-
-<div id="leaveList">
-{% for leave in leaves %}
-<div class="lm-leave-item">
-<div>
-<strong>{{leave.leave_category}}</strong>
-<div style="font-size:11px;color:#888">
-{{leave.start_date}} → {{leave.end_date}}
-</div>
-</div>
-<div>
-<span class="lm-status {{leave.status}}">
-{{leave.status}}
-</span>
-</div>
-</div>
-{% endfor %}
-<div class="pagination" style="display:flex; align-items:center; gap:6px; font-family:sans-serif;">
-
-  <!-- PREVIOUS -->
-  {% if pagination.has_prev %}
-    <a href="{{ url_for('employee.leaves', page=pagination.prev_num) }}"
-       style="padding:6px 10px; border:1px solid #ccc; border-radius:6px; text-decoration:none; color:#333;">
-       &laquo;
-    </a>
-  {% else %}
-    <span style="padding:6px 10px; border:1px solid #eee; border-radius:6px; color:#aaa;">
-      &laquo;
-    </span>
-  {% endif %}
-
-  <!-- PAGE NUMBERS -->
-  {% for p in range(1, pagination.pages + 1) %}
-    {% if p == pagination.page %}
-      <span style="padding:6px 10px; border-radius:6px; background:#333; color:#fff; font-weight:bold;">
-        {{ p }}
-      </span>
-    {% else %}
-      <a href="{{ url_for('employee.leaves', page=p) }}"
-         style="padding:6px 10px; border:1px solid #ccc; border-radius:6px; text-decoration:none; color:#333;">
-        {{ p }}
-      </a>
+      {% if pagination.has_next %}
+        <a href="{{ url_for('employee.leaves', page=pagination.next_num) }}">&raquo;</a>
+      {% else %}
+        <span class="disabled-page">&raquo;</span>
+      {% endif %}
+    </div>
     {% endif %}
-  {% endfor %}
+  </aside>
 
-  <!-- NEXT -->
-  {% if pagination.has_next %}
-    <a href="{{ url_for('employee.leaves', page=pagination.next_num) }}"
-       style="padding:6px 10px; border:1px solid #ccc; border-radius:6px; text-decoration:none; color:#333;">
-       &raquo;
-    </a>
-  {% else %}
-    <span style="padding:6px 10px; border:1px solid #eee; border-radius:6px; color:#aaa;">
-      &raquo;
-    </span>
-  {% endif %}
+</section>
 
-</div>
-</div>
+<!-- ===== MOBILE OVERVIEW MODAL ===== -->
+<div class="modal fade" id="leaveOverviewModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title section-title mb-0">Overview</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="leave-stat-row">
+          <div class="leave-stat">
+            <div class="leave-stat-num" style="color:#b45309;">{{ pending_count }}</div>
+            <span>Pending</span>
+          </div>
+          <div class="leave-stat">
+            <div class="leave-stat-num" style="color:#16a34a;">{{ approved_count }}</div>
+            <span>Approved</span>
+          </div>
+          <div class="leave-stat">
+            <div class="leave-stat-num" style="color:#dc2626;">{{ rejected_count }}</div>
+            <span>Rejected</span>
+          </div>
+        </div>
 
-</div>
-</div>
+        <h2 class="section-title">Recent Leaves</h2>
 
+        <div class="leave-list">
+          {% for leave in leaves %}
+          <div class="leave-item">
+            <div>
+              <strong>{{ leave.leave_category }}</strong>
+              <div class="leave-item-date">{{ leave.start_date }} &rarr; {{ leave.end_date }}</div>
+            </div>
+            <span class="status {{ leave.status }}">{{ leave.status }}</span>
+          </div>
+          {% endfor %}
+        </div>
+
+        {% if pagination.pages > 1 %}
+        <div class="leave-pagination">
+          {% if pagination.has_prev %}
+            <a href="{{ url_for('employee.leaves', page=pagination.prev_num) }}">&laquo;</a>
+          {% else %}
+            <span class="disabled-page">&laquo;</span>
+          {% endif %}
+
+          {% for p in range(1, pagination.pages + 1) %}
+            {% if p == pagination.page %}
+              <span class="active-page">{{ p }}</span>
+            {% else %}
+              <a href="{{ url_for('employee.leaves', page=p) }}">{{ p }}</a>
+            {% endif %}
+          {% endfor %}
+
+          {% if pagination.has_next %}
+            <a href="{{ url_for('employee.leaves', page=pagination.next_num) }}">&raquo;</a>
+          {% else %}
+            <span class="disabled-page">&raquo;</span>
+          {% endif %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -530,31 +449,18 @@ document.querySelectorAll('input[name="leave_category"]').forEach(radio => {
   });
 });
 
-const modal = document.getElementById("overviewModal");
-const openBtn = document.getElementById("openOverview");
-const closeBtn = document.getElementById("closeOverview");
-
-openBtn.onclick = () => modal.style.display = "block";
-closeBtn.onclick = () => modal.style.display = "none";
-
 // ===== DATE DEFAULT + LIMITS =====
 const today = new Date().toISOString().split("T")[0];
 
-// set default start date
 startDate.value = today;
-
-// prevent past dates
 startDate.min = today;
 endDate.min = today;
 
-// ensure end date is never before start date
 startDate.addEventListener("change", () => {
   endDate.min = startDate.value;
-
   if(endDate.value < startDate.value){
     endDate.value = startDate.value;
   }
-
   calculateDays();
 });
 </script>

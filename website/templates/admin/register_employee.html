@@ -2,99 +2,244 @@
 
 {% block title %}Register Employee{% endblock %}
 
+{% block topbar %}
+<header class="topbar register-topbar">
+  <div class="register-topbar-brand">
+    <div class="brand-mark">
+      <img src="{{ url_for('static', filename='images/logos/HYG LOGO.png') }}" alt="HYG Logo" class="hyg-logo">
+    </div>
+    <strong>HYG Employee Portal</strong>
+  </div>
+</header>
+{% endblock %}
+
 {% block extra_head %}
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-
 <style>
-
-/* ===== GLOBAL ===== */
-body {
-  font-family: 'Inter', sans-serif;
+.mobile-bottom-nav {
+  display: none !important;
 }
 
-/* ===== FIELD ===== */
+.register-topbar {
+  justify-content: flex-start;
+  padding: 0 1.25rem;
+  background: linear-gradient(180deg, #0f172a 0%, #111b34 100%);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+  box-shadow: inset -1px 0 0 rgba(148, 163, 184, 0.2);
+}
+
+.register-topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.register-topbar-brand .brand-mark {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: var(--accent);
+  color: #111827;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.register-topbar-brand .hyg-logo {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+}
+
+.register-topbar-brand strong {
+  font-size: 0.88rem;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  color: #e2e8f0;
+}
+
+.register-employee-page {
+  display: grid;
+  gap: 18px;
+}
+
+.register-employee-head {
+  display: flex;
+  align-items: center;
+}
+
+.register-note {
+  margin: 0;
+  font-size: 13px;
+  color: #64748b;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  padding: 8px 14px;
+}
+
+.register-note strong {
+  color: #b45309;
+}
+
+/* Step indicator */
+.step-indicator {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.step-pill {
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  padding: 10px 8px;
+  text-align: center;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+  cursor: default;
+}
+
+.step-pill span {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  border: 1px solid #cbd5e1;
+  display: grid;
+  place-items: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #334155;
+  background: #fff;
+  transition: border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+}
+
+.step-pill small {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.step-pill.active {
+  border-color: #facc15;
+  background: #fefce8;
+}
+
+.step-pill.active span {
+  border-color: #facc15;
+  background: #fde047;
+  color: #111827;
+}
+
+.step-pill.done {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+
+.step-pill.done span {
+  border-color: #22c55e;
+  background: #22c55e;
+  color: #fff;
+}
+
+/* Step panels */
+.step {
+  display: none;
+}
+
+.step.active {
+  display: grid;
+  gap: 16px;
+}
+
+.employee-register-form {
+  display: grid;
+  gap: 16px;
+}
+
+.form-section-card {
+  background: #fff;
+  padding: 20px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
+}
+
+.form-section-title {
+  font-size: 17px;
+  font-weight: 700;
+  margin: 0 0 14px;
+  color: #1f2937;
+}
+
+.grid-4,
+.grid-3,
+.grid-2 {
+  display: grid;
+  gap: 14px;
+}
+
+.grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
 .field {
   display: flex;
   flex-direction: column;
+  gap: 5px;
 }
 
 .field label {
   font-size: 13px;
-  margin-bottom: 5px;
-  font-weight: 500;
+  font-weight: 600;
   color: #374151;
 }
 
 .field input,
 .field select,
 .field textarea {
-  padding: 10px;
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 10px;
   border-radius: 8px;
-  border: 1px solid #ccc;
-  font-size: 13px;
+  border: 1px solid #cbd5e1;
+  font-size: 14px;
+  color: #111827;
+  background: #fff;
+}
+
+.field textarea {
+  resize: vertical;
 }
 
 .field input:focus,
 .field select:focus,
 .field textarea:focus {
+  outline: 2px solid rgba(37, 99, 235, 0.18);
   border-color: #2563eb;
-  outline: none;
 }
 
-/* ===== GRIDS (DESKTOP DEFAULT) ===== */
-.grid-4 {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 15px;
-}
-
-.grid-3 {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 15px;
-}
-
-.grid-2 {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 15px;
-}
-
-/* ===== CARD ===== */
-.form-section-card {
-  background: #fff;
-  padding: 20px;
-  border-radius: 14px;
-  box-shadow: 0 1px 6px rgba(0,0,0,0.05);
-  margin-bottom: 20px;
-}
-
-.form-section-title {
-  font-size: 18px;
-  font-weight: 600;
-  margin-bottom: 15px;
-  color: #1f2937;
-}
-
-/* ===== PHOTO ===== */
 .photo-section {
   display: flex;
-  gap: 25px;
-  margin-bottom: 25px;
+  gap: 18px;
+  align-items: center;
+  margin-bottom: 18px;
 }
 
 .photo-box {
-  width: 180px;
-  height: 180px;
-  border-radius: 16px;
+  width: 150px;
+  height: 150px;
+  border-radius: 8px;
   border: 2px dashed #cbd5e1;
   background: #f8fafc;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  place-items: center;
   cursor: pointer;
+  overflow: hidden;
 }
 
 .photo-box img {
@@ -109,225 +254,693 @@ body {
   color: #64748b;
 }
 
-.photo-info {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
+.photo-info h2 {
+  margin: 0;
+  font-size: 18px;
 }
 
-/* ===== BUTTONS ===== */
-.form-actions {
+.photo-info p {
+  margin: 4px 0 0;
+  color: #64748b;
+}
+
+.employee-child-group {
+  padding-top: 14px;
+  margin-top: 14px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.field-error {
+  font-size: 12px;
+  color: #ef4444;
+  margin-top: 2px;
+  animation: fieldErrorIn 0.2s ease;
+}
+
+@keyframes fieldErrorIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Step navigation */
+.step-nav {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 10px;
 }
 
-.form-actions button {
-  padding: 10px 18px;
+.step-nav button {
+  min-height: 42px;
+  padding: 0 20px;
   border-radius: 8px;
-  border: none;
+  border: 1px solid #d1d5db;
+  font-weight: 700;
+  font-size: 14px;
   cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
 
-.form-actions button[type="submit"] {
-  background: gold;
-  color: white;
+.step-nav .btn-back {
+  background: #fff;
+  color: #374151;
 }
 
-.form-actions button[type="reset"] {
-  background: #e5e7eb;
+.step-nav .btn-back:hover {
+  background: #f8fafc;
+  transform: translateY(-1px);
 }
 
-/* ===== MOBILE ===== */
-@media (max-width: 768px) {
+.step-nav .btn-next {
+  border-color: #ca8a04;
+  background: linear-gradient(135deg, #fde047 0%, #facc15 45%, #eab308 100%);
+  color: #111827;
+  box-shadow: 0 4px 12px rgba(202, 138, 4, 0.2);
+}
 
+.step-nav .btn-next:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(161, 98, 7, 0.25);
+}
+
+.step-nav .btn-submit {
+  border-color: #ca8a04;
+  background: linear-gradient(135deg, #fde047 0%, #facc15 45%, #eab308 100%);
+  color: #111827;
+  box-shadow: 0 4px 12px rgba(202, 138, 4, 0.2);
+}
+
+.step-nav .btn-submit:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(161, 98, 7, 0.25);
+}
+
+.step-nav .btn-spacer {
+  visibility: hidden;
+}
+
+@media (max-width: 900px) {
   .grid-4,
-  .grid-3,
-  .grid-2 {
-    grid-template-columns: repeat(2, 1fr);
+  .grid-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .grid-4,
+  .grid-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  textarea {
-    grid-column: span 2;
+  .grid-3.grid-compact {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .grid-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .field:has(textarea) {
+    grid-column: 1 / -1;
+  }
+
+  .field.long-text {
+    grid-column: 1 / -1;
   }
 
   .photo-section {
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-  }
-
-  .photo-box {
-    margin: 0 auto;
-  }
-
-  .form-actions {
+    align-items: flex-start;
     flex-direction: column;
   }
 
-  .form-actions button {
-    width: 100%;
+  .step-indicator {
+    gap: 4px;
+  }
+
+  .step-pill {
+    padding: 6px 4px;
+    border-radius: 8px;
+  }
+
+  .step-pill small {
+    font-size: 0.6rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+  }
+
+  .step-nav button {
+    flex: 1;
   }
 }
-
 </style>
 {% endblock %}
 
 {% block page_content %}
+<section class="register-employee-page">
+  <div class="register-employee-head">
+    <p class="register-note"><strong>Note:</strong> Please fill in all applicable fields. Indicate <strong>N/A</strong> if a field is not applicable.</p>
+  </div>
 
-<div>
-  <h2 style="font-weight:700; margin-bottom: 10px; font-size:24px;">Register Employee</h2>
+  <div class="step-indicator">
+    <div class="step-pill active" data-pill="1"><span>1</span><small>Personal</small></div>
+    <div class="step-pill" data-pill="2"><span>2</span><small>Employment</small></div>
+    <div class="step-pill" data-pill="3"><span>3</span><small>Contact & Ed.</small></div>
+    <div class="step-pill" data-pill="4"><span>4</span><small>Family</small></div>
+    <div class="step-pill" data-pill="5"><span>5</span><small>Account</small></div>
+  </div>
 
-  <form action="{{ url_for('admin.add_employee') }}" method="POST" enctype="multipart/form-data">
+  <form id="registerEmployeeForm" class="employee-register-form" action="{{ url_for('admin.add_employee') }}" method="POST" enctype="multipart/form-data">
 
-    <!-- PERSONAL -->
-    <div class="form-section-card">
-      <h3 class="form-section-title">Personal Information</h3>
+    <!-- Step 1: Personal -->
+    <div class="step active" data-step="1">
+      <div class="form-section-card">
+        <h3 class="form-section-title">Personal Details</h3>
 
-      <div class="photo-section">
-        <label class="photo-box" for="photoInput">
-          <img id="previewImg" style="display:none;">
-          <div class="photo-placeholder" id="placeholder">
-            📷<br>Click to Upload Photo
+        <div class="photo-section">
+          <label class="photo-box" for="photoInput">
+            <img id="previewImg" alt="Employee photo preview" style="display:none;">
+            <span class="photo-placeholder" id="placeholder">Click to Upload Photo</span>
+          </label>
+          <input type="file" id="photoInput" name="photo" accept=".png,.jpg,.jpeg,image/png,image/jpeg" hidden>
+          <div class="photo-info">
+            <h2>Profile Upload</h2>
+            <p>Use a clear JPG or PNG image.</p>
           </div>
-        </label>
-
-        <input type="file" id="photoInput" name="photo" hidden onchange="previewPhoto(event)">
-
-        <div class="photo-info">
-          <h4>Profile Upload</h4>
-          <p>Upload a clear square photo</p>
         </div>
-      </div>
-      <div class="grid-4">
-        <div class="field"><label>First Name</label><input name="first_name" required></div>
-        <div class="field"><label>Middle Name</label><input name="middle_name"></div>
-        <div class="field"><label>Last Name</label><input name="last_name" required></div>
-        <div class="field"><label>Suffix</label><input name="suffix"></div>
-      </div>
 
-      <div class="grid-4">
-        <div class="field"><label>Birth Date</label><input type="date" name="birth_date"></div>
-        <div class="field"><label>Age</label><input type="number" name="age"></div>
-        <div class="field">
-          <label>Gender</label>
-          <select name="gender">
-            <option>Select</option>
-            <option>Male</option>
-            <option>Female</option>
-          </select>
+        <div class="grid-4">
+          <div class="field"><label>Last Name</label><input name="last_name" required></div>
+          <div class="field"><label>First Name</label><input name="first_name" required></div>
+          <div class="field optional-field"><label>Middle Name</label><input name="middle_name"></div>
+          <div class="field optional-field"><label>Suffix</label><input name="suffix"></div>
         </div>
-        <div class="field"><label>Religion</label><input name="religion"></div>
-      </div>2
-    </div>
 
-    <!-- CONTACT -->
-    <div class="form-section-card">
-      <h3 class="form-section-title">Contact Information</h3>
+        <div class="grid-4">
+          <div class="field"><label>Birth Date</label><input type="date" name="birth_date"></div>
+          <div class="field"><label>Age</label><input type="number" name="age" min="0"></div>
+          <div class="field">
+            <label>Gender</label>
+            <select name="gender">
+              <option value="">Select</option>
+              <option>Male</option>
+              <option>Female</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <div class="field"><label>Civil Status</label><input name="civil_status"></div>
+        </div>
 
-      <div class="grid-3">
-        <div class="field"><label>Email</label><input type="email" name="email"></div>
-        <div class="field"><label>Phone</label><input name="phone"></div>
-        <div class="field"><label>Zip Code</label><input name="zipCode"></div>
-      </div>
+        <div class="field"><label>Birthplace</label><input name="birth_place"></div>
 
-      <div class="field">
-        <label>Address</label>
-        <textarea name="present_address"></textarea>
-      </div>
-    </div>
+        <div class="grid-2">
+          <div class="field"><label>Religion</label><input name="religion"></div>
+          <div class="field"><label>Nationality</label><input name="nationality"></div>
+        </div>
 
-    <!-- EMPLOYMENT (FIXED 2 COLUMN DESKTOP) -->
-    <div class="form-section-card">
-      <h3 class="form-section-title">Employment Details</h3>
-
-      <div class="grid-2">
-        <div class="field">
-          <label>Company</label>
-          <select name="company">
-            <option>Select Company</option>
-            {% for company in companies %}
-            <option value="{{ company.company_name }}">{{ company.company_name }}</option>
-            {% endfor %}
-          </select>
+        <div class="grid-2">
+          <div class="field"><label>Weight</label><input name="weight"></div>
+          <div class="field"><label>Height</label><input name="height"></div>
         </div>
 
         <div class="field">
-          <label>Position</label>
-          <input name="position">
-        </div>
-
-        <div class="field">
-          <label>Hired Date</label>
-          <input type="date" name="hired_date">
-        </div>
-
-        <div class="field">
-          <label>Employee Type</label>
-          <select name="employee_type">
-            <option>Select</option>
-            <option>Regular</option>
-            <option>Probationary</option>
-            <option>Trainee</option>
+          <label>Educational Attainment</label>
+          <select name="educational_attainment">
+            <option value="">Select Attainment</option>
+            <option value="Elementary">Elementary</option>
+            <option value="Secondary">Secondary</option>
+            <option value="Vocational">Vocational</option>
+            <option value="College">College</option>
+            <option value="Postgraduate">Postgraduate</option>
+            <option value="Doctorate">Doctorate</option>
           </select>
         </div>
       </div>
     </div>
 
-    <!-- ACTION -->
-    <div class="form-actions">
-      <button type="reset">Clear</button>
-      <button type="submit">Save Employee</button>
+    <!-- Step 2: Employment -->
+    <div class="step" data-step="2">
+      <div class="form-section-card">
+        <h3 class="form-section-title">Government IDs & Bank</h3>
+        <div class="grid-3">
+          <div class="field optional-field"><label>TIN No.</label><input name="tin_no"></div>
+          <div class="field optional-field"><label>SSS No.</label><input name="sss_no"></div>
+          <div class="field optional-field"><label>Pag-IBIG No.</label><input name="pagibig_no"></div>
+          <div class="field optional-field"><label>PhilHealth No.</label><input name="philhealth_no"></div>
+          <div class="field optional-field">
+            <label>Bank Type</label>
+            <select name="bank_type">
+              <option value="">Select Bank</option>
+              <option>BDO</option>
+              <option>BPI</option>
+              <option>Metrobank</option>
+              <option>LandBank</option>
+              <option>Chinabank</option>
+              <option>PNB</option>
+              <option>Security Bank</option>
+              <option>UnionBank</option>
+              <option>RCBC</option>
+              <option>EastWest</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <div class="field optional-field"><label>Account No.</label><input name="account_no"></div>
+          <div class="field optional-field">
+            <label>Valid ID Type</label>
+            <select name="valid_id_type">
+              <option value="">Select ID</option>
+              <option>Passport</option>
+              <option>Driver's License</option>
+              <option>UMID</option>
+              <option>SSS ID</option>
+              <option>PhilHealth ID</option>
+              <option>TIN ID</option>
+              <option>Postal ID</option>
+              <option>Voter's ID</option>
+              <option>National ID</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <div class="field optional-field"><label>Valid ID No.</label><input name="valid_id_no"></div>
+        </div>
+      </div>
+
+      <div class="form-section-card">
+        <h3 class="form-section-title">Employment Details</h3>
+        <div class="grid-3">
+          <div class="field"><label>Company ID No.</label><input name="employee_no"></div>
+          <div class="field">
+            <label>Company</label>
+            <select name="company">
+              <option value="">Select Company</option>
+              {% for company in companies %}
+                <option value="{{ company.company_name }}">{{ company.company_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field"><label>Store/Department</label><input name="department"></div>
+          <div class="field"><label>Date Hired</label><input type="date" name="hired_date"></div>
+          <div class="field">
+            <label>Employee Type</label>
+            <select name="employee_type">
+              <option value="">Select Type</option>
+              <option>Regular</option>
+              <option>Probationary</option>
+              <option>Trainee</option>
+            </select>
+          </div>
+          <input type="hidden" name="employment_status" value="Active">
+        </div>
+      </div>
     </div>
 
+    <!-- Step 3: Contact & Education -->
+    <div class="step" data-step="3">
+      <div class="form-section-card">
+        <h3 class="form-section-title">Contact & Address</h3>
+        <div class="grid-4">
+          <div class="field"><label>Cellphone No.</label><input name="phone"></div>
+          <div class="field optional-field"><label>Other phone #</label><input name="house_phone"></div>
+          <div class="field optional-field"><label>Email Address</label><input type="email" name="email"></div>
+          <div class="field"><label>Present Zip Code</label><input name="zipCode"></div>
+        </div>
+        <div class="grid-2">
+          <div class="field optional-field">
+            <label>Social Media Type</label>
+            <select name="social_media_type">
+              <option value="">Select Platform</option>
+              <option>Facebook</option>
+              <option>Instagram</option>
+              <option>TikTok</option>
+              <option>WhatsApp</option>
+              <option>Viber</option>
+              <option>Twitter / X</option>
+              <option>LinkedIn</option>
+              <option>Telegram</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <div class="field optional-field"><label>Details</label><input name="social_media_detail" placeholder="Username / Profile link"></div>
+        </div>
+        <div class="grid-2">
+          <div class="field"><label>Present Address</label><textarea name="present_address" rows="3"></textarea></div>
+          <div class="field"><label>Permanent Address</label><textarea name="permanent_address" rows="3"></textarea></div>
+        </div>
+      </div>
+
+      <div class="form-section-card">
+        <h3 class="form-section-title">Educational Background</h3>
+        <div class="grid-3">
+          <div class="field"><label>Elementary</label><input name="elementary_school"></div>
+          <div class="field"><label>Year Attended</label><input name="elementary_year_attended"></div>
+          <div class="field"><label>College Course</label><input name="college_course"></div>
+          <div class="field"><label>Secondary</label><input name="secondary_school"></div>
+          <div class="field"><label>Year Attended</label><input name="secondary_year_attended"></div>
+          <div class="field"><label>Year Graduated</label><input name="year_graduated"></div>
+          <div class="field"><label>College</label><input name="college_school"></div>
+          <div class="field"><label>Year Attended</label><input name="college_year_attended"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 4: Family -->
+    <div class="step" data-step="4">
+      <div class="form-section-card">
+        <h3 class="form-section-title">Family Details</h3>
+        <div class="grid-2">
+          <div class="field"><label>Father's Name</label><input name="father_name"></div>
+          <div class="field"><label>Father's Job</label><input name="father_occupation"></div>
+        </div>
+        <div class="grid-2">
+          <div class="field"><label>Mother's Name</label><input name="mother_maiden_name"></div>
+          <div class="field"><label>Mother's Job</label><input name="mother_occupation"></div>
+        </div>
+        <div class="grid-2">
+          <div class="field"><label>No. of Siblings</label><input name="no_of_siblings"></div>
+          <div class="field"><label>Birth Order</label><input name="sibling_birth_order"></div>
+        </div>
+      </div>
+
+      <div class="form-section-card">
+        <h3 class="form-section-title">Spouse Details</h3>
+        <div class="grid-3">
+          <div class="field optional-field"><label>Spouse Full Name</label><input name="spouse_full_name"></div>
+          <div class="field optional-field"><label>Age</label><input type="number" name="spouse_age"></div>
+          <div class="field optional-field"><label>Birth Date</label><input type="date" name="spouse_birth_date"></div>
+          <div class="field optional-field"><label>Name of School</label><input name="spouse_school"></div>
+          <div class="field optional-field"><label>Course/Degree</label><input name="spouse_course_degree"></div>
+          <div class="field optional-field"><label>Occupation</label><input name="spouse_occupation"></div>
+        </div>
+      </div>
+
+      <div class="form-section-card">
+        <h3 class="form-section-title">Children Details</h3>
+        <div class="grid-2">
+          <div class="field optional-field"><label>No. of Male Children</label><input type="number" min="0" name="no_of_male_children"></div>
+          <div class="field optional-field"><label>No. of Female Children</label><input type="number" min="0" name="no_of_female_children"></div>
+        </div>
+        <div class="js-children-container"></div>
+      </div>
+    </div>
+
+    <!-- Step 5: User Account -->
+    <div class="step" data-step="5">
+      <div class="form-section-card">
+        <h3 class="form-section-title">User Account</h3>
+        <p class="register-note" style="margin-bottom:14px;"><strong>Note:</strong> Leave blank if you don't want to create a login account yet. The employee can self-register later.</p>
+        <div class="field optional-field"><label>Username</label><input name="reg_username" minlength="4"></div>
+        <div class="field optional-field"><label>Password</label><input type="password" name="reg_password" minlength="7"></div>
+        <div class="field optional-field"><label>Confirm Password</label><input type="password" name="reg_confirm_password"></div>
+      </div>
+    </div>
+
+    <!-- Step navigation -->
+    <div class="step-nav">
+      <button type="button" class="btn-back" id="btnBack">Back</button>
+      <button type="button" class="btn-next" id="btnNext">Next</button>
+      <button type="submit" class="btn-submit" id="btnSubmit">Save Employee</button>
+    </div>
   </form>
-</div>
+</section>
 
 <script>
-function previewPhoto(event) {
-  const file = event.target.files[0];
-  const img = document.getElementById("previewImg");
-  const placeholder = document.getElementById("placeholder");
+(function () {
+  var currentStep = 1;
+  var totalSteps = 5;
 
-  const reader = new FileReader();
-  reader.onload = e => {
-    img.src = e.target.result;
-    img.style.display = "block";
-    placeholder.style.display = "none";
-  };
-  reader.readAsDataURL(file);
+  var btnBack = document.getElementById("btnBack");
+  var btnNext = document.getElementById("btnNext");
+  var btnSubmit = document.getElementById("btnSubmit");
+
+  function goToStep(n) {
+    if (n < 1 || n > totalSteps) return;
+    currentStep = n;
+
+    var steps = document.querySelectorAll(".step");
+    steps.forEach(function (s) {
+      s.classList.remove("active");
+      if (parseInt(s.getAttribute("data-step")) === n) {
+        s.classList.add("active");
+      }
+    });
+
+    var pills = document.querySelectorAll(".step-pill");
+    pills.forEach(function (p) {
+      var pillNum = parseInt(p.getAttribute("data-pill"));
+      p.classList.remove("active", "done");
+      if (pillNum === n) {
+        p.classList.add("active");
+      } else if (pillNum < n) {
+        p.classList.add("done");
+        p.querySelector("span").innerHTML = '<i class="fa-solid fa-check" style="font-size:0.7rem"></i>';
+      } else {
+        p.querySelector("span").textContent = pillNum;
+      }
+    });
+
+    // Button visibility
+    btnBack.style.display = n === 1 ? "none" : "";
+    btnNext.style.display = n < totalSteps ? "" : "none";
+    btnSubmit.style.display = n === totalSteps ? "" : "none";
+
+    // Scroll to top of form area
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  btnBack.addEventListener("click", function () {
+    goToStep(currentStep - 1);
+  });
+
+  btnNext.addEventListener("click", function () {
+    goToStep(currentStep + 1);
+  });
+
+  function showFieldError(f) {
+    f.style.borderColor = '#ef4444';
+    f.style.boxShadow = '0 0 0 3px rgba(239, 68, 68, 0.15)';
+    var fieldWrap = f.closest('.field');
+    if (!fieldWrap || fieldWrap.querySelector('.field-error')) return;
+    var err = document.createElement('span');
+    err.className = 'field-error';
+    err.textContent = 'This field is required';
+    fieldWrap.appendChild(err);
+    f.addEventListener('input', clearFieldError);
+    f.addEventListener('change', clearFieldError);
+  }
+
+  function clearFieldError(e) {
+    var f = e.target;
+    if (f.value && f.value.trim()) {
+      f.style.borderColor = '';
+      f.style.boxShadow = '';
+      var fieldWrap = f.closest('.field');
+      if (fieldWrap) {
+        var err = fieldWrap.querySelector('.field-error');
+        if (err) err.remove();
+      }
+      f.removeEventListener('input', clearFieldError);
+      f.removeEventListener('change', clearFieldError);
+    }
+  }
+
+  function clearStepErrors(stepEl) {
+    stepEl.querySelectorAll('.field-error').forEach(function (err) { err.remove(); });
+    stepEl.querySelectorAll('input, select, textarea').forEach(function (f) {
+      f.style.borderColor = '';
+      f.style.boxShadow = '';
+      f.removeEventListener('input', clearFieldError);
+      f.removeEventListener('change', clearFieldError);
+    });
+  }
+  goToStep(1);
+
+  // Allow clicking completed step pills to go back
+  document.querySelectorAll(".step-pill").forEach(function (pill) {
+    pill.style.cursor = "pointer";
+    pill.addEventListener("click", function () {
+      var pillNum = parseInt(pill.getAttribute("data-pill"));
+      if (pillNum < currentStep) {
+        goToStep(pillNum);
+      }
+    });
+  });
+
+  // --- LocalStorage: save form data on input/change ---
+  var form = document.getElementById("registerEmployeeForm");
+  var STORAGE_KEY = "registerEmployeeFormData";
+
+  function saveFormData() {
+    var data = {};
+    form.querySelectorAll('input:not([type="file"]), select, textarea').forEach(function (f) {
+      if (f.name) data[f.name] = f.value;
+    });
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch (e) {}
+  }
+
+  function restoreFormData() {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      var data = JSON.parse(raw);
+      form.querySelectorAll('input:not([type="file"]):not([type="hidden"]), select, textarea').forEach(function (f) {
+        if (f.name && data[f.name] !== undefined) {
+          f.value = data[f.name];
+          // Trigger change so children sync works
+          var evt = document.createEvent("HTMLEvents");
+          evt.initEvent("change", true, false);
+          f.dispatchEvent(evt);
+        }
+      });
+    } catch (e) {}
+  }
+
+  function clearFormData() {
+    try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+  }
+
+  // Auto-save on any input/change
+  form.querySelectorAll('input:not([type="file"]), select, textarea').forEach(function (f) {
+    f.addEventListener("input", saveFormData);
+    f.addEventListener("change", saveFormData);
+  });
+
+  // Restore on page load
+  restoreFormData();
+
+  // Clear on successful submit
+  form.addEventListener("submit", function (e) {
+    var username = form.querySelector('input[name="reg_username"]');
+    var password = form.querySelector('input[name="reg_password"]');
+    var confirm = form.querySelector('input[name="reg_confirm_password"]');
+    if (username && username.value.trim()) {
+      if (username.value.trim().length < 4) {
+        e.preventDefault();
+        alert('Username must be at least 4 characters.');
+        return;
+      }
+      if (!password.value) {
+        e.preventDefault();
+        alert('Password is required when creating an account.');
+        return;
+      }
+      if (password.value.length < 7) {
+        e.preventDefault();
+        alert('Password must be at least 7 characters.');
+        return;
+      }
+      if (password.value !== confirm.value) {
+        e.preventDefault();
+        alert('Passwords do not match.');
+        return;
+      }
+    }
+    clearFormData();
+  });
+})();
+
+function computeAgeFromBirthDate(value) {
+  if (!value) return "";
+  const birthDate = new Date(value + "T00:00:00");
+  if (Number.isNaN(birthDate.getTime())) return "";
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  const dayDiff = today.getDate() - birthDate.getDate();
+  if (monthDiff < 0 || (monthDiff === 0 && dayDiff < 0)) age -= 1;
+  return age >= 0 ? String(age) : "";
 }
 
-/* ===== DUPLICATE NAME CHECK ===== */
-document.addEventListener("DOMContentLoaded", function () {
-  const form = document.querySelector("form");
+function initRegisterPhotoPreview() {
+  const input = document.getElementById("photoInput");
+  const img = document.getElementById("previewImg");
+  const placeholder = document.getElementById("placeholder");
+  if (!input || !img || !placeholder) return;
 
-  form.addEventListener("submit", function (e) {
-    const firstName = document.querySelector("input[name='first_name']").value.trim().toLowerCase();
-    const lastName = document.querySelector("input[name='last_name']").value.trim().toLowerCase();
-
-    // If empty, let required handle it
-    if (!firstName || !lastName) return;
-
-    // Simple rule: block same exact full name input (client-side only)
-    const fullName = firstName + " " + lastName;
-
-    // Optional: you can extend this list or fetch from backend later
-    const existingEmployees = window.existingEmployees || [];3
-
-    const isDuplicate = existingEmployees.some(emp =>
-      (emp.first_name + " " + emp.last_name).toLowerCase() === fullName
-    );
-
-    if (isDuplicate) {
-      e.preventDefault();
-
-      alert("⚠️ Employee already exists with the same First Name and Last Name!");
-
-      return false;
-    }
+  input.addEventListener("change", function () {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function (event) {
+      img.src = event.target.result;
+      img.style.display = "block";
+      placeholder.style.display = "none";
+    };
+    reader.readAsDataURL(file);
   });
+}
+
+function initRegisterAgeSync() {
+  const form = document.getElementById("registerEmployeeForm");
+  if (!form) return;
+  const birthDate = form.querySelector('input[name="birth_date"]');
+  const age = form.querySelector('input[name="age"]');
+  if (!birthDate || !age) return;
+  const sync = function () {
+    age.value = computeAgeFromBirthDate(birthDate.value);
+  };
+  birthDate.addEventListener("input", sync);
+  birthDate.addEventListener("change", sync);
+}
+
+function initRegisterChildren() {
+  const maleInput = document.querySelector('input[name="no_of_male_children"]');
+  const femaleInput = document.querySelector('input[name="no_of_female_children"]');
+  const container = document.querySelector(".js-children-container");
+  if (!maleInput || !femaleInput || !container) return;
+
+  function createChildGroup(index) {
+    const group = document.createElement("div");
+    group.className = "employee-child-group";
+    group.innerHTML = `
+      <h4 class="form-section-title">Child ${index}</h4>
+      <div class="grid-3">
+        <div class="field optional-field"><label>Full Name</label><input type="text" name="child_full_name[]"></div>
+        <div class="field optional-field"><label>Age</label><input type="number" name="child_age[]"></div>
+        <div class="field optional-field"><label>Birth Date</label><input type="date" name="child_birth_date[]"></div>
+      </div>
+      <div class="grid-3">
+        <div class="field optional-field"><label>Name of School</label><input type="text" name="child_school[]"></div>
+        <div class="field optional-field"><label>School Level</label><input type="text" name="child_school_level[]"></div>
+        <div class="field optional-field"><label>Occupation</label><input type="text" name="child_occupation[]"></div>
+      </div>
+    `;
+    return group;
+  }
+
+  function syncChildren() {
+    const maleCount = Math.max(0, parseInt(maleInput.value || "0", 10) || 0);
+    const femaleCount = Math.max(0, parseInt(femaleInput.value || "0", 10) || 0);
+    const requestedCount = maleCount + femaleCount;
+    let groups = Array.from(container.querySelectorAll(".employee-child-group"));
+
+    while (groups.length < requestedCount) {
+      const group = createChildGroup(groups.length + 1);
+      container.appendChild(group);
+      groups.push(group);
+    }
+
+    while (groups.length > requestedCount) {
+      const group = groups.pop();
+      group.remove();
+    }
+
+    groups.forEach(function (group, index) {
+      const title = group.querySelector(".form-section-title");
+      if (title) title.textContent = "Child " + (index + 1);
+    });
+  }
+
+  maleInput.addEventListener("input", syncChildren);
+  maleInput.addEventListener("change", syncChildren);
+  femaleInput.addEventListener("input", syncChildren);
+  femaleInput.addEventListener("change", syncChildren);
+  syncChildren();
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+  initRegisterPhotoPreview();
+  initRegisterAgeSync();
+  initRegisterChildren();
 });
 </script>
-
 {% endblock %}

@@ -1,0 +1,375 @@
+{% extends "base.html" %}
+{% block title %}Perks | HYG Employee Portal{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pages/perks.css') }}">
+{% endblock %}
+
+{% block page_content %}
+
+<!-- ================= GREETING ================= -->
+<section class="page-header perks-greeting">
+  <div>
+    <h1>Employee Perks</h1>
+    <p>Apply for discounts and product charges.</p>
+  </div>
+</section>
+
+<!-- ================= TWO-CARD FORMS ================= -->
+<section class="perks-mobile-selector" aria-label="Choose perk request type">
+  <button type="button" class="perks-select-card active" data-perk-select="discount" aria-pressed="true">
+    <span class="perks-select-icon goldilocks-icon">
+      <i class="fa-solid fa-percent"></i>
+    </span>
+    <span>
+      <strong>Goldilocks Discount</strong>
+      <small>15% off</small>
+    </span>
+  </button>
+
+  <button type="button" class="perks-select-card" data-perk-select="charge" aria-pressed="false">
+    <span class="perks-select-icon charge-icon">
+      <i class="fa-solid fa-cart-shopping"></i>
+    </span>
+    <span>
+      <strong>Product Charge</strong>
+      <small>Up to PHP 3,000</small>
+    </span>
+  </button>
+</section>
+
+<section class="perks-forms-grid">
+
+  <!-- GOLDILOCKS DISCOUNT -->
+  <article class="card perks-form-card active" data-perk-card="discount">
+    <div class="perks-form-header">
+      <div class="perks-form-icon goldilocks-icon">
+        <i class="fa-solid fa-percent"></i>
+      </div>
+      <div>
+        <h2 class="perks-form-title">Goldilocks Discount</h2>
+        <p class="perks-form-sub">15% off per transaction</p>
+      </div>
+    </div>
+
+    <div class="perks-limit-bar">
+      <div class="perks-limit-info">
+        <span>Transactions Used</span>
+        <strong>{{ discount_used }}/6 this year</strong>
+      </div>
+      <div class="perks-limit-track">
+        <div class="perks-limit-fill" style="width: {{ (discount_used / 6 * 100)|int }}%;"></div>
+      </div>
+    </div>
+
+    {% if discount_remaining <= 0 %}
+    <div class="perks-limit-reached">
+      <i class="fa-solid fa-circle-exclamation"></i>
+      You have reached the maximum of 6 discount transactions for this year.
+    </div>
+    {% elif pending_discount %}
+    <div class="perks-pending-notice">
+      <i class="fa-solid fa-clock"></i>
+      <div>
+        <strong>You have a pending discount request.</strong>
+        <p>{{ pending_discount.product_name }} &mdash; PHP {{ '%.2f'|format(pending_discount.discounted_amount) }}</p>
+        <small>Please wait for it to be processed before submitting another.</small>
+      </div>
+    </div>
+    {% else %}
+    <form method="POST" action="{{ url_for('employee.perks') }}">
+      <input type="hidden" name="form_type" value="discount">
+
+      <div class="field">
+        <label>Transaction Date</label>
+        <input type="date" name="transaction_date" required>
+      </div>
+
+      <div class="field">
+        <label>Product Name</label>
+        <input type="text" name="product_name" required placeholder="e.g. Cake, Polvoron">
+      </div>
+
+      <div class="perks-qty-price-row">
+        <div class="field">
+          <label>Quantity</label>
+          <input type="number" name="quantity" id="discountQty" min="1" required placeholder="0" oninput="calcDiscount()">
+        </div>
+        <div class="field">
+          <label>Unit Price (PHP)</label>
+          <input type="number" name="price" id="discountPrice" step="0.01" min="0.01" required placeholder="0.00" oninput="calcDiscount()">
+        </div>
+      </div>
+
+      <div class="perks-calc-preview">
+        <span>Purchase Amount</span>
+        <strong id="discountAmountDisplay">0.00</strong>
+      </div>
+
+      <div class="perks-calc-preview" id="discountPreview">
+        <span>Discounted Amount (15% off)</span>
+        <strong id="discountResult">0.00</strong>
+      </div>
+
+      <button type="submit" class="primary-btn perks-submit-btn">
+        <i class="fa-solid fa-percent"></i> Apply Discount
+      </button>
+    </form>
+    {% endif %}
+  </article>
+
+  <!-- PRODUCT CHARGE -->
+  <article class="card perks-form-card" data-perk-card="charge">
+    <div class="perks-form-header">
+      <div class="perks-form-icon charge-icon">
+        <i class="fa-solid fa-cart-shopping"></i>
+      </div>
+      <div>
+        <h2 class="perks-form-title">Product Charge</h2>
+        <p class="perks-form-sub">Charge products up to PHP 3,000</p>
+      </div>
+    </div>
+
+    <div class="perks-limit-bar">
+      <div class="perks-limit-info">
+        <span>Credit Used</span>
+        <strong>PHP {{ '%.2f'|format(charge_credit_used) }} / {{ '%.0f'|format(charge_credit_limit) }}</strong>
+      </div>
+      <div class="perks-limit-track charge-track">
+        <div class="perks-limit-fill charge-fill" style="width: {{ (charge_credit_used / charge_credit_limit * 100)|int }}%;"></div>
+      </div>
+    </div>
+
+    {% if pending_charge %}
+    <div class="perks-pending-notice">
+      <i class="fa-solid fa-clock"></i>
+      <div>
+        <strong>You have a pending charge request.</strong>
+        <p>{{ pending_charge.product_name }} &mdash; PHP {{ '%.2f'|format(pending_charge.total_amount) }}</p>
+        <small>Please wait for it to be processed before submitting another.</small>
+      </div>
+    </div>
+    {% else %}
+    <form method="POST" action="{{ url_for('employee.perks') }}">
+      <input type="hidden" name="form_type" value="charge">
+
+      <div class="field">
+        <label>Transaction Date</label>
+        <input type="date" name="transaction_date" required>
+      </div>
+
+      <div class="field">
+        <label>Product Name</label>
+        <input type="text" name="product_name" required placeholder="e.g. Rice, Grocery items">
+      </div>
+
+      <div class="perks-qty-price-row">
+        <div class="field">
+          <label>Quantity</label>
+          <input type="number" name="quantity" id="chargeQty" min="1" required placeholder="0" oninput="calcTotal()">
+        </div>
+        <div class="field">
+          <label>Unit Price (PHP)</label>
+          <input type="number" name="price" id="chargePrice" step="0.01" min="0.01" required placeholder="0.00" oninput="calcTotal()">
+        </div>
+      </div>
+
+      <div class="perks-calc-preview" id="chargePreview">
+        <span>Total Amount</span>
+        <div>
+          <strong id="chargeResult">0.00</strong>
+          <small id="chargeLimitWarn" class="perks-limit-warn" style="display:none;">Exceeds PHP 3,000 limit</small>
+        </div>
+      </div>
+
+      <button type="submit" class="primary-btn perks-submit-btn">
+        <i class="fa-solid fa-cart-shopping"></i> Submit Charge
+      </button>
+    </form>
+    {% endif %}
+  </article>
+
+</section>
+
+<!-- ================= HISTORY ================= -->
+<section class="perks-history">
+  <h2 class="section-title">Request History</h2>
+
+  {% if discounts or charges %}
+
+  <!-- Desktop Table -->
+  <div class="perks-table-desktop table-wrap">
+    <table class="perks-history-table">
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Details</th>
+          <th>Amount</th>
+          <th>Date</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in discounts %}
+        <tr>
+          <td><span class="perk-type-badge discount-badge">Discount</span></td>
+          <td>{{ d.product_name }} x{{ d.quantity }} @ {{ '%.2f'|format(d.price) }}</td>
+          <td>
+            <span class="perk-amount-original">{{ '%.2f'|format(d.amount) }}</span>
+            &rarr; <strong>{{ '%.2f'|format(d.discounted_amount) }}</strong>
+          </td>
+          <td>{{ d.transaction_date.strftime('%b %d, %Y') if d.transaction_date else '-' }}</td>
+          <td>
+            {% if d.status == 'Pending' %}
+              <span class="status pending">Pending</span>
+            {% elif d.status == 'Approved' %}
+              <span class="status active">Approved</span>
+            {% elif d.status == 'Rejected' %}
+              <span class="status rejected">Rejected</span>
+              {% if d.declined_reason %}<br><small style="color:#94a3b8;">{{ d.declined_reason }}</small>{% endif %}
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+
+        {% for c in charges %}
+        <tr>
+          <td><span class="perk-type-badge charge-badge">Charge</span></td>
+          <td>{{ c.product_name }} x{{ c.quantity }} @ {{ '%.2f'|format(c.price) }}</td>
+          <td><strong>{{ '%.2f'|format(c.total_amount) }}</strong></td>
+          <td>{{ c.transaction_date.strftime('%b %d, %Y') if c.transaction_date else '-' }}</td>
+          <td>
+            {% if c.status == 'Pending' %}
+              <span class="status pending">Pending</span>
+            {% elif c.status == 'Approved' %}
+              <span class="status active">Approved</span>
+            {% elif c.status == 'Rejected' %}
+              <span class="status rejected">Rejected</span>
+              {% if c.declined_reason %}<br><small style="color:#94a3b8;">{{ c.declined_reason }}</small>{% endif %}
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Mobile Cards -->
+  <div class="perks-cards-mobile">
+    {% for d in discounts %}
+    <div class="perk-history-card">
+      <div class="perk-card-top">
+        <span class="perk-type-badge discount-badge">Discount</span>
+        {% if d.status == 'Pending' %}
+          <span class="status pending">Pending</span>
+        {% elif d.status == 'Approved' %}
+          <span class="status active">Approved</span>
+        {% elif d.status == 'Rejected' %}
+          <span class="status rejected">Rejected</span>
+        {% endif %}
+      </div>
+      <div class="perk-card-body">
+        <strong>{{ d.product_name }}</strong>
+        <span class="perk-card-meta">{{ d.quantity }} x {{ '%.2f'|format(d.price) }}</span>
+      </div>
+      <div class="perk-card-bottom">
+        <div class="perk-card-amount">
+          <span class="perk-amount-original">{{ '%.2f'|format(d.amount) }}</span>
+          <strong>{{ '%.2f'|format(d.discounted_amount) }}</strong>
+        </div>
+        <span class="perk-card-date">{{ d.transaction_date.strftime('%b %d, %Y') if d.transaction_date else '-' }}</span>
+      </div>
+      {% if d.status == 'Rejected' and d.declined_reason %}
+      <div class="perk-card-reason">{{ d.declined_reason }}</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+
+    {% for c in charges %}
+    <div class="perk-history-card">
+      <div class="perk-card-top">
+        <span class="perk-type-badge charge-badge">Charge</span>
+        {% if c.status == 'Pending' %}
+          <span class="status pending">Pending</span>
+        {% elif c.status == 'Approved' %}
+          <span class="status active">Approved</span>
+        {% elif c.status == 'Rejected' %}
+          <span class="status rejected">Rejected</span>
+        {% endif %}
+      </div>
+      <div class="perk-card-body">
+        <strong>{{ c.product_name }}</strong>
+        <span class="perk-card-meta">{{ c.quantity }} x {{ '%.2f'|format(c.price) }}</span>
+      </div>
+      <div class="perk-card-bottom">
+        <div class="perk-card-amount"><strong>PHP {{ '%.2f'|format(c.total_amount) }}</strong></div>
+        <span class="perk-card-date">{{ c.transaction_date.strftime('%b %d, %Y') if c.transaction_date else '-' }}</span>
+      </div>
+      {% if c.status == 'Rejected' and c.declined_reason %}
+      <div class="perk-card-reason">{{ c.declined_reason }}</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+  {% else %}
+  <div class="perks-empty">
+    <i class="fa-regular fa-folder-open"></i>
+    <p>No perk requests yet.</p>
+  </div>
+  {% endif %}
+</section>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function calcDiscount() {
+  const qty = parseInt(document.getElementById('discountQty').value) || 0;
+  const price = parseFloat(document.getElementById('discountPrice').value) || 0;
+  const amount = qty * price;
+  const discounted = amount * 0.85;
+  document.getElementById('discountAmountDisplay').textContent = amount.toFixed(2);
+  document.getElementById('discountResult').textContent = discounted.toFixed(2);
+}
+
+function calcTotal() {
+  const qty = parseInt(document.getElementById('chargeQty').value) || 0;
+  const price = parseFloat(document.getElementById('chargePrice').value) || 0;
+  const total = qty * price;
+  document.getElementById('chargeResult').textContent = total.toFixed(2);
+
+  const warn = document.getElementById('chargeLimitWarn');
+  if (total > 3000) {
+    warn.style.display = 'inline';
+  } else {
+    warn.style.display = 'none';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  const selectCards = document.querySelectorAll('[data-perk-select]');
+  const formCards = document.querySelectorAll('[data-perk-card]');
+
+  function showPerk(perkType) {
+    selectCards.forEach(function (card) {
+      const isActive = card.dataset.perkSelect === perkType;
+      card.classList.toggle('active', isActive);
+      card.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+
+    formCards.forEach(function (card) {
+      card.classList.toggle('active', card.dataset.perkCard === perkType);
+    });
+  }
+
+  selectCards.forEach(function (card) {
+    card.addEventListener('click', function () {
+      showPerk(card.dataset.perkSelect);
+    });
+  });
+
+  showPerk('discount');
+});
+</script>
+{% endblock %}

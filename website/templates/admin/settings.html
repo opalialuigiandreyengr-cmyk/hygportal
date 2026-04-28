@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}Settings | HYG Employee Portal{% endblock %}
+
+{% block extra_head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/settings.css') }}">
+{% endblock %}
+
+{% block page_content %}
+<section class="page-header settings-hero">
+  <div>
+    <h1>Settings</h1>
+    <p>Manage perk request approvers and system configurations.</p>
+  </div>
+</section>
+
+<!-- PERK APPROVERS -->
+<section class="card settings-section">
+  <div class="settings-section-header">
+    <div>
+      <h2><i class="fa-solid fa-user-check"></i> Perk Approvers</h2>
+      <p>Assign who can view and approve employee perk requests (discounts &amp; charges).</p>
+    </div>
+  </div>
+
+  <!-- ADD APPROVER FORM -->
+  {% if eligible_users %}
+  <div class="settings-add-form">
+    <h3>Add Approver</h3>
+    <form method="POST" action="{{ url_for('admin.settings') }}">
+      <input type="hidden" name="action" value="add_approver">
+
+      <div class="add-approver-row">
+        <div class="field">
+          <label>Select User</label>
+          <select name="user_id" required>
+            <option value="">-- Choose a user --</option>
+            {% for u in eligible_users %}
+            <option value="{{ u.id }}">{{ u.username }} ({{ u.role }})</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="field checkbox-group">
+          <label class="checkbox-label">
+            <input type="checkbox" name="can_approve_discount" checked>
+            <span>Can approve <strong>Discount</strong> requests</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" name="can_approve_charge" checked>
+            <span>Can approve <strong>Charge</strong> requests</span>
+          </label>
+        </div>
+
+        <button type="submit" class="primary-btn">
+          <i class="fa-solid fa-plus"></i> Add Approver
+        </button>
+      </div>
+    </form>
+  </div>
+  {% else %}
+  <div class="settings-no-eligible">
+    <i class="fa-solid fa-circle-info"></i>
+    <p>No eligible users to add as approvers. All non-admin users are already assigned or no users exist.</p>
+  </div>
+  {% endif %}
+
+  <!-- APPROVERS LIST -->
+  {% if approvers %}
+  <div class="settings-approvers-list">
+    {% for a in approvers %}
+    <div class="approver-card">
+      <div class="approver-info">
+        <div class="approver-avatar">
+          <i class="fa-solid fa-user-shield"></i>
+        </div>
+        <div class="approver-details">
+          <strong>{{ a.user.username }}</strong>
+          <span class="approver-role">{{ a.user.role }}</span>
+          {% if a.user.employee %}
+          <span class="approver-employee">{{ a.user.employee.first_name }} {{ a.user.employee.last_name }}</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="approver-permissions">
+        <form method="POST" action="{{ url_for('admin.settings') }}" class="inline-form">
+          <input type="hidden" name="action" value="update_approver">
+          <input type="hidden" name="approver_id" value="{{ a.id }}">
+          <label class="checkbox-label compact">
+            <input type="checkbox" name="can_approve_discount" {% if a.can_approve_discount %}checked{% endif %} onchange="this.form.submit()">
+            <span>Discounts</span>
+          </label>
+          <label class="checkbox-label compact">
+            <input type="checkbox" name="can_approve_charge" {% if a.can_approve_charge %}checked{% endif %} onchange="this.form.submit()">
+            <span>Charges</span>
+          </label>
+        </form>
+      </div>
+
+      <div class="approver-actions">
+        <form method="POST" action="{{ url_for('admin.settings') }}" onsubmit="return confirm('Remove {{ a.user.username }} as perk approver?')">
+          <input type="hidden" name="action" value="remove_approver">
+          <input type="hidden" name="approver_id" value="{{ a.id }}">
+          <button type="submit" class="danger-btn-sm" title="Remove approver">
+            <i class="fa-solid fa-trash"></i>
+          </button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="settings-empty">
+    <i class="fa-regular fa-folder-open"></i>
+    <p>No perk approvers assigned yet. Only admins and HR can approve requests by default.</p>
+  </div>
+  {% endif %}
+</section>
+
+{% endblock %}

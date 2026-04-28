@@ -1,14 +1,15 @@
 .emp-profile-shell {
   display: grid;
   gap: 1rem;
+  max-width: 1100px;
+  margin: 0 auto;
+  width: 100%;
 }
 
 .emp-profile-hero {
   padding: 1.1rem;
   border-radius: 22px;
-  background:
-    radial-gradient(circle at 85% 15%, rgba(250, 204, 21, 0.2), transparent 38%),
-    linear-gradient(145deg, #111827 0%, #1f2937 55%, #0f172a 100%);
+  background: #1a1f2e;
   color: #f8fafc;
   border: 0;
 }
@@ -162,11 +163,78 @@
 .emp-section-head {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 0.55rem;
   margin-bottom: 0.95rem;
 }
 
-.emp-section-head i {
+.emp-section-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.emp-icon-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #475569;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.emp-icon-btn:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.emp-icon-btn.save {
+  background: #dcfce7;
+  color: #15803d;
+  border-color: #bbf7d0;
+}
+
+.emp-icon-btn.save:hover {
+  background: #bbf7d0;
+}
+
+.emp-icon-btn.cancel {
+  background: #fee2e2;
+  color: #b91c1c;
+  border-color: #fecaca;
+}
+
+.emp-icon-btn.cancel:hover {
+  background: #fecaca;
+}
+
+.emp-input {
+  width: 100%;
+  margin-top: 0.4rem;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #0f172a;
+  border-radius: 10px;
+  min-height: 40px;
+  padding: 0.6rem 0.72rem;
+  font-size: 0.93rem;
+  font-weight: 600;
+  font-family: inherit;
+  outline: none;
+}
+
+.emp-input:focus {
+  border-color: #facc15;
+  box-shadow: 0 0 0 3px rgba(250, 204, 21, 0.2);
+}
+
+.emp-section-head > div:first-child > i {
   width: 32px;
   height: 32px;
   border-radius: 10px;
@@ -265,7 +333,8 @@
 
 @media (max-width: 720px) {
   .emp-fields {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.6rem;
   }
 
   .emp-stat-value {

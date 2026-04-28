@@ -3,66 +3,6 @@
 
 {% block extra_head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/esarf.css') }}">
-<style>
-/* ===== LAYOUT: FORM + NOTES SIDE-BY-SIDE ===== */
-.esarf-layout {
-  display: flex;
-  gap: 2rem;
-  align-items: flex-start;
-}
-
-/* Form takes majority, notes smaller */
-.esarf-card {
-  flex: 2;
-}
-
-/* Notes aside */
-.esarf-note-card {
-  flex: 1;
-  max-width: 300px;
-  position: sticky;
-  top: 1rem;
-}
-
-/* ===== MOBILE ===== */
-@media (max-width: 768px) {
-  /* Hide hero on mobile */
-  .esarf-hero {
-    display: none;
-  }
-
-  .esarf-layout {
-    flex-direction: column;
-  }
-  .esarf-note-card {
-    display: none; /* hide on mobile, notes accessible via button */
-  }
-
-  /* Mobile Notes toggle button */
-  .esarf-note-toggle-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.25rem;
-    padding: 0.5rem 0.75rem;
-    font-size: 0.9rem;
-    border: 1px solid #ddd;
-    border-radius: 0.5rem;
-    background-color: #fef3c7;
-    cursor: pointer;
-    margin-bottom: 1rem;
-  }
-
-  .esarf-note-toggle-btn i {
-    font-size: 1rem;
-  }
-
-  /* Make form full width on mobile and prevent scroll */
-  .esarf-card form {
-    overflow: hidden;
-  }
-}
-</style>
 {% endblock %}
 
 {% block page_content %}
@@ -78,24 +18,23 @@
 {% set selected_total_hours = esarf_form.get('total_hours', '') %}
 {% set selected_reason = esarf_form.get('reason', '') %}
 
-<!-- ===== HERO (Desktop only) ===== -->
-<!-- <section class="hero esarf-hero">
+<header class="page-header esarf-page-header">
   <div>
     <h1>Employee Salary Adjustment Request</h1>
-    <p>Submit ESARF requests for payroll adjustments and attendance corrections.</p>
+    <p>Submit your ESARF request for adjustment, overtime, or time-related entries.</p>
   </div>
-  <div class="esarf-hero-actions">
-    <a href="/employee/esarf_requests" class="esarf-info-btn esarf-request-btn">
+  <div class="esarf-header-actions">
+    <a href="{{ url_for('employee.esarf_requests') }}" class="esarf-info-btn">
       <i class="fa-solid fa-list-check"></i>
       <span>ESARF Requests</span>
     </a>
   </div>
-</section> -->
+</header>
 
 <section class="esarf-layout">
   <!-- ===== ESARF FORM ===== -->
   <article class="card esarf-card">
-    <form method="POST" action="{{ url_for('employee.esarf') }}" class="esarf-grid" novalidate>
+    <form method="POST" action="{{ url_for('employee.esarf') }}" class="esarf-grid" id="requestDetails" novalidate>
       {% set esarf_employee = current_user.employee if current_user.is_authenticated and current_user.employee else None %}
       {% set auto_employee_id = esarf_employee.employee_no if esarf_employee and esarf_employee.employee_no else '' %}
       {% set auto_full_name = (
@@ -112,64 +51,9 @@
       <input type="hidden" name="company" value="{{ auto_company }}">
       <input type="hidden" name="department" value="{{ auto_department }}">
 
-      <div class="full-width auto-fill-head">
-        <div>
-          <h1 style="font-size: 18px; font-weight: bold; margin-bottom: 10px;">Employee Salary Adjustment Request</h1>
-        </div>
-        <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
-       <div   class="esarf-info-btn esarf-ghost-btn esarf-toggle-btn" >
-       <a href="/employee/esarf_requests">
-       <i class="fa-solid fa-list-check"></i>
-       <span style="font-size: 13px;">ESARF Requests</span>
-       </a>
-       </div>
-      <div>
-     <button
-          type="button"
-          class="esarf-info-btn esarf-ghost-btn esarf-toggle-btn"
-         
-          data-bs-toggle="collapse"
-          data-bs-target="#autoEmployeeFields"
-          aria-expanded="false"
-          aria-controls="autoEmployeeFields"
-        >
-          <i class="fa-solid fa-id-card"></i>
-          <span>Details</span>
-        </button>
-      </div>
-        </div>
-  
-      
-      </div>
-
-      <div class="collapse full-width" id="autoEmployeeFields">
-        <div class="auto-fields-wrap">
-          <div class="auto-fields-grid">
-            <div class="field">
-              <label>Employee ID No.</label>
-              <input type="text" value="{{ auto_employee_id }}" readonly>
-            </div>
-
-            <div class="field">
-              <label>Full Name</label>
-              <input type="text" value="{{ auto_full_name }}" readonly>
-            </div>
-
-            <div class="field">
-              <label>Company</label>
-              <input type="text" value="{{ auto_company }}" readonly>
-            </div>
-
-            <div class="field">
-              <label>Department</label>
-              <input type="text" value="{{ auto_department }}" readonly>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="full-width esarf-divider">
-        <span>Request Details</span>
+      <div class="full-width esarf-form-section-title">
+        <span class="esarf-step-badge">1</span>
+        <span>Request Information</span>
       </div>
 
       <div class="full-width esarf-inline-meta">
@@ -206,44 +90,70 @@
         </div>
       </div>
 
+      <div class="full-width esarf-form-section-title">
+        <span class="esarf-step-badge">2</span>
+        <span>Transaction Type</span>
+      </div>
+      <p class="full-width esarf-section-hint">Select one or more transactions.</p>
+
       <div class="field full-width">
-        <label>Transaction Type</label>
         <div class="transaction-checklist" role="group" aria-label="Transaction Type">
-          <label class="transaction-option"><input type="checkbox" name="transaction_type" value="UT" {% if 'UT' in esarf_transaction_types %}checked{% endif %}>&nbsp;<span>Undertime (UT)</span></label>
-          <label class="transaction-option"><input type="checkbox" name="transaction_type" value="OT" {% if 'OT' in esarf_transaction_types %}checked{% endif %}>&nbsp;<span>Overtime (OT)</span></label>
-          <label class="transaction-option"><input type="checkbox" name="transaction_type" value="FIO" {% if 'FIO' in esarf_transaction_types %}checked{% endif %}>&nbsp;<span>Failure to Punch In/Out (FIO)</span></label>
-          <label class="transaction-option"><input type="checkbox" name="transaction_type" value="OB" {% if 'OB' in esarf_transaction_types %}checked{% endif %}>&nbsp;<span>Official Business (OB)</span></label>
-          <label class="transaction-option"><input type="checkbox" name="transaction_type" value="Adjustment" {% if 'Adjustment' in esarf_transaction_types %}checked{% endif %}>&nbsp;<span>Adjustment</span></label>
+          <label class="transaction-option transaction-ut">
+            <input type="checkbox" name="transaction_type" value="UT" {% if 'UT' in esarf_transaction_types %}checked{% endif %}>
+            <span class="transaction-icon"><i class="fa-regular fa-clock"></i></span>
+            <span>Undertime (UT)</span>
+          </label>
+          <label class="transaction-option transaction-ot">
+            <input type="checkbox" name="transaction_type" value="OT" {% if 'OT' in esarf_transaction_types %}checked{% endif %}>
+            <span class="transaction-icon"><i class="fa-regular fa-clock"></i></span>
+            <span>Overtime (OT)</span>
+          </label>
+          <label class="transaction-option transaction-fio">
+            <input type="checkbox" name="transaction_type" value="FIO" {% if 'FIO' in esarf_transaction_types %}checked{% endif %}>
+            <span class="transaction-icon"><i class="fa-solid fa-ban"></i></span>
+            <span>Failure to Punch In/Out (FIO)</span>
+          </label>
+          <label class="transaction-option transaction-ob">
+            <input type="checkbox" name="transaction_type" value="OB" {% if 'OB' in esarf_transaction_types %}checked{% endif %}>
+            <span class="transaction-icon"><i class="fa-solid fa-briefcase"></i></span>
+            <span>Official Business (OB)</span>
+          </label>
+          <label class="transaction-option transaction-adjustment">
+            <input type="checkbox" name="transaction_type" value="Adjustment" {% if 'Adjustment' in esarf_transaction_types %}checked{% endif %}>
+            <span class="transaction-icon"><i class="fa-solid fa-sliders"></i></span>
+            <span>Adjustment</span>
+          </label>
         </div>
-        <small class="field-hint">Select one or more transactions.</small>
+        <small class="field-hint hidden" id="otAutoHint"></small>
+      </div>
+
+      <div class="full-width esarf-form-section-title">
+        <span class="esarf-step-badge">3</span>
+        <span>Date and Time Range</span>
       </div>
 
       <div class="full-width esarf-date-time-columns">
         <div class="field">
           <label>Date From</label>
-          <input type="date" name="date_from" value="{{ selected_date_from }}">
+          <input type="date" name="date_from" required value="{{ selected_date_from }}">
         </div>
         <div class="field">
           <label>Date To</label>
-          <input type="date" name="date_to" value="{{ selected_date_to }}">
+          <input type="date" name="date_to" required value="{{ selected_date_to }}">
         </div>
         <div class="field">
           <label>Time From</label>
-          <input type="time" name="time_from" value="{{ selected_time_from }}">
+          <input type="time" name="time_from" required value="{{ selected_time_from }}">
         </div>
         <div class="field">
           <label>Time To</label>
-          <input type="time" name="time_to" value="{{ selected_time_to }}">
+          <input type="time" name="time_to" required value="{{ selected_time_to }}">
         </div>
       </div>
 
-      <div class="field">
+      <div class="field full-width esarf-total-hours-field">
         <label>Total OT / UT / No. of Hours</label>
-        <input type="text" name="total_hours" id="totalHoursInput" required value="{{ selected_total_hours }}">
-      </div>
-
-      <div class="full-width esarf-divider">
-        <span>Reason</span>
+        <input type="text" name="total_hours" id="totalHoursInput" required readonly value="{{ selected_total_hours }}" placeholder="Auto-calculated">
       </div>
 
       <div class="field full-width">
@@ -252,58 +162,53 @@
       </div>
 
       <div class="full-width esarf-actions">
-        <button type="submit" class="primary-btn esarf-submit-btn">Submit ESARF</button>
+        <button type="submit" class="primary-btn esarf-submit-btn">
+          <i class="fa-regular fa-paper-plane"></i>
+          <span>Submit Request</span>
+        </button>
       </div>
     </form>
   </article>
 
   <!-- ===== DESKTOP NOTES (always visible) ===== -->
-  <aside class="card esarf-note-card d-none d-md-block">
-    <h2 class="section-title">Submission Notes</h2>
-    <ul class="esarf-note-list">
-      <li>Prepare two copies of the form for every payroll period.</li>
-      <li>Select the correct transaction type for each entry.</li>
-      <li>For <strong>FIO</strong>, record only the missed time-in or time-out.</li>
-      <li>Leave dates should exclude rest days and holidays.</li>
-      <li>Overnight overtime must be written on its actual date.</li>
-    </ul>
-    <p class="esarf-note-deadline">
-      <i class="fa-regular fa-calendar-check"></i>
-      Submit approved ESARF forms on or before the 5th and 20th.
-    </p>
+  <aside class="esarf-side-panel">
+    <section class="card esarf-note-card">
+      <h2 class="section-title"><i class="fa-solid fa-file-lines"></i> Submission Notes</h2>
+      <ul class="esarf-note-list">
+        <li>Prepare two copies of the form for every payroll period.</li>
+        <li>Select the correct transaction type for each entry.</li>
+        <li>For <strong>FIO</strong>, record only the missed time-in or time-out.</li>
+        <li>Leave dates should exclude rest days and holidays.</li>
+        <li>Overnight overtime must be written on its actual date.</li>
+      </ul>
+      <p class="esarf-note-deadline">
+        <i class="fa-regular fa-calendar-check"></i>
+        <span>Submit approved ESARF forms on or before <strong>the 5th and 20th.</strong></span>
+      </p>
+    </section>
+
+    <section class="card esarf-quick-card">
+      <h2 class="section-title"><i class="fa-solid fa-bolt"></i> Quick Actions</h2>
+      <a href="{{ url_for('employee.esarf_requests') }}" class="esarf-quick-link">
+        <i class="fa-regular fa-file-lines"></i>
+        <span>
+          <strong>View My ESARF Requests</strong>
+          <small>Track your submitted requests</small>
+        </span>
+        <i class="fa-solid fa-arrow-right"></i>
+      </a>
+      <a href="#" class="esarf-quick-link">
+        <i class="fa-solid fa-file-arrow-down"></i>
+        <span>
+          <strong>Download ESARF Form</strong>
+          <small>Get the official ESARF template</small>
+        </span>
+        <i class="fa-solid fa-arrow-right"></i>
+      </a>
+    </section>
   </aside>
 </section>
 
-<!-- ===== MOBILE NOTES BUTTON ===== -->
-<button class="esarf-note-toggle-btn d-md-none" data-bs-toggle="modal" data-bs-target="#esarfNoteModal">
-  <i class="fa-solid fa-circle-info"></i>
-  <span>Submission Notes</span>
-</button>
-
-<!-- ===== SUBMISSION NOTES MODAL ===== -->
-<div class="modal fade" id="esarfNoteModal" tabindex="-1" aria-labelledby="esarfNoteModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="esarfNoteModalLabel">Submission Notes</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body">
-        <ul class="esarf-note-list">
-          <li>Prepare two copies of the form for every payroll period.</li>
-          <li>Select the correct transaction type for each entry.</li>
-          <li>For <strong>FIO</strong>, record only the missed time-in or time-out.</li>
-          <li>Leave dates should exclude rest days and holidays.</li>
-          <li>Overnight overtime must be written on its actual date.</li>
-        </ul>
-        <p class="esarf-note-deadline">
-          <i class="fa-regular fa-calendar-check"></i>
-          Submit approved ESARF forms on or before the 5th and 20th.
-        </p>
-      </div>
-    </div>
-  </div>
-</div>
 {% endblock %}
 
 {% block extra_scripts %}

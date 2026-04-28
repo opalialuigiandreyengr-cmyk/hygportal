@@ -8,7 +8,7 @@
 {% block page_content %}
   {% set request_items = esarf_requests or [] %}
   {% set current_role = current_user.role if current_user.is_authenticated else '' %}
-  <section class="hero employees-hero">
+  <section class="page-header">
     <div>
       <h1>ESARF Request Management</h1>
       <p>View all ESARF requests and open full details using the action button.</p>
@@ -54,10 +54,15 @@
             (' ' ~ submit_emp.suffix if submit_emp.suffix else '')
           )|trim if submit_emp else (submit_user.username if submit_user and submit_user.username else 'N/A') %}
           {% set submit_position = submit_emp.position if submit_emp and submit_emp.position else 'N/A' %}
+          {% set esarf_number = req.esarf_number or ('ESARF-2026-' ~ '%03d'|format(req.id)) %}
+          {% set transaction_display = (req.transaction_types or '-')|replace('UT', 'Undertime (UT)')|replace('OT', 'Overtime (OT)')|replace('FIO', 'Failure to Punch In/Out (FIO)')|replace('OB', 'Official Business (OB)')|replace('Adjustment', 'Adjustment')|replace(',', ', ') %}
+          {% set date_from_display = req.date_from.strftime('%b') ~ '. ' ~ req.date_from.day ~ ', ' ~ req.date_from.year if req.date_from else '-' %}
+          {% set date_to_display = req.date_to.strftime('%b') ~ '. ' ~ req.date_to.day ~ ', ' ~ req.date_to.year if req.date_to else '-' %}
+          {% set date_range_display = req.date_from.strftime('%b') ~ '. ' ~ req.date_from.day ~ ' - ' ~ req.date_to.strftime('%b') ~ '. ' ~ req.date_to.day ~ ', ' ~ req.date_to.year if req.date_from and req.date_to and req.date_from.year == req.date_to.year else date_from_display ~ ' - ' ~ date_to_display %}
           <tr>
             <td>
               <div class="company-meta">
-                <strong class="company-name-text">#{{ req.id }}</strong>
+                <strong class="company-name-text">{{ esarf_number }}</strong>
                 <small class="company-subtext">{{ req.created_at.strftime('%m-%d-%Y') if req.created_at else '-' }}</small>
               </div>
             </td>
@@ -67,25 +72,11 @@
                 <small class="company-subtext">{{ submit_position }}</small>
               </div>
             </td>
-            <td><span class="company-name">{{ req.transaction_types or '-' }}</span></td>
+            <td><span class="company-name">{{ transaction_display }}</span></td>
             <td>
               <div class="company-meta">
-                <strong class="company-name-text">
-                  From:
-                  {% if req.date_from %}
-                    {{ req.date_from.strftime('%b') }}. {{ req.date_from.day }}, {{ req.date_from.year }}
-                  {% else %}
-                    -
-                  {% endif %}
-                </strong>
-                <small class="company-subtext">
-                  To:
-                  {% if req.date_to %}
-                    {{ req.date_to.strftime('%b') }}. {{ req.date_to.day }}, {{ req.date_to.year }}
-                  {% else %}
-                    -
-                  {% endif %}
-                </small>
+                <strong class="company-name-text">{{ date_range_display }}</strong>
+                <small class="company-subtext">{{ req.time_from.strftime('%I:%M %p') if req.time_from else '-' }} - {{ req.time_to.strftime('%I:%M %p') if req.time_to else '-' }}</small>
               </div>
             </td>
             <td>{{ '%.2f'|format(req.total_hours) if req.total_hours is not none else '-' }}</td>
@@ -213,8 +204,11 @@
   {% set date_filed_display = req.created_at.strftime('%b') ~ '. ' ~ req.created_at.day ~ ', ' ~ req.created_at.year if req.created_at else '-' %}
   {% set date_from_display = req.date_from.strftime('%b') ~ '. ' ~ req.date_from.day ~ ', ' ~ req.date_from.year if req.date_from else '-' %}
   {% set date_to_display = req.date_to.strftime('%b') ~ '. ' ~ req.date_to.day ~ ', ' ~ req.date_to.year if req.date_to else '-' %}
+  {% set date_range_display = req.date_from.strftime('%b') ~ '. ' ~ req.date_from.day ~ ' - ' ~ req.date_to.strftime('%b') ~ '. ' ~ req.date_to.day ~ ', ' ~ req.date_to.year if req.date_from and req.date_to and req.date_from.year == req.date_to.year else date_from_display ~ ' - ' ~ date_to_display %}
   {% set time_from_display = req.time_from.strftime('%I:%M %p') if req.time_from else '-' %}
   {% set time_to_display = req.time_to.strftime('%I:%M %p') if req.time_to else '-' %}
+  {% set esarf_number = req.esarf_number or ('ESARF-2026-' ~ '%03d'|format(req.id)) %}
+  {% set transaction_display = (req.transaction_types or '-')|replace('UT', 'Undertime (UT)')|replace('OT', 'Overtime (OT)')|replace('FIO', 'Failure to Punch In/Out (FIO)')|replace('OB', 'Official Business (OB)')|replace('Adjustment', 'Adjustment')|replace(',', ', ') %}
   <div class="modal fade" id="esarfRequestModal{{ req.id }}" tabindex="-1" aria-labelledby="esarfRequestModalTitle{{ req.id }}" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
       <div class="modal-content">
@@ -225,7 +219,7 @@
         <div class="modal-body">
           <section class="esarf-paper esarf-paper-simple">
             <div class="esarf-paper-title">
-              <span>ESARF Request #{{ req.id }}</span>
+              <span>{{ esarf_number }}</span>
               {% if raw_status == 'Pending' %}
                 <span class="esarf-status-pill pending">Pending</span>
               {% elif raw_status == 'Rejected' %}
@@ -272,7 +266,7 @@
               </article>
               <article class="esarf-summary-item">
                 <p class="esarf-summary-label">Transaction</p>
-                <p class="esarf-summary-value">{{ req.transaction_types or '-' }}</p>
+                <p class="esarf-summary-value">{{ transaction_display }}</p>
               </article>
               <article class="esarf-summary-item">
                 <p class="esarf-summary-label">Payroll Class</p>
@@ -288,7 +282,7 @@
               </article>
               <article class="esarf-summary-item">
                 <p class="esarf-summary-label">From - To</p>
-                <p class="esarf-summary-value">{{ date_from_display }} to {{ date_to_display }}</p>
+                <p class="esarf-summary-value">{{ date_range_display }}</p>
               </article>
               <article class="esarf-summary-item">
                 <p class="esarf-summary-label">Time Range</p>

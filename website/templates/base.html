@@ -33,18 +33,19 @@
 
       {% set role = current_user.role if current_user.is_authenticated else '' %}
       {% set is_employee_user = role == 'user' %}
+      {% set has_employee_profile = current_user.is_authenticated and current_user.employee %}
       {% set can_manage_employees = role in ['admin', 'hr'] %}
       {% set can_manage_companies = role in ['admin', 'hr'] %}
       {% set can_manage_users = role == 'admin' %}
       {% set can_manage_settings = role == 'admin' %}
       {% set can_view_esarf_requests = role in ['admin', 'timekeeper', 'dept manager', 'operation', 'general manager'] %}
       {% set can_view_attendance = role in ['admin', 'user'] %}
-      {% set can_view_leaves = role in ['admin', 'user'] %}
+      {% set can_view_leaves = role == 'admin' or has_employee_profile %}
       {% set can_view_info_pages = role in ['admin', 'user'] %}
       <ul class="nav-list">
         {% if current_user.is_authenticated %}
         <li>
-          <a href="{% if is_employee_user %}{{ url_for('employee.employee_dashboard') }}{% else %}{{ url_for('views.home') }}{% endif %}" class="nav-link {% if request.path == '/dashboard' or request.path == '/' or request.path == '/employee/employee_dashboard' or request.path == '/employee_dashboard' %}active{% endif %}">
+          <a href="{% if has_employee_profile %}{{ url_for('employee.employee_dashboard') }}{% else %}{{ url_for('views.home') }}{% endif %}" class="nav-link {% if request.path == '/dashboard' or request.path == '/' or request.path == '/employee/employee_dashboard' or request.path == '/employee_dashboard' %}active{% endif %}">
             <i class="fa-solid fa-right-from-bracket"></i>
             <span>Dashboard</span>
           </a>
@@ -113,7 +114,7 @@
             </a>
           </li>
         {% endif %}
-        {% if is_employee_user %}
+        {% if has_employee_profile %}
         <li>
           <a href="{{ url_for('employee.esarf') }}" class="nav-link {% if request.path in ['/employee/esarf', '/esarf', '/employee/esarf_requests'] %}active{% endif %}">
             <i class="fa-solid fa-file-signature"></i>
@@ -215,13 +216,13 @@
   </div>
 
 <nav class="mobile-bottom-nav" aria-label="Mobile navigation">
-  <a href="{% if is_employee_user %}{{ url_for('employee.employee_dashboard') }}{% else %}{{ url_for('views.home') }}{% endif %}"
+  <a href="{% if has_employee_profile %}{{ url_for('employee.employee_dashboard') }}{% else %}{{ url_for('views.home') }}{% endif %}"
      class="mobile-nav-link {% if request.path == '/dashboard' or request.path == '/' or request.path == '/employee/employee_dashboard' or request.path == '/employee_dashboard' %}active{% endif %}">
     <i class="fa-solid fa-right-from-bracket"></i>
     <span>Dashboard</span>
   </a>
 
-  {% if is_employee_user %}
+  {% if has_employee_profile %}
 
     <a href="{{ url_for('views.attendance') }}"
        class="mobile-nav-link {% if request.path == '/attendance' %}active{% endif %}">

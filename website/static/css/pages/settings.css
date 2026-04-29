@@ -29,6 +29,67 @@
   margin-bottom: 0;
 }
 
+.settings-subsection {
+  margin-top: 1.25rem;
+}
+
+.settings-subsection + .settings-subsection {
+  border-top: 1px solid #e2e8f0;
+  padding-top: 1.25rem;
+}
+
+.settings-subsection-title h3 {
+  font-size: 1rem;
+  color: #0f172a;
+  margin-bottom: 0.15rem;
+}
+
+.settings-subsection-title p {
+  color: #64748b;
+  font-size: 0.86rem;
+  margin: 0;
+}
+
+.settings-role-grid {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.settings-role-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  padding: 0.85rem;
+}
+
+.settings-role-card-head {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: #0f172a;
+  margin-bottom: 0.75rem;
+}
+
+.settings-role-card-head span {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.compact-card {
+  padding: 0.65rem;
+}
+
+.compact-empty {
+  padding: 1rem 0.5rem;
+}
+
 /* ---- ADD APPROVER FORM ---- */
 
 .settings-add-form {
@@ -270,5 +331,9 @@
   .add-approver-row .primary-btn {
     width: 100%;
     justify-content: center;
+  }
+
+  .settings-role-grid {
+    grid-template-columns: 1fr;
   }
 }

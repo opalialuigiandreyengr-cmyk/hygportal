@@ -28,6 +28,13 @@ ESARF_STATUS_DEPT_MGR_OPS_APPROVED = "Dept Mgr Ops Approved"
 ESARF_STATUS_APPROVED = "Approved"
 ESARF_STATUS_REJECTED = "Rejected"
 
+ESARF_APPROVER_ROLES = [
+    ("dept manager", "Department Manager"),
+    ("operation", "Operations Manager"),
+    ("general manager", "General Manager"),
+]
+ESARF_APPROVER_ROLE_KEYS = {role for role, _label in ESARF_APPROVER_ROLES}
+
 
 def _compute_age_from_birth_date(birth_date):
     if not birth_date:
@@ -770,30 +777,34 @@ def update_esarf_status(esarf_id):
         esarf_request.status = ESARF_STATUS_APPROVED
         success_message = f"ESARF request #{esarf_request.id}: General Manager approval recorded. Request is now Approved."
     elif current_role in {"admin", "timekeeper"}:
-        if action != "reject":
-            flash(
-                "Final approval requires all 3 signatories. "
-                "Department manager, operation, and general manager approvals are enabled.",
-                category="error",
-            )
-            return redirect(url_for("admin.esarf_requests"))
-        if esarf_request.status != ESARF_STATUS_PENDING:
-            flash("Only pending requests can be declined.", category="error")
-            return redirect(url_for("admin.esarf_requests"))
-        reject_reason = (request.form.get("reject_reason") or "").strip()
-        if not reject_reason:
-            flash("Decline reason is required.", category="error")
-            return redirect(url_for("admin.esarf_requests"))
-
         role_labels = {
             "admin": "Admin",
             "timekeeper": "Timekeeper",
             "dept manager": "Dept Manager",
         }
-        declined_by_label = role_labels.get(current_role, current_role.title())
-        esarf_request.status = ESARF_STATUS_REJECTED
-        esarf_request.declined_reason = f"{declined_by_label}: {reject_reason}"
-        success_message = f"ESARF request #{esarf_request.id} declined by {declined_by_label}. Reason: {reject_reason}"
+        approver_label = role_labels.get(current_role, current_role.title())
+        if action == "approve":
+            if esarf_request.status != ESARF_STATUS_PENDING:
+                flash("Only pending requests can be approved.", category="error")
+                return redirect(url_for("admin.esarf_requests"))
+
+            esarf_request.status = ESARF_STATUS_APPROVED
+            success_message = f"ESARF request #{esarf_request.id} approved by {approver_label}."
+        elif action == "reject":
+            if esarf_request.status != ESARF_STATUS_PENDING:
+                flash("Only pending requests can be declined.", category="error")
+                return redirect(url_for("admin.esarf_requests"))
+            reject_reason = (request.form.get("reject_reason") or "").strip()
+            if not reject_reason:
+                flash("Decline reason is required.", category="error")
+                return redirect(url_for("admin.esarf_requests"))
+
+            esarf_request.status = ESARF_STATUS_REJECTED
+            esarf_request.declined_reason = f"{approver_label}: {reject_reason}"
+            success_message = f"ESARF request #{esarf_request.id} declined by {approver_label}. Reason: {reject_reason}"
+        else:
+            flash("Admin approvers can only approve or reject pending ESARF requests.", category="error")
+            return redirect(url_for("admin.esarf_requests"))
     else:
         flash("You do not have permission to update this request.", category="error")
         return redirect(url_for("admin.esarf_requests"))
@@ -1154,7 +1165,56 @@ def settings():
     if request.method == 'POST':
         action = request.form.get('action')
 
-        if action == 'add_approver':
+        if action == 'assign_esarf_approver':
+            user_id = request.form.get('user_id')
+            approver_role = (request.form.get('approver_role') or '').strip().lower()
+
+            if approver_role not in ESARF_APPROVER_ROLE_KEYS:
+                flash('Please select a valid ESARF approver role.', category='error')
+                return redirect(url_for('admin.settings'))
+            if not user_id:
+                flash('Please select a user.', category='error')
+                return redirect(url_for('admin.settings'))
+
+            user = User.query.get(user_id)
+            if not user:
+                flash('User not found.', category='error')
+                return redirect(url_for('admin.settings'))
+            if user.role == 'admin':
+                flash('Admin users cannot be reassigned from approval settings.', category='error')
+                return redirect(url_for('admin.settings'))
+
+            role_label = dict(ESARF_APPROVER_ROLES)[approver_role]
+            user.role = approver_role
+            try:
+                db.session.commit()
+                flash(f'{user.username} assigned as {role_label}.', category='success')
+            except Exception:
+                db.session.rollback()
+                flash('Failed to assign ESARF approver.', category='error')
+            return redirect(url_for('admin.settings'))
+
+        elif action == 'remove_esarf_approver':
+            user_id = request.form.get('user_id')
+            user = User.query.get(user_id)
+            if not user:
+                flash('User not found.', category='error')
+                return redirect(url_for('admin.settings'))
+            if user.role not in ESARF_APPROVER_ROLE_KEYS:
+                flash('Selected user is not an ESARF approver.', category='error')
+                return redirect(url_for('admin.settings'))
+
+            previous_role = dict(ESARF_APPROVER_ROLES)[user.role]
+            user.role = 'user'
+            try:
+                db.session.commit()
+                flash(f'{user.username} removed from {previous_role} approvers.', category='success')
+            except Exception:
+                db.session.rollback()
+                flash('Failed to remove ESARF approver.', category='error')
+            return redirect(url_for('admin.settings'))
+
+        elif action == 'add_approver':
             user_id = request.form.get('user_id')
             can_discount = 'can_approve_discount' in request.form
             can_charge = 'can_approve_charge' in request.form
@@ -1221,14 +1281,25 @@ def settings():
     # GET
     approvers = PerkApprover.query.order_by(PerkApprover.id.desc()).all()
     approver_user_ids = [a.user_id for a in approvers]
+    esarf_approvers_by_role = {
+        role: User.query.filter_by(role=role).order_by(User.username.asc()).all()
+        for role, _label in ESARF_APPROVER_ROLES
+    }
+    esarf_eligible_users = User.query.filter(
+        User.role != 'admin',
+        User.role.notin_(list(ESARF_APPROVER_ROLE_KEYS)),
+    ).order_by(User.username.asc()).all()
     # Users eligible to be approvers (non-admin users that are not already approvers)
     eligible_users = User.query.filter(
         User.id.notin_(approver_user_ids),
         User.role != 'admin',
-    ).all()
+    ).order_by(User.username.asc()).all()
 
     return render_template(
         'admin/settings.html',
         approvers=approvers,
         eligible_users=eligible_users,
+        esarf_approver_roles=ESARF_APPROVER_ROLES,
+        esarf_approvers_by_role=esarf_approvers_by_role,
+        esarf_eligible_users=esarf_eligible_users,
     )

@@ -11,11 +11,19 @@ from .models import Employee, EsarfRequest, LeaveRequest, DiscountRequest, Produ
 employee = Blueprint('employee', __name__)
 
 
+def _require_employee_profile():
+    if current_user.employee:
+        return None
+    flash('Your account is not linked to an employee profile.', category='error')
+    return redirect(url_for('views.home'))
+
+
 @employee.route('/employee_dashboard')
 @login_required
 def employee_dashboard():
-    if current_user.role != 'user':
-        return redirect(url_for('views.home'))
+    profile_redirect = _require_employee_profile()
+    if profile_redirect:
+        return profile_redirect
     return render_template('employee/dashboard.html', employee=current_user.employee)
 
 
@@ -187,8 +195,9 @@ def update_section(employee_id, section):
 @employee.route('/employee/esarf', methods=['GET', 'POST'])
 @login_required
 def esarf():
-    if current_user.role != 'user':
-        return redirect(url_for('views.home'))
+    profile_redirect = _require_employee_profile()
+    if profile_redirect:
+        return profile_redirect
 
     esarf_form = {}
     esarf_transaction_types = []
@@ -312,8 +321,9 @@ def esarf():
 @employee.route('/employee/esarf_requests', methods=['GET'])
 @login_required
 def esarf_requests():
-    if current_user.role != 'user':
-        return redirect(url_for('views.home'))
+    profile_redirect = _require_employee_profile()
+    if profile_redirect:
+        return profile_redirect
 
     esarf_request_items = EsarfRequest.query.filter_by(submitted_by_user_id=current_user.id).order_by(EsarfRequest.id.desc()).all()
     
@@ -323,8 +333,9 @@ def esarf_requests():
 @employee.route('/submit_leave', methods=['POST'])
 @login_required
 def submit_leave():
-    if current_user.role != 'user':
-        return redirect(url_for('views.home'))
+    profile_redirect = _require_employee_profile()
+    if profile_redirect:
+        return profile_redirect
 
     try:
         start_date = datetime.strptime(request.form.get("start_date"), "%Y-%m-%d").date()
@@ -365,8 +376,9 @@ def submit_leave():
 @employee.route('/leaves', methods=['GET', 'POST'])
 @login_required
 def leaves():
-    if current_user.role != 'user':
-        return redirect(url_for('views.home'))
+    profile_redirect = _require_employee_profile()
+    if profile_redirect:
+        return profile_redirect
 
     # Pagination parameters
     page = request.args.get('page', 1, type=int)  # Get the current page, default=1

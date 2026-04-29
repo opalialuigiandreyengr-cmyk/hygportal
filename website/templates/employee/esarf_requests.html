@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}My ESARF Requests | HYG Employee Portal{% endblock %}
+{% block title %}My ESARF Request History | HYG Employee Portal{% endblock %}
 
 {% block extra_head %}
   <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/employee.css') }}">
@@ -34,7 +34,7 @@
 <section class="employee-esarf-requests-page esarf-requests-redesign">
   <header class="page-header esarf-page-header">
     <div class="employee-esarf-hero-main">
-      <h1>Employee Salary Adjustment Request</h1>
+      <h1>My ESARF Request History</h1>
       <p>Track and Manage Salary Adjustment Request Form.</p>
     </div>
     <div class="employee-esarf-hero-tools esarf-header-actions">
@@ -48,41 +48,6 @@
       </a>
     </div>
   </header>
-
-  <section class="esarf-request-stats" aria-label="ESARF request summary">
-    <article class="esarf-stat-card">
-      <div class="esarf-stat-icon is-total"><i class="fa-solid fa-file-lines"></i></div>
-      <div>
-        <span>Total Requests</span>
-        <strong>{{ counts.total }}</strong>
-        <small>All time requests</small>
-      </div>
-    </article>
-    <article class="esarf-stat-card is-pending">
-      <div class="esarf-stat-icon"><i class="fa-regular fa-clock"></i></div>
-      <div>
-        <span>Pending</span>
-        <strong>{{ counts.pending }}</strong>
-        <small>Awaiting approval</small>
-      </div>
-    </article>
-    <article class="esarf-stat-card is-approved">
-      <div class="esarf-stat-icon"><i class="fa-solid fa-check"></i></div>
-      <div>
-        <span>Approved</span>
-        <strong>{{ counts.approved }}</strong>
-        <small>This year</small>
-      </div>
-    </article>
-    <article class="esarf-stat-card is-rejected">
-      <div class="esarf-stat-icon"><i class="fa-solid fa-xmark"></i></div>
-      <div>
-        <span>Rejected</span>
-        <strong>{{ counts.rejected }}</strong>
-        <small>This year</small>
-      </div>
-    </article>
-  </section>
 
   <section class="card esarf-filters-card" aria-label="ESARF request filters">
     <form class="esarf-filters-form" id="esarfFilterForm">

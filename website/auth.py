@@ -1,7 +1,8 @@
 from flask import Blueprint, jsonify, render_template, request, flash, redirect, url_for
 from flask_login import login_required, login_user, logout_user
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from werkzeug.security import check_password_hash, generate_password_hash
+import unicodedata
 
 from . import db
 from .models import Employee, User
@@ -52,24 +53,36 @@ def register():
 def verify_employee():
     data = request.get_json()
     
-    first_name = data.get('first_name', '').strip()
-    middle_name = data.get('middle_name', '').strip()
-    last_name = data.get('last_name', '').strip()
-    email = data.get('email', '').strip()
+    first_name = unicodedata.normalize('NFC', data.get('first_name', '').strip())
+    middle_name = unicodedata.normalize('NFC', data.get('middle_name', '').strip())
+    last_name = unicodedata.normalize('NFC', data.get('last_name', '').strip())
+    email = unicodedata.normalize('NFC', data.get('email', '').strip())
     birth_date_str = data.get('birth_date') 
 
     if not first_name or not last_name or not birth_date_str:
         return jsonify({'status': 'error', 'message': 'First Name, Last Name, and Birth Date are required.'}), 400
 
+    def ci_match(column, value):
+        """Case-insensitive match that works with SQLite's ASCII-only lower()/upper()."""
+        if not value:
+            return column.is_(None)
+        return or_(
+            func.lower(column) == value.lower(),
+            column == value,
+            column == value.upper(),
+            column == value.lower(),
+            column == value.title(),
+        )
+
     try:
         # Step 1: Find by first + last name
         query = Employee.query.filter(
-            func.lower(Employee.first_name) == first_name.lower(),
-            func.lower(Employee.last_name) == last_name.lower()
+            ci_match(Employee.first_name, first_name),
+            ci_match(Employee.last_name, last_name)
         )
 
         if middle_name:
-            query = query.filter(func.lower(Employee.middle_name) == middle_name.lower())
+            query = query.filter(ci_match(Employee.middle_name, middle_name))
         
         if email:
             query = query.filter(func.lower(Employee.email) == email.lower())

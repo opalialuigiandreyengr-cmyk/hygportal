@@ -186,11 +186,15 @@
           <tr>
             <td>
               <div class="employee-cell">
+                {% if employee.photopath %}
                 <img
-                  src="{{ url_for('static', filename=employee.photopath) if employee.photopath else 'https://picsum.photos/seed/' ~ employee.id ~ '/100/100' }}"
+                  src="{{ url_for('static', filename=employee.photopath) }}"
                   alt="{{ employee.first_name }} {{ employee.last_name }}"
                   class="employee-id-pic"
                 >
+                {% else %}
+                <div class="employee-id-pic-letter">{{ employee.first_name[:1]|upper }}</div>
+                {% endif %}
                 <div class="employee-meta">
                   <strong class="employee-name-text">{{ employee.first_name }} {{ employee.last_name }}</strong>
                   <small class="employee-email">{{ employee.email or '-' }}</small>
@@ -351,7 +355,7 @@
               <div class="form-section-card">
                 <h3 class="form-section-title">Employment Details</h3>
                 <div class="grid-2">
-                  <div class="field"><label>Employee ID No. </label><input type="text" name="employee_no" value="{{ employee.employee_no }}"></div>
+                  <div class="field"><label>Employee ID No. </label><input type="text" name="employee_no" value="{{ '' if not employee.employee_no or employee.employee_no|string|lower in ['none', 'null', 'n/a'] else employee.employee_no }}"></div>
                   <div class="field">
                     <label>Company </label>
                     <select name="company">
@@ -523,7 +527,6 @@
               <div class="form-section-card">
                 <h3 class="form-section-title">Employment Details</h3>
                 <div class="grid-2">
-                  <div class="field"><label>Employee ID No.</label><input type="text" name="employee_no" value="{{ add_form.get('employee_no', '') }}"></div>
                   <div class="field">
                     <label>Company <span class="req">*</span></label>
                     <select name="company" required>

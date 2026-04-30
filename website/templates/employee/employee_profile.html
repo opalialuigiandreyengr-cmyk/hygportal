@@ -48,9 +48,44 @@
       </div>
     </article>
 
+    <nav class="emp-profile-links" aria-label="Profile sections">
+      <button type="button" class="emp-section-link active" data-profile-section-link="personal">
+        <i class="fa-solid fa-user"></i>
+        <span>Personal</span>
+      </button>
+      <button type="button" class="emp-section-link" data-profile-section-link="contact">
+        <i class="fa-solid fa-address-book"></i>
+        <span>Contact</span>
+      </button>
+      <button type="button" class="emp-section-link" data-profile-section-link="employment">
+        <i class="fa-solid fa-building-user"></i>
+        <span>Employment</span>
+      </button>
+      <button type="button" class="emp-section-link" data-profile-section-link="government">
+        <i class="fa-solid fa-id-card-clip"></i>
+        <span>Government and Bank</span>
+      </button>
+      <button type="button" class="emp-section-link" data-profile-section-link="education">
+        <i class="fa-solid fa-graduation-cap"></i>
+        <span>Education</span>
+      </button>
+      <button type="button" class="emp-section-link" data-profile-section-link="family">
+        <i class="fa-solid fa-people-roof"></i>
+        <span>Family</span>
+      </button>
+      <button type="button" class="emp-section-link" data-profile-section-link="spouse">
+        <i class="fa-solid fa-ring"></i>
+        <span>Spouse</span>
+      </button>
+      <button type="button" class="emp-section-link" data-profile-section-link="children">
+        <i class="fa-solid fa-children"></i>
+        <span>Children</span>
+      </button>
+    </nav>
+
     <section class="emp-profile-layout">
       <div class="emp-col">
-        <article class="card emp-section" id="personalInfoSection">
+        <article class="card emp-section active" id="personalInfoSection" data-section="personal">
           <div class="emp-section-head">
             <div style="display:flex;align-items:center;gap:0.55rem;">
               <i class="fa-solid fa-user"></i>
@@ -513,6 +548,46 @@
   </div>
 
   <script>
+    (function() {
+      var links = Array.prototype.slice.call(document.querySelectorAll('[data-profile-section-link]'));
+      var sections = Array.prototype.slice.call(document.querySelectorAll('.emp-section[data-section]'));
+      if (!links.length || !sections.length) return;
+
+      function showSection(sectionName, updateHash) {
+        var target = sections.find(function(section) {
+          return section.dataset.section === sectionName;
+        }) || sections[0];
+        var targetName = target.dataset.section;
+
+        sections.forEach(function(section) {
+          section.classList.toggle('active', section === target);
+        });
+
+        links.forEach(function(link) {
+          var isActive = link.dataset.profileSectionLink === targetName;
+          link.classList.toggle('active', isActive);
+          if (isActive) {
+            link.setAttribute('aria-current', 'page');
+          } else {
+            link.removeAttribute('aria-current');
+          }
+        });
+
+        if (updateHash) {
+          history.replaceState(null, '', '#' + targetName);
+        }
+      }
+
+      links.forEach(function(link) {
+        link.addEventListener('click', function() {
+          showSection(link.dataset.profileSectionLink, true);
+        });
+      });
+
+      var initialSection = window.location.hash ? window.location.hash.slice(1) : 'personal';
+      showSection(initialSection, false);
+    })();
+
     (function() {
       document.querySelectorAll('.emp-section').forEach(function(section) {
         var btnEdit = section.querySelector('.btn-edit');

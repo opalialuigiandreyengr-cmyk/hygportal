@@ -3,401 +3,772 @@
 
 {% block extra_head %}
 <style>
-/* ===== LAYOUT: FORM + OVERVIEW SIDE-BY-SIDE ===== */
-.leave-layout {
-  display: flex;
-  gap: 1.2rem;
-  align-items: flex-start;
+.leave-page {
+  display: grid;
+  gap: 18px;
+}
+
+.leave-page-header p {
+  margin: 6px 0 0;
+}
+
+.leave-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 22px;
+  align-items: start;
+}
+
+.leave-form-card,
+.leave-side-card {
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.06);
 }
 
 .leave-form-card {
-  flex: 2;
+  padding: 22px;
 }
 
-.leave-overview-card {
-  flex: 1;
-  max-width: 320px;
-  position: sticky;
-  top: 1rem;
+.leave-section {
+  display: grid;
+  gap: 14px;
 }
 
-.leave-row {
+.leave-section + .leave-section {
+  margin-top: 20px;
+}
+
+.leave-section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.leave-step {
+  display: inline-grid;
+  place-items: center;
+  width: 21px;
+  height: 21px;
+  border-radius: 999px;
+  background: #2f80ed;
+  color: #fff;
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+.leave-grid-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0.8rem;
+  gap: 14px;
 }
 
-/* Radio pills */
-.leave-pill-group {
-  display: flex;
-  gap: 8px;
+.leave-field {
+  display: grid;
+  gap: 7px;
 }
 
-.leave-pill-group input[type="radio"] {
+.leave-required {
+  color: #ef4444;
+}
+
+.leave-input-wrap {
+  position: relative;
+}
+
+.leave-input-wrap i {
   position: absolute;
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.leave-pill-group label {
-  border: 1px solid var(--line);
-  padding: 8px 16px;
-  border-radius: 12px;
-  cursor: pointer;
+  left: 13px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: #3b82f6;
   font-size: 0.82rem;
-  font-weight: 600;
-  transition: all 0.15s ease;
+  pointer-events: none;
 }
 
-.leave-pill-group input:checked + label {
-  background: var(--ink);
-  color: #fff;
-  border-color: var(--ink);
+.leave-input-wrap input,
+.leave-field textarea {
+  width: 100%;
+  border: 1px solid #dbe4f0;
+  border-radius: 7px;
+  background: #fff;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-/* Category grid */
+.leave-input-wrap input {
+  min-height: 44px;
+  padding: 0 13px 0 50px;
+}
+
+.leave-input-wrap input[type="date"] {
+  padding-right: 13px;
+}
+
+.leave-field textarea {
+  min-height: 86px;
+  resize: vertical;
+  padding: 13px;
+}
+
+.leave-input-wrap input:focus,
+.leave-field textarea:focus {
+  border-color: #2f80ed;
+  box-shadow: 0 0 0 3px rgba(47, 128, 237, 0.12);
+}
+
+.leave-choice-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 132px;
+  gap: 14px;
+  align-items: end;
+}
+
+.leave-pill-group,
 .leave-category-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-  gap: 8px;
+  gap: 9px;
 }
 
-.leave-category-grid input[type="radio"] {
+.leave-pill-group {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.leave-category-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.leave-pill-group input,
+.leave-category-grid input {
   position: absolute;
   opacity: 0;
-  width: 0;
-  height: 0;
+  pointer-events: none;
 }
 
-.leave-category-grid label {
-  border: 1px solid var(--line);
-  padding: 8px;
-  border-radius: 12px;
+.leave-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  border: 1px solid #dbe4f0;
+  border-radius: 7px;
+  padding: 9px 12px;
+  color: #0f172a;
   cursor: pointer;
   font-size: 0.82rem;
-  font-weight: 600;
-  text-align: center;
-  transition: all 0.15s ease;
+  font-weight: 800;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
 
-.leave-category-grid input:checked + label {
-  background: var(--ink);
-  color: #fff;
-  border-color: var(--ink);
+.leave-option i {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 0.82rem;
 }
 
-/* Day counter chip */
+.leave-option.is-sick i {
+  background: #ecfdf3;
+  color: #16a34a;
+}
+
+.leave-option.is-vacation i {
+  background: #eef6ff;
+  color: #2f80ed;
+}
+
+.leave-option.is-emergency i {
+  background: #fff1f2;
+  color: #ef4444;
+}
+
+.leave-option.is-family i {
+  background: #f5f3ff;
+  color: #7c3aed;
+}
+
+.leave-option.is-other i {
+  background: #fff7ed;
+  color: #f59e0b;
+}
+
+.leave-pill-group input:checked + .leave-option,
+.leave-category-grid input:checked + .leave-option {
+  border-color: #2f80ed;
+  background: #f8fbff;
+  box-shadow: 0 0 0 3px rgba(47, 128, 237, 0.12);
+}
+
 .leave-day-chip {
-  border: 1px solid var(--line);
-  padding: 6px 14px;
-  border-radius: 12px;
-  font-weight: 700;
-  font-size: 0.85rem;
+  display: grid;
+  place-items: center;
+  min-height: 58px;
+  border: 1px solid #dbe4f0;
+  border-radius: 7px;
+  background: #f8fafc;
+  color: #0f172a;
+  text-align: center;
 }
 
-/* Stat row */
+.leave-day-chip span:first-child {
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.leave-day-chip strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.leave-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.leave-cancel-btn,
+.leave-submit-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 42px;
+  border-radius: 7px;
+  padding: 0 22px;
+  font-size: 0.82rem;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.leave-cancel-btn {
+  border: 1px solid #dbe4f0;
+  background: #fff;
+  color: #0f172a;
+}
+
+.leave-submit-btn {
+  border: 1px solid #f4b400;
+  background: #fbbc05;
+  color: #0f172a;
+  cursor: pointer;
+}
+
+.leave-side {
+  display: grid;
+  gap: 14px;
+}
+
+.leave-side-card {
+  padding: 18px;
+}
+
+.leave-card-title-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.leave-card-title-row a {
+  color: #2f80ed;
+  font-size: 0.74rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
 .leave-stat-row {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 8px;
-  margin-bottom: 1rem;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
 }
 
 .leave-stat {
-  background: var(--surface-2);
-  border-radius: 14px;
-  padding: 12px;
+  display: grid;
+  place-items: center;
+  gap: 7px;
+  min-height: 96px;
+  border-radius: 8px;
   text-align: center;
 }
 
-.leave-stat-num {
-  font-size: 1.4rem;
+.leave-stat i {
+  font-size: 1.05rem;
+}
+
+.leave-stat strong {
+  color: #0f172a;
+  font-size: 1.45rem;
+  line-height: 1;
+}
+
+.leave-stat span {
+  font-size: 0.73rem;
   font-weight: 800;
 }
 
-.leave-stat span:last-child {
-  font-size: 0.75rem;
-  color: var(--ink-soft);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-weight: 600;
+.leave-stat.is-pending {
+  background: #fff8e7;
+  color: #f59e0b;
 }
 
-/* Leave list items */
+.leave-stat.is-approved {
+  background: #ecfdf3;
+  color: #16a34a;
+}
+
+.leave-stat.is-rejected {
+  background: #fff1f2;
+  color: #ef4444;
+}
+
+.leave-balance-list {
+  display: grid;
+  gap: 12px;
+}
+
+.leave-balance-item {
+  display: grid;
+  gap: 6px;
+}
+
+.leave-balance-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: #0f172a;
+  font-size: 0.76rem;
+  font-weight: 900;
+}
+
+.leave-balance-top span:last-child {
+  color: #64748b;
+  font-weight: 800;
+}
+
+.leave-bar {
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e5e7eb;
+}
+
+.leave-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.leave-bar.is-vacation span {
+  width: 80%;
+  background: #2f80ed;
+}
+
+.leave-bar.is-sick span {
+  width: 80%;
+  background: #22c55e;
+}
+
+.leave-bar.is-emergency span {
+  width: 60%;
+  background: #ef4444;
+}
+
 .leave-list {
   display: grid;
-  gap: 0.5rem;
+  gap: 10px;
 }
 
 .leave-item {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 48px;
+  gap: 10px;
   align-items: center;
-  border: 1px solid rgba(148, 163, 184, 0.24);
-  border-radius: 14px;
-  padding: 10px 14px;
-  background: var(--surface-2);
 }
 
-.leave-item strong {
-  font-size: 0.88rem;
+.leave-item-icon,
+.leave-item-days {
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
 }
 
-.leave-item-date {
-  font-size: 0.75rem;
-  color: var(--ink-soft);
+.leave-item-icon {
+  width: 36px;
+  height: 36px;
+  background: #eff6ff;
+  color: #2563eb;
 }
 
-/* Pagination */
+.leave-item-icon.is-sick {
+  background: #ecfdf3;
+  color: #16a34a;
+}
+
+.leave-item-icon.is-vacation {
+  background: #eef6ff;
+  color: #2f80ed;
+}
+
+.leave-item-icon.is-emergency {
+  background: #fff1f2;
+  color: #ef4444;
+}
+
+.leave-item-info {
+  min-width: 0;
+}
+
+.leave-status-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  border-radius: 999px;
+  padding: 3px 7px;
+  font-size: 0.58rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.leave-status-chip.is-pending {
+  background: #fff7ed;
+  color: #f59e0b;
+}
+
+.leave-status-chip.is-approved {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.leave-status-chip.is-rejected {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.leave-item-info strong {
+  display: block;
+  margin-top: 4px;
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.leave-item-info small {
+  display: block;
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 0.7rem;
+}
+
+.leave-item-days {
+  min-height: 44px;
+  background: #f8fafc;
+  color: #0f172a;
+  font-weight: 900;
+  text-align: center;
+}
+
+.leave-item-days small {
+  display: block;
+  color: #64748b;
+  font-size: 0.62rem;
+  font-weight: 800;
+}
+
+.leave-empty {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.85rem;
+}
+
 .leave-pagination {
   display: flex;
   justify-content: center;
   align-items: center;
   gap: 4px;
-  margin-top: 0.8rem;
+  margin-top: 12px;
 }
 
 .leave-pagination a,
 .leave-pagination span {
-  padding: 6px 10px;
-  border-radius: 10px;
-  font-size: 0.82rem;
-  font-weight: 600;
+  display: inline-grid;
+  place-items: center;
+  min-width: 30px;
+  height: 30px;
+  border: 1px solid #dbe4f0;
+  border-radius: 7px;
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 900;
   text-decoration: none;
-  color: var(--ink-soft);
-  border: 1px solid var(--line);
-  transition: all 0.15s ease;
 }
 
-.leave-pagination a:hover {
-  background: var(--ink);
-  color: #fff;
-  border-color: var(--ink);
-}
-
+.leave-pagination a:hover,
 .leave-pagination .active-page {
-  background: var(--ink);
+  border-color: #2f80ed;
+  background: #2f80ed;
   color: #fff;
-  border-color: var(--ink);
 }
 
 .leave-pagination .disabled-page {
   color: #cbd5e1;
-  border-color: #e2e8f0;
-  cursor: not-allowed;
 }
 
-/* Mobile overview toggle */
-.leave-overview-toggle {
-  display: none;
+.leave-character-count {
+  justify-self: end;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 700;
 }
 
-/* ===== MOBILE ===== */
-@media (max-width: 860px) {
-  .leave-layout {
-    flex-direction: column;
-  }
-
-  .leave-overview-card {
-    display: none;
-  }
-
-  .leave-overview-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-  }
-
-  .leave-row {
+@media (max-width: 1080px) {
+  .leave-shell {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .leave-form-card,
+  .leave-side-card {
+    padding: 16px;
+  }
+
+  .leave-grid-2,
+  .leave-choice-row,
+  .leave-pill-group,
+  .leave-category-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .leave-stat-row {
+    grid-template-columns: 1fr;
+  }
+
+  .leave-footer {
+    flex-direction: column-reverse;
+  }
+
+  .leave-cancel-btn,
+  .leave-submit-btn {
+    width: 100%;
   }
 }
 </style>
 {% endblock %}
 
 {% block page_content %}
+{% set employee = current_user.employee %}
+{% set full_name = (employee.first_name ~ ' ' ~ employee.last_name)|trim if employee else current_user.username %}
 
-<section class="leave-layout">
+<section class="leave-page">  
 
-  <!-- ===== LEAVE FORM ===== -->
-  <article class="card leave-form-card">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
-      <h2 class="section-title" style="margin-bottom:0;">Leave Management</h2>
-      <button class="primary-btn btn-mini leave-overview-toggle" data-bs-toggle="modal" data-bs-target="#leaveOverviewModal">
-        <i class="fa-solid fa-chart-simple"></i> Overview
-      </button>
-    </div>
-
-    <form method="POST" action="/submit_leave">
-
-      <div class="leave-row">
-        <div class="field">
-          <label>Full Name</label>
-          <input type="text" value="{{ current_user.employee.first_name }} {{ current_user.employee.last_name }}" disabled>
-        </div>
-        <div class="field">
-          <label>Position</label>
-          <input type="text" value="{{ current_user.employee.position }}" disabled>
-        </div>
-      </div>
-
-      <div class="leave-row">
-        <div class="field">
-          <label>Start Date</label>
-          <input type="date" name="start_date" id="leaveStart" required>
-        </div>
-        <div class="field">
-          <label>End Date</label>
-          <input type="date" name="end_date" id="leaveEnd" required>
-        </div>
-      </div>
-
-      <div class="field">
-        <label>Leave Pay Type <span style="color:var(--danger);">*</span></label>
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-          <div class="leave-pill-group">
-            <input type="radio" name="leave_type" value="With Pay" id="payWith" required>
-            <label for="payWith">With Pay</label>
-            <input type="radio" name="leave_type" value="Without Pay" id="payWithout">
-            <label for="payWithout">Without Pay</label>
+  <div class="leave-shell">
+    <article class="leave-form-card">
+      <form method="POST" action="/submit_leave" id="leaveRequestForm">
+        <section class="leave-section">
+          <h2 class="leave-section-title"><span class="leave-step">1</span> Employee Information</h2>
+          <div class="leave-grid-2">
+            <div class="leave-field">
+              <label for="leaveFullName">Full Name</label>
+              <div class="leave-input-wrap">
+                <i class="fa-regular fa-user"></i>
+                <input type="text" id="leaveFullName" value="{{ full_name|upper }}" disabled>
+              </div>
+            </div>
+            <div class="leave-field">
+              <label for="leavePosition">Position</label>
+              <div class="leave-input-wrap">
+                <i class="fa-solid fa-briefcase"></i>
+                <input type="text" id="leavePosition" value="{{ employee.position if employee and employee.position else 'N/A' }}" disabled>
+              </div>
+            </div>
           </div>
-          <div class="leave-day-chip">
-            <span id="leaveDays"><b>0 day/s</b></span>
+        </section>
+
+        <section class="leave-section">
+          <h2 class="leave-section-title"><span class="leave-step">2</span> Leave Details</h2>
+          <div class="leave-grid-2">
+            <div class="leave-field">
+              <label for="leaveStart">Start Date</label>
+              <div class="leave-input-wrap">
+                <i class="fa-regular fa-calendar"></i>
+                <input type="date" name="start_date" id="leaveStart" required>
+              </div>
+            </div>
+            <div class="leave-field">
+              <label for="leaveEnd">End Date</label>
+              <div class="leave-input-wrap">
+                <i class="fa-regular fa-calendar"></i>
+                <input type="date" name="end_date" id="leaveEnd" required>
+              </div>
+            </div>
           </div>
+
+          <div class="leave-field">
+            <span class="leave-choice-label">Leave Pay Type <span class="leave-required">*</span></span>
+            <div class="leave-choice-row">
+              <div class="leave-pill-group">
+                <input type="radio" name="leave_type" value="With Pay" id="payWith" required>
+                <label class="leave-option" for="payWith"><i class="fa-regular fa-credit-card"></i> With Pay</label>
+                <input type="radio" name="leave_type" value="Without Pay" id="payWithout">
+                <label class="leave-option" for="payWithout"><i class="fa-regular fa-credit-card"></i> Without Pay</label>
+              </div>
+              <div class="leave-day-chip">
+                <span>Total Duration</span>
+                <strong id="leaveDays">0 day/s</strong>
+              </div>
+            </div>
+          </div>
+
+          <div class="leave-field">
+            <span class="leave-choice-label">Leave Category <span class="leave-required">*</span></span>
+            <div class="leave-category-grid">
+              <input type="radio" name="leave_category" value="Sick Leave" id="catSick" required>
+              <label class="leave-option is-sick" for="catSick"><i class="fa-solid fa-shield-heart"></i> Sick Leave</label>
+              <input type="radio" name="leave_category" value="Vacation Leave" id="catVacation">
+              <label class="leave-option is-vacation" for="catVacation"><i class="fa-solid fa-umbrella-beach"></i> Vacation Leave</label>
+              <input type="radio" name="leave_category" value="Emergency Leave" id="catEmergency">
+              <label class="leave-option is-emergency" for="catEmergency"><i class="fa-solid fa-bell"></i> Emergency Leave</label>
+              <input type="radio" name="leave_category" value="Maternity Leave" id="catMaternity">
+              <label class="leave-option is-family" for="catMaternity"><i class="fa-solid fa-baby"></i> Maternity / Paternity</label>
+              <input type="radio" name="leave_category" value="Others" id="otherLeaveRadio">
+              <label class="leave-option is-other" for="otherLeaveRadio"><i class="fa-regular fa-circle"></i> Others</label>
+            </div>
+            <div class="leave-input-wrap" id="otherLeaveWrap" style="display:none;">
+              <i class="fa-solid fa-pen"></i>
+              <input type="text" name="other_leave" id="otherLeaveInput" placeholder="Please specify...">
+            </div>
+          </div>
+        </section>
+
+        <section class="leave-section">
+          <h2 class="leave-section-title"><span class="leave-step">3</span> Reason</h2>
+          <div class="leave-field">
+            <label for="leaveReason">Reason for Leave <span class="leave-required">*</span></label>
+            <textarea name="reason" id="leaveReason" rows="3" maxlength="500" placeholder="Enter reason for your leave..." required></textarea>
+            <span class="leave-character-count"><span id="leaveReasonCount">0</span>/500</span>
+          </div>
+        </section>
+
+        <div class="leave-footer">
+          <a href="{{ url_for('employee.employee_dashboard') }}" class="leave-cancel-btn">
+            <i class="fa-solid fa-xmark"></i>
+            Cancel
+          </a>
+          <button type="submit" class="leave-submit-btn">
+            <i class="fa-regular fa-paper-plane"></i>
+            Submit Leave Request
+          </button>
         </div>
-      </div>
+      </form>
+    </article>
 
-      <div class="field">
-        <label>Leave Category</label>
-        <div class="leave-category-grid">
-          <input type="radio" name="leave_category" value="Sick Leave" id="catSick" required>
-          <label for="catSick">Sick Leave</label>
-          <input type="radio" name="leave_category" value="Vacation Leave" id="catVacation">
-          <label for="catVacation">Vacation Leave</label>
-          <input type="radio" name="leave_category" value="Emergency Leave" id="catEmergency">
-          <label for="catEmergency">Emergency Leave</label>
-          <input type="radio" name="leave_category" value="Maternity Leave" id="catMaternity">
-          <label for="catMaternity">Maternity / Paternity</label>
-          <input type="radio" name="leave_category" value="Others" id="otherLeaveRadio">
-          <label for="otherLeaveRadio">Others</label>
+    <aside class="leave-side" aria-label="Leave overview">
+      <section class="leave-side-card">
+        <div class="leave-card-title-row">
+          <h2>Overview</h2>
         </div>
-        <input type="text" name="other_leave" id="otherLeaveInput" placeholder="Please specify..." style="display:none;margin-top:8px;">
-      </div>
-
-      <div class="field">
-        <label>Reason</label>
-        <textarea name="reason" rows="3" required></textarea>
-      </div>
-
-      <button type="submit" class="primary-btn">Submit Request</button>
-    </form>
-  </article>
-
-  <!-- ===== DESKTOP OVERVIEW (always visible) ===== -->
-  <aside class="card leave-overview-card">
-    <h2 class="section-title">Overview</h2>
-
-    <div class="leave-stat-row">
-      <div class="leave-stat">
-        <div class="leave-stat-num" style="color:#b45309;">{{ pending_count }}</div>
-        <span>Pending</span>
-      </div>
-      <div class="leave-stat">
-        <div class="leave-stat-num" style="color:#16a34a;">{{ approved_count }}</div>
-        <span>Approved</span>
-      </div>
-      <div class="leave-stat">
-        <div class="leave-stat-num" style="color:#dc2626;">{{ rejected_count }}</div>
-        <span>Rejected</span>
-      </div>
-    </div>
-
-    <h2 class="section-title">Recent Leaves</h2>
-
-    <div class="leave-list">
-      {% for leave in leaves %}
-      <div class="leave-item">
-        <div>
-          <strong>{{ leave.leave_category }}</strong>
-          <div class="leave-item-date">{{ leave.start_date }} &rarr; {{ leave.end_date }}</div>
-        </div>
-        <span class="status {{ leave.status }}">{{ leave.status }}</span>
-      </div>
-      {% endfor %}
-    </div>
-
-    {% if pagination.pages > 1 %}
-    <div class="leave-pagination">
-      {% if pagination.has_prev %}
-        <a href="{{ url_for('employee.leaves', page=pagination.prev_num) }}">&laquo;</a>
-      {% else %}
-        <span class="disabled-page">&laquo;</span>
-      {% endif %}
-
-      {% for p in range(1, pagination.pages + 1) %}
-        {% if p == pagination.page %}
-          <span class="active-page">{{ p }}</span>
-        {% else %}
-          <a href="{{ url_for('employee.leaves', page=p) }}">{{ p }}</a>
-        {% endif %}
-      {% endfor %}
-
-      {% if pagination.has_next %}
-        <a href="{{ url_for('employee.leaves', page=pagination.next_num) }}">&raquo;</a>
-      {% else %}
-        <span class="disabled-page">&raquo;</span>
-      {% endif %}
-    </div>
-    {% endif %}
-  </aside>
-
-</section>
-
-<!-- ===== MOBILE OVERVIEW MODAL ===== -->
-<div class="modal fade" id="leaveOverviewModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title section-title mb-0">Overview</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body">
         <div class="leave-stat-row">
-          <div class="leave-stat">
-            <div class="leave-stat-num" style="color:#b45309;">{{ pending_count }}</div>
+          <div class="leave-stat is-pending">
+            <i class="fa-regular fa-clock"></i>
+            <strong>{{ pending_count }}</strong>
             <span>Pending</span>
           </div>
-          <div class="leave-stat">
-            <div class="leave-stat-num" style="color:#16a34a;">{{ approved_count }}</div>
+          <div class="leave-stat is-approved">
+            <i class="fa-regular fa-circle-check"></i>
+            <strong>{{ approved_count }}</strong>
             <span>Approved</span>
           </div>
-          <div class="leave-stat">
-            <div class="leave-stat-num" style="color:#dc2626;">{{ rejected_count }}</div>
+          <div class="leave-stat is-rejected">
+            <i class="fa-regular fa-circle-xmark"></i>
+            <strong>{{ rejected_count }}</strong>
             <span>Rejected</span>
           </div>
         </div>
+      </section>
 
-        <h2 class="section-title">Recent Leaves</h2>
+      <section class="leave-side-card">
+        <div class="leave-card-title-row">
+          <h2>Leave Balance</h2>
+          <a href="{{ url_for('employee.leaves') }}">View Details</a>
+        </div>
+        <div class="leave-balance-list">
+          <div class="leave-balance-item">
+            <div class="leave-balance-top"><span>Vacation Leave</span><span>12 / 15 days</span></div>
+            <div class="leave-bar is-vacation"><span></span></div>
+          </div>
+          <div class="leave-balance-item">
+            <div class="leave-balance-top"><span>Sick Leave</span><span>8 / 10 days</span></div>
+            <div class="leave-bar is-sick"><span></span></div>
+          </div>
+          <div class="leave-balance-item">
+            <div class="leave-balance-top"><span>Emergency Leave</span><span>3 / 5 days</span></div>
+            <div class="leave-bar is-emergency"><span></span></div>
+          </div>
+        </div>
+      </section>
 
+      <section class="leave-side-card">
+        <div class="leave-card-title-row">
+          <h2>Recent Leaves</h2>
+          <a href="{{ url_for('employee.leaves') }}">View All</a>
+        </div>
         <div class="leave-list">
           {% for leave in leaves %}
+          {% set status_key = (leave.status or 'Pending')|lower %}
+          {% set category_key = 'vacation' if 'Vacation' in leave.leave_category else ('sick' if 'Sick' in leave.leave_category else ('emergency' if 'Emergency' in leave.leave_category else 'other')) %}
+          {% set leave_days = ((leave.end_date - leave.start_date).days + 1) if leave.start_date and leave.end_date else 0 %}
           <div class="leave-item">
-            <div>
+            <span class="leave-item-icon is-{{ category_key }}">
+              {% if category_key == 'vacation' %}
+              <i class="fa-solid fa-umbrella-beach"></i>
+              {% elif category_key == 'sick' %}
+              <i class="fa-solid fa-shield-heart"></i>
+              {% elif category_key == 'emergency' %}
+              <i class="fa-solid fa-bell"></i>
+              {% else %}
+              <i class="fa-regular fa-circle"></i>
+              {% endif %}
+            </span>
+            <span class="leave-item-info">
+              <span class="leave-status-chip is-{{ status_key }}">{{ leave.status }}</span>
               <strong>{{ leave.leave_category }}</strong>
-              <div class="leave-item-date">{{ leave.start_date }} &rarr; {{ leave.end_date }}</div>
-            </div>
-            <span class="status {{ leave.status }}">{{ leave.status }}</span>
+              <small>{{ leave.start_date.strftime('%b %d') }} - {{ leave.end_date.strftime('%b %d, %Y') }}</small>
+            </span>
+            <span class="leave-item-days">
+              {{ leave_days }}
+              <small>{{ 'day' if leave_days == 1 else 'days' }}</small>
+            </span>
           </div>
+          {% else %}
+          <p class="leave-empty">No leave requests yet.</p>
           {% endfor %}
         </div>
 
         {% if pagination.pages > 1 %}
         <div class="leave-pagination">
           {% if pagination.has_prev %}
-            <a href="{{ url_for('employee.leaves', page=pagination.prev_num) }}">&laquo;</a>
+            <a href="{{ url_for('employee.leaves', page=pagination.prev_num) }}" aria-label="Previous page"><i class="fa-solid fa-chevron-left"></i></a>
           {% else %}
-            <span class="disabled-page">&laquo;</span>
+            <span class="disabled-page"><i class="fa-solid fa-chevron-left"></i></span>
           {% endif %}
 
           {% for p in range(1, pagination.pages + 1) %}
@@ -409,60 +780,72 @@
           {% endfor %}
 
           {% if pagination.has_next %}
-            <a href="{{ url_for('employee.leaves', page=pagination.next_num) }}">&raquo;</a>
+            <a href="{{ url_for('employee.leaves', page=pagination.next_num) }}" aria-label="Next page"><i class="fa-solid fa-chevron-right"></i></a>
           {% else %}
-            <span class="disabled-page">&raquo;</span>
+            <span class="disabled-page"><i class="fa-solid fa-chevron-right"></i></span>
           {% endif %}
         </div>
         {% endif %}
-      </div>
-    </div>
+      </section>
+    </aside>
   </div>
-</div>
+</section>
 
 <script>
 const startDate = document.getElementById("leaveStart");
 const endDate = document.getElementById("leaveEnd");
 const leaveDays = document.getElementById("leaveDays");
+const otherInput = document.getElementById("otherLeaveInput");
+const otherWrap = document.getElementById("otherLeaveWrap");
+const reasonInput = document.getElementById("leaveReason");
+const reasonCount = document.getElementById("leaveReasonCount");
 
-function calculateDays(){
-  if(startDate.value && endDate.value){
+function calculateDays() {
+  if (startDate.value && endDate.value) {
     const start = new Date(startDate.value);
     const end = new Date(endDate.value);
-    let diff = (end - start) / (1000*60*60*24) + 1;
-    if(diff < 0) diff = 0;
-    leaveDays.textContent = `${diff} day${diff !== 1 ? 's' : ''}`;
+    let diff = (end - start) / (1000 * 60 * 60 * 24) + 1;
+    if (diff < 0) diff = 0;
+    leaveDays.textContent = `${diff} day${diff !== 1 ? "/s" : ""}`;
   } else {
     leaveDays.textContent = "0 day/s";
   }
 }
 
-startDate.addEventListener("change", calculateDays);
-endDate.addEventListener("change", calculateDays);
+function syncOtherLeave() {
+  const selected = document.querySelector('input[name="leave_category"]:checked');
+  const isOther = selected && selected.value === "Others";
+  otherWrap.style.display = isOther ? "block" : "none";
+  otherInput.required = isOther;
+  if (!isOther) otherInput.value = "";
+}
 
-const otherInput = document.getElementById("otherLeaveInput");
+function updateReasonCount() {
+  reasonCount.textContent = reasonInput.value.length;
+}
 
-document.querySelectorAll('input[name="leave_category"]').forEach(radio => {
-  radio.addEventListener("change", () => {
-    otherInput.style.display =
-      radio.value === "Others" && radio.checked ? "block" : "none";
-  });
-});
-
-// ===== DATE DEFAULT + LIMITS =====
 const today = new Date().toISOString().split("T")[0];
-
 startDate.value = today;
 startDate.min = today;
 endDate.min = today;
 
 startDate.addEventListener("change", () => {
   endDate.min = startDate.value;
-  if(endDate.value < startDate.value){
+  if (endDate.value && endDate.value < startDate.value) {
     endDate.value = startDate.value;
   }
   calculateDays();
 });
+
+endDate.addEventListener("change", calculateDays);
+reasonInput.addEventListener("input", updateReasonCount);
+document.querySelectorAll('input[name="leave_category"]').forEach((radio) => {
+  radio.addEventListener("change", syncOtherLeave);
+});
+
+calculateDays();
+updateReasonCount();
+syncOtherLeave();
 </script>
 
 {% endblock %}

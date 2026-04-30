@@ -1,6 +1,5 @@
-from datetime import datetime
-
 from . import db
+from .helpers import philippine_now
 from flask_login import UserMixin
 
 
@@ -125,7 +124,7 @@ class EsarfRequest(db.Model):
     total_hours = db.Column(db.Float, nullable=False)
     reason = db.Column(db.Text, nullable=False)
 
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    created_at = db.Column(db.DateTime, default=philippine_now, nullable=False)
     declined_reason = db.Column(db.String(255))
 
     submitted_by_user = db.relationship(
@@ -161,7 +160,8 @@ class DiscountRequest(db.Model):
     transaction_date = db.Column(db.Date, nullable=False)
     amount = db.Column(db.Float, nullable=False)
     discounted_amount = db.Column(db.Float, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    created_at = db.Column(db.DateTime, default=philippine_now, nullable=False)
+    approval_code = db.Column(db.String(12))
     declined_reason = db.Column(db.String(255))
     submitted_by_user = db.relationship(
         'User',
@@ -178,7 +178,8 @@ class ProductChargeRequest(db.Model):
     price = db.Column(db.Float, nullable=False)
     total_amount = db.Column(db.Float, nullable=False)
     transaction_date = db.Column(db.Date)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    created_at = db.Column(db.DateTime, default=philippine_now, nullable=False)
+    approval_code = db.Column(db.String(12))
     declined_reason = db.Column(db.String(255))
     submitted_by_user = db.relationship(
         'User',
@@ -191,8 +192,24 @@ class PerkApprover(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, unique=True)
     can_approve_discount = db.Column(db.Boolean, default=True, nullable=False)
     can_approve_charge = db.Column(db.Boolean, default=True, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    created_at = db.Column(db.DateTime, default=philippine_now, nullable=False)
     user = db.relationship(
         'User',
         backref=db.backref('perk_approver', uselist=False),
+    )
+
+
+class Notification(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    title = db.Column(db.String(140), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    category = db.Column(db.String(40), nullable=False, default='info')
+    link_url = db.Column(db.String(255))
+    is_read = db.Column(db.Boolean, nullable=False, default=False)
+    created_at = db.Column(db.DateTime, default=philippine_now, nullable=False)
+
+    user = db.relationship(
+        'User',
+        backref=db.backref('notifications', lazy=True, cascade='all, delete-orphan'),
     )

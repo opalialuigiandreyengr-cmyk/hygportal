@@ -5,6 +5,7 @@ from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
 from sqlalchemy import inspect, text, func
+from sqlalchemy.exc import OperationalError
 from werkzeug.security import check_password_hash, generate_password_hash
 
 db = SQLAlchemy()
@@ -157,7 +158,29 @@ def _sync_esarf_columns():
         has_changes = True
 
     if has_changes:
-        db.session.commit()
+        try:
+            db.session.commit()
+        except OperationalError as exc:
+            db.session.rollback()
+            if "database is locked" not in str(exc).lower():
+                raise
+            print("Skipped ESARF number backfill because the database is locked.")
+
+
+def _sync_perk_columns():
+    from .models import DiscountRequest, ProductChargeRequest
+
+    inspector = inspect(db.engine)
+    for model in (DiscountRequest, ProductChargeRequest):
+        existing_columns = {
+            column["name"] for column in inspector.get_columns(model.__tablename__)
+        }
+        if "approval_code" not in existing_columns:
+            db.session.execute(
+                text(f"ALTER TABLE {model.__tablename__} ADD COLUMN approval_code VARCHAR(12)")
+            )
+
+    db.session.commit()
 
 
 def _migrate_employee_children_details():
@@ -257,6 +280,7 @@ def create_app():
         db.create_all()
         _sync_employee_columns()
         _sync_esarf_columns()
+        _sync_perk_columns()
         _migrate_employee_children_details()
         _sync_service_accounts()
         print("Created database!")
@@ -268,14 +292,22 @@ def create_app():
     login_manager.init_app(app)
 
     @app.context_processor
-    def inject_perk_approver_status():
+    def inject_global_user_status():
         from flask_login import current_user
+        unread_notification_count = 0
         if current_user.is_authenticated:
-            from .models import PerkApprover
+            from .models import Notification, PerkApprover
             is_perk_approver = PerkApprover.query.filter_by(user_id=current_user.id).first() is not None
+            unread_notification_count = Notification.query.filter_by(
+                user_id=current_user.id,
+                is_read=False,
+            ).count()
         else:
             is_perk_approver = False
-        return dict(is_perk_approver=is_perk_approver)
+        return dict(
+            is_perk_approver=is_perk_approver,
+            unread_notification_count=unread_notification_count,
+        )
 
     @login_manager.user_loader
     def load_user(id):

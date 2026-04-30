@@ -1,14 +1,54 @@
 from datetime import datetime, timedelta
+from email.message import EmailMessage
+import random
+import smtplib
 
-from flask import Blueprint, flash, redirect, render_template, request, url_for
+from flask import Blueprint, flash, redirect, render_template, request, session, url_for
 from flask_login import current_user, login_required
 from werkzeug.security import generate_password_hash
 
 from . import db
-from .helpers import _save_employee_photo
-from .models import Employee, EsarfRequest, LeaveRequest, DiscountRequest, ProductChargeRequest, User
+from .helpers import _save_employee_photo, create_notification, philippine_now
+from .models import Employee, EsarfRequest, LeaveRequest, DiscountRequest, ProductChargeRequest, Notification, User
 
 employee = Blueprint('employee', __name__)
+
+PERK_APPROVAL_EMAIL = "icount.itsolution@gmail.com"
+PERK_APPROVAL_PASSWORD = "llpb llss ztrm ujtj"
+PERK_APPROVAL_SENDER = "HYG Employee Portal - No Reply"
+
+
+def _format_employee_no(hired_date, sequence):
+    date_part = hired_date.strftime("%m%d%Y") if hired_date else "00000000"
+    return f"{date_part}-{sequence:02d}"
+
+
+def _next_employee_no_for_date(hired_date, exclude_employee_id=None):
+    prefix = hired_date.strftime("%m%d%Y") if hired_date else "00000000"
+    query = Employee.query.with_entities(Employee.employee_no).filter(
+        Employee.employee_no.like(f"{prefix}-%")
+    )
+    if exclude_employee_id is not None:
+        query = query.filter(Employee.id != exclude_employee_id)
+
+    max_sequence = 0
+    for value, in query.all():
+        if not value:
+            continue
+        try:
+            max_sequence = max(max_sequence, int(str(value).rsplit("-", 1)[1]))
+        except (IndexError, ValueError):
+            continue
+    return _format_employee_no(hired_date, max_sequence + 1)
+
+
+def _should_refresh_employee_no(employee_no, hired_date):
+    normalized_employee_no = (str(employee_no or "").strip()).lower()
+    return (
+        not normalized_employee_no
+        or normalized_employee_no in {"none", "n/a", "null"}
+        or normalized_employee_no.startswith("00000000-")
+    )
 
 
 def _require_employee_profile():
@@ -18,13 +58,190 @@ def _require_employee_profile():
     return redirect(url_for('views.home'))
 
 
+def _activity_sort_date(value):
+    if not value:
+        return datetime.min
+    if isinstance(value, datetime):
+        return value
+    return datetime.combine(value, datetime.min.time())
+
+
 @employee.route('/employee_dashboard')
 @login_required
 def employee_dashboard():
     profile_redirect = _require_employee_profile()
     if profile_redirect:
         return profile_redirect
-    return render_template('employee/dashboard.html', employee=current_user.employee)
+
+    emp = current_user.employee
+    now = philippine_now()
+    local_now = now
+    greeting_label = 'Good morning'
+    if local_now.hour >= 18:
+        greeting_label = 'Good evening'
+    elif local_now.hour >= 12:
+        greeting_label = 'Good afternoon'
+
+    year_start = datetime(now.year, 1, 1)
+    year_end = datetime(now.year, 12, 31, 23, 59, 59)
+    annual_cash_limit = 3000.0
+    annual_cash_transaction_limit = 6
+    per_charge_limit = 3000.0
+
+    leave_counts = {
+        'pending': LeaveRequest.query.filter_by(
+            submitted_by_user_id=current_user.id,
+            status='Pending',
+        ).count(),
+        'approved': LeaveRequest.query.filter(
+            LeaveRequest.submitted_by_user_id == current_user.id,
+            LeaveRequest.status.ilike('approved'),
+        ).count(),
+        'rejected': LeaveRequest.query.filter(
+            LeaveRequest.submitted_by_user_id == current_user.id,
+            LeaveRequest.status.ilike('rejected'),
+        ).count(),
+    }
+
+    esarf_counts = {
+        'pending': EsarfRequest.query.filter_by(
+            submitted_by_user_id=current_user.id,
+            status='Pending',
+        ).count(),
+        'approved': EsarfRequest.query.filter(
+            EsarfRequest.submitted_by_user_id == current_user.id,
+            EsarfRequest.status.ilike('approved'),
+        ).count(),
+        'rejected': EsarfRequest.query.filter(
+            EsarfRequest.submitted_by_user_id == current_user.id,
+            EsarfRequest.status.ilike('rejected'),
+        ).count(),
+    }
+    pending_esarf_hours = db.session.query(
+        db.func.coalesce(db.func.sum(EsarfRequest.total_hours), 0)
+    ).filter(
+        EsarfRequest.submitted_by_user_id == current_user.id,
+        EsarfRequest.status == 'Pending',
+    ).scalar()
+
+    discount_transaction_count = DiscountRequest.query.filter(
+        DiscountRequest.submitted_by_user_id == current_user.id,
+        DiscountRequest.status.in_(['Pending', 'Approved']),
+        DiscountRequest.created_at >= year_start,
+        DiscountRequest.created_at <= year_end,
+    ).count()
+    discount_used = db.session.query(
+        db.func.coalesce(db.func.sum(DiscountRequest.amount), 0)
+    ).filter(
+        DiscountRequest.submitted_by_user_id == current_user.id,
+        DiscountRequest.status.in_(['Pending', 'Approved']),
+        DiscountRequest.created_at >= year_start,
+        DiscountRequest.created_at <= year_end,
+    ).scalar()
+    discount_used = float(discount_used or 0)
+    discount_remaining = max(0, annual_cash_limit - discount_used)
+
+    charge_transaction_count = ProductChargeRequest.query.filter(
+        ProductChargeRequest.submitted_by_user_id == current_user.id,
+        ProductChargeRequest.status.in_(['Pending', 'Approved']),
+        ProductChargeRequest.created_at >= year_start,
+        ProductChargeRequest.created_at <= year_end,
+    ).count()
+
+    profile_fields = [
+        emp.first_name, emp.last_name, emp.employee_no, emp.company, emp.department,
+        emp.position, emp.employee_type, emp.hired_date, emp.email, emp.phone,
+        emp.present_address, emp.birth_date, emp.gender, emp.civil_status,
+        emp.sss_no, emp.philhealth_no, emp.pagibig_no, emp.tin_no,
+    ]
+    completed_profile_fields = sum(1 for field in profile_fields if field)
+    profile_completion = round((completed_profile_fields / len(profile_fields)) * 100)
+    missing_profile_items = []
+    for label, value in [
+        ('employee number', emp.employee_no),
+        ('company', emp.company),
+        ('department', emp.department),
+        ('position', emp.position),
+        ('email', emp.email),
+        ('phone', emp.phone),
+        ('address', emp.present_address),
+        ('government IDs', all([emp.sss_no, emp.philhealth_no, emp.pagibig_no, emp.tin_no])),
+    ]:
+        if not value:
+            missing_profile_items.append(label)
+
+    recent_leaves = LeaveRequest.query.filter_by(
+        submitted_by_user_id=current_user.id,
+    ).order_by(LeaveRequest.id.desc()).limit(3).all()
+    recent_esarfs = EsarfRequest.query.filter_by(
+        submitted_by_user_id=current_user.id,
+    ).order_by(EsarfRequest.id.desc()).limit(3).all()
+    recent_discounts = DiscountRequest.query.filter_by(
+        submitted_by_user_id=current_user.id,
+    ).order_by(DiscountRequest.id.desc()).limit(3).all()
+    recent_charges = ProductChargeRequest.query.filter_by(
+        submitted_by_user_id=current_user.id,
+    ).order_by(ProductChargeRequest.id.desc()).limit(3).all()
+
+    recent_activity = []
+    for item in recent_leaves:
+        recent_activity.append({
+            'type': 'Leave',
+            'title': item.leave_category,
+            'status': item.status,
+            'date': item.start_date,
+            'icon': 'fa-calendar-day',
+        })
+    for item in recent_esarfs:
+        recent_activity.append({
+            'type': 'ESARF',
+            'title': item.esarf_number or 'ESARF Request',
+            'status': item.status,
+            'date': item.created_at,
+            'icon': 'fa-file-signature',
+        })
+    for item in recent_discounts:
+        recent_activity.append({
+            'type': 'Discount',
+            'title': item.product_name or 'Employee discount',
+            'status': item.status,
+            'date': item.created_at,
+            'icon': 'fa-tags',
+        })
+    for item in recent_charges:
+        recent_activity.append({
+            'type': 'Charge',
+            'title': item.product_name or 'Product charge',
+            'status': item.status,
+            'date': item.created_at,
+            'icon': 'fa-receipt',
+        })
+    recent_activity = sorted(
+        recent_activity,
+        key=lambda activity: _activity_sort_date(activity['date']),
+        reverse=True,
+    )[:6]
+
+    return render_template(
+        'employee/dashboard.html',
+        employee=emp,
+        greeting_label=greeting_label,
+        leave_counts=leave_counts,
+        esarf_counts=esarf_counts,
+        pending_esarf_hours=float(pending_esarf_hours or 0),
+        annual_cash_limit=annual_cash_limit,
+        annual_cash_transaction_limit=annual_cash_transaction_limit,
+        per_charge_limit=per_charge_limit,
+        discount_used=discount_used,
+        discount_remaining=discount_remaining,
+        discount_transaction_count=discount_transaction_count,
+        discount_transaction_remaining=max(0, annual_cash_transaction_limit - discount_transaction_count),
+        charge_transaction_count=charge_transaction_count,
+        charge_first_available=charge_transaction_count == 0,
+        profile_completion=profile_completion,
+        missing_profile_items=missing_profile_items[:4],
+        recent_activity=recent_activity,
+    )
 
 
 @employee.route('/employee/profile/<int:employee_id>')
@@ -156,6 +373,15 @@ def update_section(employee_id, section):
             elif field in INT_FIELDS:
                 value = int(value)
             setattr(employee_data, field, value)
+
+        if section == 'employment' and _should_refresh_employee_no(
+            employee_data.employee_no,
+            employee_data.hired_date,
+        ):
+            employee_data.employee_no = _next_employee_no_for_date(
+                employee_data.hired_date,
+                exclude_employee_id=employee_data.id,
+            )
 
         if section == 'children':
             names = request.form.getlist('child_full_name[]')
@@ -297,7 +523,14 @@ def esarf():
             )
             db.session.add(new_request)
             db.session.flush()
-            new_request.esarf_number = f"ESARF-{datetime.utcnow().year}-{new_request.id:03d}"
+            new_request.esarf_number = f"ESARF-{philippine_now().year}-{new_request.id:03d}"
+            create_notification(
+                current_user.id,
+                "ESARF sent",
+                f"You submitted {new_request.esarf_number}.",
+                category="success",
+                link_url=url_for("employee.esarf_requests"),
+            )
             db.session.commit()
 
             flash(
@@ -362,6 +595,14 @@ def submit_leave():
         )
 
         db.session.add(new_leave_request)
+        db.session.flush()
+        create_notification(
+            current_user.id,
+            "Leave sent",
+            f"You requested {final_category} leave.",
+            category="success",
+            link_url=url_for("employee.leaves"),
+        )
         db.session.commit()
         flash("Leave request submitted successfully.", category="success")
 
@@ -393,11 +634,13 @@ def leaves():
     pending_count = LeaveRequest.query.filter_by(
         submitted_by_user_id=current_user.id, status="Pending"
     ).count()
-    approved_count = LeaveRequest.query.filter_by(
-        submitted_by_user_id=current_user.id, status="approved"
+    approved_count = LeaveRequest.query.filter(
+        LeaveRequest.submitted_by_user_id == current_user.id,
+        LeaveRequest.status.ilike("approved"),
     ).count()
-    rejected_count = LeaveRequest.query.filter_by(
-        submitted_by_user_id=current_user.id, status="rejected"
+    rejected_count = LeaveRequest.query.filter(
+        LeaveRequest.submitted_by_user_id == current_user.id,
+        LeaveRequest.status.ilike("rejected"),
     ).count()
 
     return render_template(
@@ -416,24 +659,191 @@ def leaves():
 def perks():
     emp = current_user.employee if current_user.is_authenticated else None
 
-    # Current year counts for discount cap
-    now = datetime.utcnow()
+    # Current year limits automatically reset because every cap is scoped to this year.
+    now = philippine_now()
     year_start = datetime(now.year, 1, 1)
     year_end = datetime(now.year, 12, 31, 23, 59, 59)
+    annual_cash_limit = 3000.0
+    annual_cash_transaction_limit = 6
+    per_charge_limit = 3000.0
 
-    discount_used = DiscountRequest.query.filter(
+    discount_transaction_count = DiscountRequest.query.filter(
         DiscountRequest.submitted_by_user_id == current_user.id,
         DiscountRequest.status.in_(['Pending', 'Approved']),
         DiscountRequest.created_at >= year_start,
         DiscountRequest.created_at <= year_end,
     ).count()
-    discount_remaining = max(0, 6 - discount_used)
+    discount_used = db.session.query(
+        db.func.coalesce(db.func.sum(DiscountRequest.amount), 0)
+    ).filter(
+        DiscountRequest.submitted_by_user_id == current_user.id,
+        DiscountRequest.status.in_(['Pending', 'Approved']),
+        DiscountRequest.created_at >= year_start,
+        DiscountRequest.created_at <= year_end,
+    ).scalar()
+    discount_used = float(discount_used or 0)
+    discount_remaining = max(0, annual_cash_limit - discount_used)
+    discount_transaction_remaining = max(0, annual_cash_transaction_limit - discount_transaction_count)
 
-    # Check if user has pending charge
-    pending_charge = ProductChargeRequest.query.filter_by(
-        submitted_by_user_id=current_user.id,
-        status='Pending',
-    ).first()
+    charge_transaction_count = ProductChargeRequest.query.filter(
+        ProductChargeRequest.submitted_by_user_id == current_user.id,
+        ProductChargeRequest.status.in_(['Pending', 'Approved']),
+        ProductChargeRequest.created_at >= year_start,
+        ProductChargeRequest.created_at <= year_end,
+    ).count()
+    charge_first_available = charge_transaction_count == 0
+
+    def _generate_unique_perk_code():
+        rng = random.SystemRandom()
+        while True:
+            code = f"{rng.randint(0, 999999):06d}"
+            discount_exists = DiscountRequest.query.filter_by(approval_code=code).first()
+            charge_exists = ProductChargeRequest.query.filter_by(approval_code=code).first()
+            if not discount_exists and not charge_exists:
+                return code
+
+    def _send_perk_approval_code(email_address, code, request_label):
+        message = EmailMessage()
+        message["Subject"] = f"Your {request_label} approval code"
+        message["From"] = f"{PERK_APPROVAL_SENDER} <{PERK_APPROVAL_EMAIL}>"
+        message["To"] = email_address
+        message.set_content(
+            "This is an automated message from HYG Employee Portal.\n\n"
+            f"Your approval code for {request_label} is: {code}\n\n"
+            "Enter this code in the Employee Perks page to complete your request.\n"
+            "Please do not reply to this email."
+        )
+
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+            smtp.login(PERK_APPROVAL_EMAIL, PERK_APPROVAL_PASSWORD)
+            smtp.send_message(message)
+
+    def _employee_display_name():
+        if not emp:
+            return current_user.username
+        return (
+            f"{emp.first_name or ''} "
+            f"{(emp.middle_name[:1] + '.') if emp.middle_name else ''} "
+            f"{emp.last_name or ''} "
+            f"{emp.suffix or ''}"
+        ).strip() or current_user.username
+
+    def _send_perk_slip(email_address, payload, approval_code):
+        request_label = payload.get('request_label') or (
+            'Employee Discount (Cash)' if payload['form_type'] == 'discount' else 'Employee Charge (Credit)'
+        )
+        employee_name = _employee_display_name()
+        employee_no = emp.employee_no if emp and emp.employee_no else 'N/A'
+        department = emp.department if emp and emp.department else 'N/A'
+        company = emp.company if emp and emp.company else 'N/A'
+        transaction_date = payload.get('transaction_date') or 'N/A'
+        product_summary = payload.get('product_name') or 'N/A'
+
+        if payload['form_type'] == 'discount':
+            amount = float(payload.get('amount') or 0)
+            final_amount = float(payload.get('discounted_amount') or 0)
+            benefit_line = '15% Employee Discount'
+            total_label = 'Cashier amount after discount'
+            amount_rows = (
+                f"<tr><td>Purchase amount</td><td>PHP {amount:.2f}</td></tr>"
+                f"<tr><td>Discounted amount</td><td>PHP {final_amount:.2f}</td></tr>"
+            )
+        else:
+            original_amount = float(payload.get('original_amount') or payload.get('total_amount') or 0)
+            final_amount = float(payload.get('total_amount') or 0)
+            benefit_line = '15% first-transaction discount' if payload.get('discount_applies') else 'No discount'
+            total_label = 'Approved credit amount'
+            amount_rows = (
+                f"<tr><td>Credit amount</td><td>PHP {original_amount:.2f}</td></tr>"
+                f"<tr><td>{total_label}</td><td>PHP {final_amount:.2f}</td></tr>"
+            )
+
+        html = f"""
+        <html>
+          <body style="margin:0;padding:24px;background:#f5f7fb;font-family:Arial,sans-serif;color:#0f172a;">
+            <div style="max-width:680px;margin:0 auto;background:#ffffff;border:1px solid #dbe4f0;border-radius:14px;overflow:hidden;">
+              <div style="padding:22px 26px;background:#0f172a;color:#ffffff;">
+                <div style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#cbd5e1;">HYG Employee Portal</div>
+                <h1 style="margin:8px 0 0;font-size:24px;line-height:1.2;">{request_label} Slip</h1>
+                <p style="margin:8px 0 0;color:#e2e8f0;">Show this approved slip to the cashier.</p>
+              </div>
+              <div style="padding:24px 26px;">
+                <div style="display:block;padding:18px;border:1px solid #bfdbfe;border-radius:12px;background:#eff6ff;text-align:center;margin-bottom:20px;">
+                  <div style="font-size:12px;font-weight:700;color:#475569;">Approval Code</div>
+                  <div style="margin-top:6px;font-size:34px;letter-spacing:.18em;font-weight:800;color:#1d4ed8;">{approval_code}</div>
+                  <div style="margin-top:8px;font-size:13px;color:#475569;">Status: <strong style="color:#16a34a;">Approved</strong></div>
+                </div>
+                <table style="width:100%;border-collapse:collapse;font-size:14px;">
+                  <tr><td style="padding:9px 0;color:#64748b;">Employee</td><td style="padding:9px 0;text-align:right;font-weight:700;">{employee_name}</td></tr>
+                  <tr><td style="padding:9px 0;color:#64748b;">Employee No.</td><td style="padding:9px 0;text-align:right;font-weight:700;">{employee_no}</td></tr>
+                  <tr><td style="padding:9px 0;color:#64748b;">Department</td><td style="padding:9px 0;text-align:right;font-weight:700;">{department}</td></tr>
+                  <tr><td style="padding:9px 0;color:#64748b;">Company</td><td style="padding:9px 0;text-align:right;font-weight:700;">{company}</td></tr>
+                  <tr><td style="padding:9px 0;color:#64748b;">Transaction date</td><td style="padding:9px 0;text-align:right;font-weight:700;">{transaction_date}</td></tr>
+                  <tr><td style="padding:9px 0;color:#64748b;">Benefit</td><td style="padding:9px 0;text-align:right;font-weight:700;">{benefit_line}</td></tr>
+                </table>
+                <div style="margin-top:18px;padding:16px;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc;">
+                  <div style="font-size:12px;font-weight:800;color:#64748b;margin-bottom:8px;">Items</div>
+                  <div style="font-size:14px;line-height:1.5;font-weight:700;">{product_summary}</div>
+                </div>
+                <table style="width:100%;border-collapse:collapse;font-size:15px;margin-top:18px;">
+                  {amount_rows}
+                </table>
+                <div style="margin-top:22px;padding:14px;border-radius:10px;background:#fff7ed;color:#92400e;font-size:13px;line-height:1.45;">
+                  Cashier note: Verify the approval code and employee identity before honoring this slip.
+                </div>
+              </div>
+            </div>
+            <p style="max-width:680px;margin:14px auto 0;text-align:center;color:#94a3b8;font-size:12px;">This is an automated no-reply email.</p>
+          </body>
+        </html>
+        """
+
+        text = (
+            f"{request_label} Slip\n"
+            f"Status: Approved\n"
+            f"Approval Code: {approval_code}\n"
+            f"Employee: {employee_name}\n"
+            f"Employee No.: {employee_no}\n"
+            f"Department: {department}\n"
+            f"Company: {company}\n"
+            f"Transaction date: {transaction_date}\n"
+            f"Items: {product_summary}\n"
+            f"{total_label}: PHP {final_amount:.2f}\n"
+            "Show this approved slip to the cashier."
+        )
+
+        message = EmailMessage()
+        message["Subject"] = f"Approved {request_label} Slip - Code {approval_code}"
+        message["From"] = f"{PERK_APPROVAL_SENDER} <{PERK_APPROVAL_EMAIL}>"
+        message["To"] = email_address
+        message.set_content(text)
+        message.add_alternative(html, subtype="html")
+
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+            smtp.login(PERK_APPROVAL_EMAIL, PERK_APPROVAL_PASSWORD)
+            smtp.send_message(message)
+
+    def _start_perk_verification(payload):
+        applicant_email = (emp.email if emp and emp.email else "").strip()
+        if not applicant_email:
+            flash('Your employee profile does not have a registered email address. Please add an email before submitting a perk request.', category='error')
+            return False
+
+        code = _generate_unique_perk_code()
+        request_label = 'Employee Discount (Cash)' if payload['form_type'] == 'discount' else 'Employee Charge (Credit)'
+        try:
+            _send_perk_approval_code(applicant_email, code, request_label)
+        except Exception:
+            flash('Unable to send the approval code. Please check the registered email or try again later.', category='error')
+            return False
+
+        payload['approval_code'] = code
+        payload['email'] = applicant_email
+        payload['request_label'] = request_label
+        session['pending_perk_request'] = payload
+        session.modified = True
+        flash(f'Approval code sent to {applicant_email}. Enter the code to complete your request.', category='info')
+        return True
 
     # Check if user has pending discount
     pending_discount = DiscountRequest.query.filter_by(
@@ -444,48 +854,175 @@ def perks():
     if request.method == 'POST':
         form_type = request.form.get('form_type')
 
+        if form_type == 'cancel_perk_code':
+            session.pop('pending_perk_request', None)
+            flash('Perk request verification cancelled.', category='info')
+            return redirect(url_for('employee.perks'))
+
+        if form_type == 'resend_perk_code':
+            pending_payload = session.get('pending_perk_request')
+            if not pending_payload:
+                flash('No perk request is waiting for verification.', category='error')
+                return redirect(url_for('employee.perks'))
+            pending_payload.pop('approval_code', None)
+            if _start_perk_verification(pending_payload):
+                flash('A new approval code was sent.', category='success')
+            return redirect(url_for('employee.perks'))
+
+        if form_type == 'verify_perk_code':
+            pending_payload = session.get('pending_perk_request')
+            approval_code = (request.form.get('approval_code') or '').strip()
+            if not pending_payload:
+                flash('No perk request is waiting for verification.', category='error')
+                return redirect(url_for('employee.perks'))
+            if approval_code != pending_payload.get('approval_code'):
+                flash('Invalid approval code. Please try again.', category='error')
+                return redirect(url_for('employee.perks'))
+
+            try:
+                transaction_date = datetime.strptime(pending_payload['transaction_date'], '%Y-%m-%d').date()
+                if pending_payload['form_type'] == 'discount':
+                    new_discount = DiscountRequest(
+                        submitted_by_user_id=current_user.id,
+                        status='Approved',
+                        discount_type='Employee Discount (Cash)',
+                        discount_percent=15.0,
+                        product_name=pending_payload['product_name'],
+                        quantity=int(pending_payload['quantity']),
+                        price=float(pending_payload['price']),
+                        transaction_date=transaction_date,
+                        amount=float(pending_payload['amount']),
+                        discounted_amount=float(pending_payload['discounted_amount']),
+                        approval_code=approval_code,
+                    )
+                    db.session.add(new_discount)
+                    db.session.flush()
+                    create_notification(
+                        current_user.id,
+                        "Perk approved",
+                        "Your discount request was approved.",
+                        category="approved",
+                        link_url=url_for("employee.perks"),
+                    )
+                    success_message = 'Employee discount request verified and submitted.'
+                else:
+                    new_charge = ProductChargeRequest(
+                        submitted_by_user_id=current_user.id,
+                        status='Approved',
+                        product_name=pending_payload['product_name'],
+                        quantity=int(pending_payload['quantity']),
+                        price=float(pending_payload['price']),
+                        total_amount=float(pending_payload['total_amount']),
+                        transaction_date=transaction_date,
+                        approval_code=approval_code,
+                    )
+                    db.session.add(new_charge)
+                    db.session.flush()
+                    create_notification(
+                        current_user.id,
+                        "Perk approved",
+                        "Your charge request was approved.",
+                        category="approved",
+                        link_url=url_for("employee.perks"),
+                    )
+                    success_message = 'Employee charge request verified and submitted.'
+
+                db.session.commit()
+                try:
+                    _send_perk_slip(pending_payload['email'], pending_payload, approval_code)
+                except Exception:
+                    flash('Request approved and saved, but the cashier slip email could not be sent. Please contact HR.', category='error')
+                    session.pop('pending_perk_request', None)
+                    return redirect(url_for('employee.perks'))
+
+                session.pop('pending_perk_request', None)
+                flash(f'{success_message} Cashier slip sent to {pending_payload["email"]}.', category='success')
+            except Exception:
+                db.session.rollback()
+                flash('Failed to save the verified perk request. Please try again.', category='error')
+            return redirect(url_for('employee.perks'))
+
+        def _parse_perk_products(form_prefix):
+            names = request.form.getlist(f'{form_prefix}_product_name[]')
+            quantities = request.form.getlist(f'{form_prefix}_quantity[]')
+            prices = request.form.getlist(f'{form_prefix}_price[]')
+
+            if not names:
+                names = [request.form.get('product_name')]
+                quantities = [request.form.get('quantity')]
+                prices = [request.form.get('price')]
+
+            products = []
+            total_quantity = 0
+            total_amount = 0.0
+
+            for name_raw, quantity_raw, price_raw in zip(names, quantities, prices):
+                product_name = (name_raw or '').strip()
+                if not product_name and not quantity_raw and not price_raw:
+                    continue
+                if not product_name or not quantity_raw or not price_raw:
+                    raise ValueError('missing')
+
+                quantity = int(quantity_raw)
+                price = float(price_raw)
+                if quantity <= 0 or price <= 0:
+                    raise ValueError('invalid')
+
+                line_total = round(quantity * price, 2)
+                products.append({
+                    'name': product_name,
+                    'quantity': quantity,
+                    'price': price,
+                    'line_total': line_total,
+                })
+                total_quantity += quantity
+                total_amount += line_total
+
+            if not products:
+                raise ValueError('missing')
+
+            product_summary = '; '.join(
+                f"{item['name']} x{item['quantity']} @ {item['price']:.2f}"
+                for item in products
+            )
+            average_price = round(total_amount / total_quantity, 2) if total_quantity else 0
+            return product_summary, total_quantity, average_price, round(total_amount, 2)
+
         if form_type == 'discount':
             if pending_discount:
-                flash('You already have a pending discount request. Wait for it to be processed before submitting another.', category='error')
+                flash('You already have a pending employee discount request. Wait for it to be processed before submitting another.', category='error')
+                return redirect(url_for('employee.perks'))
+            if discount_transaction_remaining <= 0:
+                flash('You have reached the maximum of 6 employee discount transactions for this year.', category='error')
                 return redirect(url_for('employee.perks'))
             if discount_remaining <= 0:
-                flash('You have reached the maximum of 6 Goldilocks discount transactions for this year.', category='error')
+                flash('You have reached the PHP 3,000 yearly employee discount limit.', category='error')
                 return redirect(url_for('employee.perks'))
 
-            product_name = (request.form.get('product_name') or '').strip()
-            quantity_raw = request.form.get('quantity')
-            price_raw = request.form.get('price')
             transaction_date_raw = request.form.get('transaction_date')
 
-            if not product_name or not quantity_raw or not price_raw or not transaction_date_raw:
+            if not transaction_date_raw:
                 flash('Please fill in all discount fields.', category='error')
                 return redirect(url_for('employee.perks'))
 
             try:
-                quantity = int(quantity_raw)
-                price = float(price_raw)
-                if quantity <= 0 or price <= 0:
-                    flash('Quantity and price must be greater than zero.', category='error')
-                    return redirect(url_for('employee.perks'))
-
+                product_name, quantity, price, amount = _parse_perk_products('discount')
                 transaction_date = datetime.strptime(transaction_date_raw, '%Y-%m-%d').date()
-                amount = round(quantity * price, 2)
+                if amount > discount_remaining:
+                    flash(f'This discount request exceeds your remaining yearly cash discount limit of PHP {discount_remaining:.2f}.', category='error')
+                    return redirect(url_for('employee.perks'))
                 discounted_amount = round(amount * 0.85, 2)
 
-                new_discount = DiscountRequest(
-                    submitted_by_user_id=current_user.id,
-                    discount_type='Goldilocks',
-                    discount_percent=15.0,
-                    product_name=product_name,
-                    quantity=quantity,
-                    price=price,
-                    transaction_date=transaction_date,
-                    amount=amount,
-                    discounted_amount=discounted_amount,
-                )
-                db.session.add(new_discount)
-                db.session.commit()
-                flash(f'Goldilocks discount request submitted. 15% off: {amount:.2f} -> {discounted_amount:.2f}', category='success')
+                payload = {
+                    'form_type': 'discount',
+                    'product_name': product_name,
+                    'quantity': quantity,
+                    'price': price,
+                    'transaction_date': transaction_date_raw,
+                    'amount': amount,
+                    'discounted_amount': discounted_amount,
+                }
+                _start_perk_verification(payload)
             except ValueError:
                 flash('Invalid amount or date. Please check your inputs.', category='error')
             except Exception:
@@ -495,43 +1032,33 @@ def perks():
             return redirect(url_for('employee.perks'))
 
         elif form_type == 'charge':
-            if pending_charge:
-                flash('You already have a pending product charge. Wait for it to be processed before submitting another.', category='error')
-                return redirect(url_for('employee.perks'))
-
-            product_name = (request.form.get('product_name') or '').strip()
-            quantity_raw = request.form.get('quantity')
-            price_raw = request.form.get('price')
             transaction_date_raw = request.form.get('transaction_date')
 
-            if not product_name or not quantity_raw or not price_raw or not transaction_date_raw:
+            if not transaction_date_raw:
                 flash('Please fill in all charge fields.', category='error')
                 return redirect(url_for('employee.perks'))
 
             try:
-                quantity = int(quantity_raw)
-                price = float(price_raw)
+                product_name, quantity, price, total_amount = _parse_perk_products('charge')
                 transaction_date = datetime.strptime(transaction_date_raw, '%Y-%m-%d').date()
-                if quantity <= 0 or price <= 0:
-                    flash('Quantity and price must be greater than zero.', category='error')
+                if total_amount > per_charge_limit:
+                    flash(f'Total amount ({total_amount:.2f}) exceeds the per-transaction credit limit of PHP {per_charge_limit:.2f}.', category='error')
                     return redirect(url_for('employee.perks'))
 
-                total_amount = round(quantity * price, 2)
-                if total_amount > 3000:
-                    flash(f'Total amount ({total_amount:.2f}) exceeds the credit limit of 3,000.00 pesos.', category='error')
-                    return redirect(url_for('employee.perks'))
+                charge_discount_applies = charge_first_available
+                final_total_amount = round(total_amount * 0.85, 2) if charge_discount_applies else total_amount
 
-                new_charge = ProductChargeRequest(
-                    submitted_by_user_id=current_user.id,
-                    product_name=product_name,
-                    quantity=quantity,
-                    price=price,
-                    total_amount=total_amount,
-                    transaction_date=transaction_date,
-                )
-                db.session.add(new_charge)
-                db.session.commit()
-                flash(f'Product charge request submitted. Total: {total_amount:.2f} pesos', category='success')
+                payload = {
+                    'form_type': 'charge',
+                    'product_name': product_name,
+                    'quantity': quantity,
+                    'price': price,
+                    'transaction_date': transaction_date_raw,
+                    'total_amount': final_total_amount,
+                    'original_amount': total_amount,
+                    'discount_applies': charge_discount_applies,
+                }
+                _start_perk_verification(payload)
             except ValueError:
                 flash('Invalid quantity or price. Please check your inputs.', category='error')
             except Exception:
@@ -539,18 +1066,6 @@ def perks():
                 flash('Failed to submit charge request. Please try again.', category='error')
 
             return redirect(url_for('employee.perks'))
-
-    # Charge credit used: sum of approved charges this year
-    charge_credit_used = db.session.query(
-        db.func.coalesce(db.func.sum(ProductChargeRequest.total_amount), 0)
-    ).filter(
-        ProductChargeRequest.submitted_by_user_id == current_user.id,
-        ProductChargeRequest.status.in_(['Pending', 'Approved']),
-        ProductChargeRequest.created_at >= year_start,
-        ProductChargeRequest.created_at <= year_end,
-    ).scalar()
-    charge_credit_limit = 3000
-    charge_credit_remaining = max(0, charge_credit_limit - float(charge_credit_used))
 
     # GET: gather history (combined, newest 5)
     discounts = DiscountRequest.query.filter_by(
@@ -575,11 +1090,71 @@ def perks():
         employee=emp,
         discount_remaining=discount_remaining,
         discount_used=discount_used,
+        discount_transaction_count=discount_transaction_count,
+        discount_transaction_remaining=discount_transaction_remaining,
+        annual_cash_transaction_limit=annual_cash_transaction_limit,
+        annual_cash_limit=annual_cash_limit,
         pending_discount=pending_discount,
-        pending_charge=pending_charge,
-        charge_credit_used=float(charge_credit_used),
-        charge_credit_limit=charge_credit_limit,
-        charge_credit_remaining=charge_credit_remaining,
+        charge_transaction_count=charge_transaction_count,
+        charge_first_available=charge_first_available,
+        charge_credit_limit=per_charge_limit,
+        pending_perk_approval=session.get('pending_perk_request'),
         discounts=recent_discounts,
         charges=recent_charges,
     )
+
+
+@employee.route('/notifications', methods=['GET'])
+@login_required
+def notifications():
+    notification_items = Notification.query.filter_by(
+        user_id=current_user.id,
+    ).order_by(Notification.created_at.desc()).all()
+    now = philippine_now()
+    for item in notification_items:
+        if not item.created_at:
+            item.relative_time = ""
+            continue
+        seconds = max(0, int((now - item.created_at).total_seconds()))
+        if seconds < 60:
+            item.relative_time = "now"
+        elif seconds < 3600:
+            item.relative_time = f"{seconds // 60}m"
+        elif seconds < 86400:
+            item.relative_time = f"{seconds // 3600}h"
+        elif seconds < 604800:
+            item.relative_time = f"{seconds // 86400}d"
+        else:
+            item.relative_time = item.created_at.strftime("%b %d")
+    unread_count = sum(1 for item in notification_items if not item.is_read)
+    return render_template(
+        'employee/notifications.html',
+        notifications=notification_items,
+        unread_count=unread_count,
+    )
+
+
+@employee.route('/notifications/<int:notification_id>/read', methods=['POST'])
+@login_required
+def mark_notification_read(notification_id):
+    notification = Notification.query.filter_by(
+        id=notification_id,
+        user_id=current_user.id,
+    ).first_or_404()
+    notification.is_read = True
+    db.session.commit()
+    flash('Notification marked as read.', category='success')
+    return redirect(request.form.get('next') or url_for('employee.notifications'))
+
+
+@employee.route('/notifications/<int:notification_id>/delete', methods=['POST'])
+@login_required
+def delete_notification(notification_id):
+    notification = Notification.query.filter_by(
+        id=notification_id,
+        user_id=current_user.id,
+    ).first_or_404()
+    db.session.delete(notification)
+    db.session.commit()
+    flash('Notification deleted.', category='success')
+    return redirect(url_for('employee.notifications'))

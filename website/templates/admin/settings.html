@@ -83,9 +83,11 @@
           {% for u in assigned_users %}
           <div class="approver-card compact-card">
             <div class="approver-info">
-              <div class="approver-avatar">
-                <i class="fa-solid fa-user-shield"></i>
-              </div>
+              {% if u.employee and u.employee.photopath %}
+              <img src="{{ url_for('static', filename=u.employee.photopath) }}" alt="{{ u.username[:1] }}" class="approver-avatar">
+              {% else %}
+              <div class="approver-avatar">{{ (u.employee.first_name[:1] if u.employee else u.username[:1])|upper }}</div>
+              {% endif %}
               <div class="approver-details">
                 <strong>{{ u.username }}</strong>
                 {% if u.employee %}
@@ -171,9 +173,11 @@
     {% for a in approvers %}
     <div class="approver-card">
       <div class="approver-info">
-        <div class="approver-avatar">
-          <i class="fa-solid fa-user-shield"></i>
-        </div>
+        {% if a.user.employee and a.user.employee.photopath %}
+        <img src="{{ url_for('static', filename=a.user.employee.photopath) }}" alt="{{ a.user.username[:1] }}" class="approver-avatar">
+        {% else %}
+        <div class="approver-avatar">{{ (a.user.employee.first_name[:1] if a.user.employee else a.user.username[:1])|upper }}</div>
+        {% endif %}
         <div class="approver-details">
           <strong>{{ a.user.username }}</strong>
           <span class="approver-role">{{ a.user.role }}</span>

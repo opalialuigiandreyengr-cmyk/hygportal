@@ -33,11 +33,15 @@
           <tr>
             <td>
               <div class="employee-cell company-cell">
+                {% if employee and employee.photopath %}
                 <img
-                  src="{{ url_for('static', filename=employee.photopath) if employee and employee.photopath else 'https://picsum.photos/seed/user-' ~ user.id ~ '/100/100' }}"
+                  src="{{ url_for('static', filename=employee.photopath) }}"
                   alt="{{ user.username }}"
                   class="company-logo-table"
                 >
+                {% else %}
+                <div class="company-logo-table-letter">{{ (employee.first_name[:1] if employee else user.username[:1])|upper }}</div>
+                {% endif %}
                 <div class="company-meta">
                   <strong class="company-name-text">{{ user.username }}</strong>
                   <small class="company-subtext">User ID: {{ user.id }}</small>

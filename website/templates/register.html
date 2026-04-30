@@ -215,10 +215,8 @@
       const form = document.getElementById("registerForm");
       return {
         first_name: form.first_name.value.trim(),
-        middle_name: form.middle_name.value.trim(),
         last_name: form.last_name.value.trim(),
-        birth_date: form.birth_date.value,
-        email: form.email.value.trim()
+        birth_date: form.birth_date.value
       };
     }
 
@@ -298,7 +296,7 @@
 
     window.addEventListener("DOMContentLoaded", () => {
       // Reset verification if user modifies fields after being verified
-      document.querySelectorAll("#step1 input").forEach((input) => {
+      document.querySelectorAll("#first_name, #last_name, #birth_date").forEach((input) => {
         input.addEventListener("input", () => {
           verifiedEmployeeId = null;
           verifiedSignature = "";

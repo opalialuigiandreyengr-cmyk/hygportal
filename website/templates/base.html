@@ -51,6 +51,14 @@
           </a>
         </li>
         {% endif %}
+        {% if has_employee_profile %}
+        <li>
+          <a href="{{ url_for('employee.view_employee', employee_id=current_user.employee.id) }}" class="nav-link {% if request.path.startswith('/employee/profile/' ~ current_user.employee.id) %}active{% endif %}">
+            <i class="fa-solid fa-user"></i>
+            <span>My Profile</span>
+          </a>
+        </li>
+        {% endif %}
         {% if can_manage_employees %}
           <li>
             <a href="{{ url_for('admin.employees') }}" class="nav-link {% if request.path == '/employees' %}active{% endif %}">
@@ -174,9 +182,12 @@
       {% set profile_name = current_user.username if current_user.is_authenticated and current_user.username else 'Guest' %}
       {% set role_label_map = {'admin': 'Administrator', 'hr': 'HR', 'timekeeper': 'Timekeeper', 'user': 'Employee', 'dept manager': 'Dept Manager', 'operation': 'Operations', 'general manager': 'General Manager'} %}
       {% set profile_position = profile_employee.position if profile_employee and profile_employee.position else role_label_map.get(role, 'Employee') %}
-      {% set profile_photo = url_for('static', filename=profile_employee.photopath) if profile_employee and profile_employee.photopath else 'https://picsum.photos/seed/' ~ (current_user.id if current_user.is_authenticated else 'guest') ~ '/40/40' %}
       <div class="sidebar-foot">
-        <img src="{{ profile_photo }}" alt="{{ profile_name }}">
+        {% if profile_employee and profile_employee.photopath %}
+        <img src="{{ url_for('static', filename=profile_employee.photopath) }}" alt="{{ profile_name }}">
+        {% else %}
+        <span class="avatar-letter">{{ profile_name[:1] }}</span>
+        {% endif %}
         <div>
           <div><strong>{{ profile_name|trim }}</strong></div>
           <small>{{ profile_position }}</small>
@@ -200,10 +211,30 @@
             <i class="fa-solid fa-magnifying-glass"></i>
             <input type="text" placeholder="Search">
           </label>
+          <div class="mobile-topbar-brand" aria-label="HYG Portal System">
+            <span class="mobile-topbar-logo">
+              <img src="{{ url_for('static', filename='images/logos/HYG LOGO.png') }}" alt="BOC Logo">
+            </span>
+            <strong>HYG Portal System</strong>
+          </div>
         </div>
         <div class="topbar-right">
-          <button class="icon-btn" title="Notifications"><i class="fa-regular fa-bell"></i></button>
-          <button class="icon-btn" title="Messages"><i class="fa-regular fa-comment-dots"></i></button>
+          <a href="{{ url_for('employee.notifications') if current_user.is_authenticated else url_for('auth.login') }}" class="icon-btn topbar-notification-link" title="Notifications" aria-label="Notifications">
+            <i class="fa-regular fa-bell"></i>
+            {% if unread_notification_count %}
+            <span class="topbar-notification-badge">{{ unread_notification_count if unread_notification_count < 10 else '9+' }}</span>
+            {% endif %}
+          </a>
+          <a href="{{ url_for('employee.notifications') if current_user.is_authenticated else url_for('auth.login') }}" class="icon-btn" title="Messages" aria-label="Messages"><i class="fa-regular fa-comment-dots"></i></a>
+          {% if current_user.is_authenticated %}
+          <a href="{% if has_employee_profile %}{{ url_for('employee.view_employee', employee_id=current_user.employee.id) }}{% else %}{{ url_for('views.home') }}{% endif %}" class="topbar-avatar" title="{{ profile_name|trim }}" aria-label="Open profile">
+            {% if profile_employee and profile_employee.photopath %}
+            <img src="{{ url_for('static', filename=profile_employee.photopath) }}" alt="{{ profile_name|trim }}">
+            {% else %}
+            <span class="avatar-letter">{{ profile_name[:1] }}</span>
+            {% endif %}
+          </a>
+          {% endif %}
           <div class="date-pill"><i class="fa-regular fa-calendar"></i><span id="topbarDate">Today</span></div>
         </div>
       </header>
@@ -218,34 +249,58 @@
 <nav class="mobile-bottom-nav" aria-label="Mobile navigation">
   <a href="{% if has_employee_profile %}{{ url_for('employee.employee_dashboard') }}{% else %}{{ url_for('views.home') }}{% endif %}"
      class="mobile-nav-link {% if request.path == '/dashboard' or request.path == '/' or request.path == '/employee/employee_dashboard' or request.path == '/employee_dashboard' %}active{% endif %}">
-    <i class="fa-solid fa-right-from-bracket"></i>
-    <span>Dashboard</span>
+    <i class="fa-solid fa-house"></i>
+    <span>Home</span>
   </a>
 
   {% if has_employee_profile %}
 
     <a href="{{ url_for('views.attendance') }}"
        class="mobile-nav-link {% if request.path == '/attendance' %}active{% endif %}">
-      <i class="fa-solid fa-clock"></i>
+      <i class="fa-regular fa-calendar"></i>
       <span>Attendance</span>
     </a>
 
-    <a href="{{ url_for('employee.leaves') }}"
-       class="mobile-nav-link {% if request.path == '/leaves' %}active{% endif %}">
-      <i class="fa-solid fa-calendar-day"></i>
-      <span>Leaves</span>
+    <button type="button"
+            class="mobile-nav-link mobile-nav-add"
+            id="mobileQuickActionBtn"
+            aria-label="Open request menu"
+            aria-expanded="false"
+            aria-controls="mobileQuickActions">
+      <i class="fa-solid fa-plus"></i>
+      <span>Create</span>
+    </button>
+
+    <div class="mobile-quick-actions" id="mobileQuickActions" aria-label="Request quick actions">
+      <a href="{{ url_for('employee.leaves') }}" class="mobile-quick-action">
+        <i class="fa-regular fa-calendar-check"></i>
+        <span>Request Leave</span>
+      </a>
+      <a href="{{ url_for('employee.esarf') }}" class="mobile-quick-action">
+        <i class="fa-solid fa-file-signature"></i>
+        <span>Apply ESARF</span>
+      </a>
+      <a href="{{ url_for('employee.perks') }}" class="mobile-quick-action">
+        <i class="fa-solid fa-gift"></i>
+        <span>Request Perks</span>
+      </a>
+    </div>
+
+    <a href="{{ url_for('employee.notifications') }}"
+       class="mobile-nav-link {% if request.path == '/notifications' %}active{% endif %}">
+      <span class="mobile-nav-icon-wrap">
+        <i class="fa-regular fa-comment-dots"></i>
+        {% if unread_notification_count %}
+        <span class="mobile-nav-badge" aria-hidden="true">{{ unread_notification_count if unread_notification_count < 10 else '9+' }}</span>
+        {% endif %}
+      </span>
+      <span>Messages</span>
     </a>
 
-    <a href="{{ url_for('employee.esarf') }}"
-       class="mobile-nav-link {% if request.path in ['/employee/esarf', '/esarf', '/employee/esarf_requests'] %}active{% endif %}">
-      <i class="fa-solid fa-file-signature"></i>
-      <span>ESARF</span>
-    </a>
-
-    <a href="{{ url_for('employee.perks') }}"
-       class="mobile-nav-link {% if request.path == '/employee/perks' %}active{% endif %}">
-      <i class="fa-solid fa-gift"></i>
-      <span>Perks</span>
+    <a href="{{ url_for('employee.view_employee', employee_id=current_user.employee.id) }}"
+       class="mobile-nav-link {% if request.path.startswith('/employee/profile/' ~ current_user.employee.id) %}active{% endif %}">
+      <i class="fa-regular fa-user"></i>
+      <span>Profile</span>
     </a>
 
   {% elif can_manage_employees %}

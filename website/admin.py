@@ -12,13 +12,14 @@ from werkzeug.security import generate_password_hash
 
 from . import db
 from .helpers import (
+    create_notification,
     _parse_date,
     _parse_int,
     _save_company_logo,
     _save_employee_photo,
     roles_required,
 )
-from .models import Company, Employee, User, EsarfRequest, DiscountRequest, ProductChargeRequest, PerkApprover
+from .models import Company, Employee, User, EsarfRequest, LeaveRequest, DiscountRequest, ProductChargeRequest, PerkApprover
 
 admin = Blueprint("admin", __name__)
 
@@ -34,6 +35,39 @@ ESARF_APPROVER_ROLES = [
     ("general manager", "General Manager"),
 ]
 ESARF_APPROVER_ROLE_KEYS = {role for role, _label in ESARF_APPROVER_ROLES}
+
+
+def _format_employee_no(hired_date, sequence):
+    date_part = hired_date.strftime("%m%d%Y") if hired_date else "00000000"
+    return f"{date_part}-{sequence:02d}"
+
+
+def _next_employee_no_for_date(hired_date, exclude_employee_id=None):
+    prefix = hired_date.strftime("%m%d%Y") if hired_date else "00000000"
+    query = Employee.query.with_entities(Employee.employee_no).filter(
+        Employee.employee_no.like(f"{prefix}-%")
+    )
+    if exclude_employee_id is not None:
+        query = query.filter(Employee.id != exclude_employee_id)
+
+    max_sequence = 0
+    for value, in query.all():
+        if not value:
+            continue
+        try:
+            max_sequence = max(max_sequence, int(str(value).rsplit("-", 1)[1]))
+        except (IndexError, ValueError):
+            continue
+    return _format_employee_no(hired_date, max_sequence + 1)
+
+
+def _should_refresh_employee_no(employee_no, hired_date):
+    normalized_employee_no = (str(employee_no or "").strip()).lower()
+    return (
+        not normalized_employee_no
+        or normalized_employee_no in {"none", "n/a", "null"}
+        or normalized_employee_no.startswith("00000000-")
+    )
 
 
 def _compute_age_from_birth_date(birth_date):
@@ -314,6 +348,8 @@ def add_employee():
         if photo_file and photo_file.filename
         else None
     )
+    hired_date = _parse_date(request.form.get("hired_date"))
+    employee_no = _next_employee_no_for_date(hired_date)
 
     # Create employee (ONLY fields from your HTML form)
     new_employee = Employee(
@@ -335,10 +371,10 @@ def add_employee():
         present_address=request.form.get("present_address"),
 
         # Employment Info
-        employee_no=(request.form.get("employee_no") or "").strip(),
+        employee_no=employee_no,
         company=(request.form.get("company") or "").strip(),
         department=(request.form.get("department") or "").strip(),
-        hired_date=_parse_date(request.form.get("hired_date")),
+        hired_date=hired_date,
         employee_type=request.form.get("employee_type"),
 
         # Government IDs & Bank
@@ -466,6 +502,8 @@ def edit_employee(employee_id):
     company_name = (request.form.get("company") or "").strip()
     birth_date = _parse_date(request.form.get("birth_date")) or employee.birth_date
     hired_date = _parse_date(request.form.get("hired_date")) or employee.hired_date
+    if _should_refresh_employee_no(employee_no, hired_date):
+        employee_no = _next_employee_no_for_date(hired_date, exclude_employee_id=employee.id)
 
     first_name = (request.form.get("first_name") or "").strip()
     last_name = (request.form.get("last_name") or "").strip()
@@ -709,6 +747,15 @@ def update_esarf_status(esarf_id):
     elif not action and legacy_status == ESARF_STATUS_REJECTED:
         action = "reject"
 
+    role_labels = {
+        "admin": "Admin",
+        "timekeeper": "Timekeeper",
+        "dept manager": "Dept Manager",
+        "operation": "Operations",
+        "general manager": "General Manager",
+    }
+    approver_label = role_labels.get(current_role, current_role.title())
+
     if current_role == "dept manager":
         if action == "reject":
             if esarf_request.status != ESARF_STATUS_PENDING:
@@ -777,12 +824,6 @@ def update_esarf_status(esarf_id):
         esarf_request.status = ESARF_STATUS_APPROVED
         success_message = f"ESARF request #{esarf_request.id}: General Manager approval recorded. Request is now Approved."
     elif current_role in {"admin", "timekeeper"}:
-        role_labels = {
-            "admin": "Admin",
-            "timekeeper": "Timekeeper",
-            "dept manager": "Dept Manager",
-        }
-        approver_label = role_labels.get(current_role, current_role.title())
         if action == "approve":
             if esarf_request.status != ESARF_STATUS_PENDING:
                 flash("Only pending requests can be approved.", category="error")
@@ -810,6 +851,29 @@ def update_esarf_status(esarf_id):
         return redirect(url_for("admin.esarf_requests"))
 
     try:
+        notification_category = "approved" if esarf_request.status == ESARF_STATUS_APPROVED else (
+            "rejected" if esarf_request.status == ESARF_STATUS_REJECTED else "info"
+        )
+        if esarf_request.status == ESARF_STATUS_REJECTED:
+            notification_title = f"Declined by {approver_label}"
+            notification_message = "Your ESARF was declined."
+        elif esarf_request.status == ESARF_STATUS_APPROVED:
+            notification_title = f"Approved by {approver_label}"
+            notification_message = "Your ESARF was approved."
+        elif action == "operation_approve":
+            notification_title = "Approved by Operations"
+            notification_message = "Moved to General Manager."
+        else:
+            notification_title = "Approved by Dept Manager"
+            notification_message = "Moved to the next approver."
+
+        create_notification(
+            esarf_request.submitted_by_user_id,
+            notification_title,
+            notification_message,
+            category=notification_category,
+            link_url=url_for("employee.esarf_requests"),
+        )
         db.session.commit()
         flash(success_message, category="success")
     except Exception:
@@ -822,8 +886,51 @@ def update_esarf_status(esarf_id):
 @admin.route('/leave_requests', methods=['GET'])
 @roles_required("admin", "timekeeper")
 def leave_requests():
+    leave_request_items = LeaveRequest.query.order_by(LeaveRequest.id.desc()).all()
+    grouped_leaves = {
+        "pending": [],
+        "approved": [],
+        "rejected": [],
+    }
+    for leave in leave_request_items:
+        status_key = (leave.status or "Pending").strip().lower()
+        grouped_leaves.setdefault(status_key, []).append(leave)
 
-    return render_template('admin/leave_requests.html', )
+    return render_template(
+        'admin/leave_requests.html',
+        grouped_leaves=grouped_leaves,
+    )
+
+
+@admin.route('/leave_requests/<int:leave_id>/status', methods=['POST'])
+@roles_required("admin", "timekeeper")
+def update_leave_status(leave_id):
+    leave_request = LeaveRequest.query.get_or_404(leave_id)
+    status = (request.form.get('status') or '').strip().title()
+    if status not in {'Approved', 'Rejected'}:
+        flash('Please choose a valid leave status.', category='error')
+        return redirect(url_for('admin.leave_requests'))
+
+    if (leave_request.status or '').strip().lower() != 'pending':
+        flash('Only pending leave requests can be updated.', category='error')
+        return redirect(url_for('admin.leave_requests'))
+
+    leave_request.status = status
+    try:
+        create_notification(
+            leave_request.submitted_by_user_id,
+            f"Leave {status.lower()}",
+            f"Your {leave_request.leave_category} leave was {status.lower()}.",
+            category="approved" if status == "Approved" else "rejected",
+            link_url=url_for("employee.leaves"),
+        )
+        db.session.commit()
+        flash(f'Leave request #{leave_id} {status.lower()}.', category='success')
+    except Exception:
+        db.session.rollback()
+        flash('Unable to update leave request status.', category='error')
+
+    return redirect(url_for('admin.leave_requests'))
 
 
 @admin.route('/perk_requests', methods=['GET'])
@@ -1104,6 +1211,13 @@ def approve_perk(perk_type, perk_id):
 
     perk.status = 'Approved'
     try:
+        create_notification(
+            perk.submitted_by_user_id,
+            "Perk approved",
+            f"Your {perk_type} request was approved.",
+            category="approved",
+            link_url=url_for("employee.perks"),
+        )
         db.session.commit()
         flash(f'{perk_type.title()} request #{perk_id} approved.', category='success')
     except Exception:
@@ -1148,6 +1262,13 @@ def decline_perk(perk_type, perk_id):
     perk.status = 'Rejected'
     perk.declined_reason = decline_reason
     try:
+        create_notification(
+            perk.submitted_by_user_id,
+            "Perk declined",
+            f"Your {perk_type} request was declined.",
+            category="rejected",
+            link_url=url_for("employee.perks"),
+        )
         db.session.commit()
         flash(f'{perk_type.title()} request #{perk_id} declined.', category='success')
     except Exception:

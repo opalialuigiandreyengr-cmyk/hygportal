@@ -328,7 +328,11 @@
             </td>
             <td>
               <div class="esarf-employee-cell">
+                {% if submit_emp and submit_emp.photopath %}
+                <img src="{{ url_for('static', filename=submit_emp.photopath) }}" alt="{{ submit_name[:1] }}" class="esarf-avatar">
+                {% else %}
                 <span class="esarf-avatar">{{ submit_name[:1] }}</span>
+                {% endif %}
                 <div class="company-meta">
                   <strong class="company-name-text">{{ submit_name }}</strong>
                   <small class="company-subtext">{{ submit_department }}</small>
@@ -363,7 +367,6 @@
             <td class="action-cell">
               <div class="action-icons">
                 {{ view_action(req) }}
-                {{ approval_actions(req, raw_status, dept_manager_signed, operation_signed, current_role) }}
               </div>
             </td>
           </tr>
@@ -421,7 +424,11 @@
     {% set filed_time_display = req.created_at.strftime('%I:%M %p') if req.created_at else '' %}
     <article class="employee-esarf-mobile-card is-{{ status_key }}" data-esarf-status="{{ status_key }}" data-esarf-date="{{ req.created_at.strftime('%Y-%m-%d') if req.created_at else '' }}" data-search-text="{{ esarf_number ~ ' ' ~ submit_name ~ ' ' ~ submit_department ~ ' ' ~ transaction_display ~ ' ' ~ raw_status }}">
       <div class="employee-esarf-mobile-main">
+        {% if submit_emp and submit_emp.photopath %}
+        <img src="{{ url_for('static', filename=submit_emp.photopath) }}" alt="{{ submit_name[:1] }}" class="employee-esarf-mobile-avatar is-{{ status_key }}">
+        {% else %}
         <span class="employee-esarf-mobile-avatar is-{{ status_key }}">{{ submit_name[:1] }}</span>
+        {% endif %}
         <div class="employee-esarf-mobile-body">
           <div class="employee-esarf-mobile-row">
             <strong class="employee-esarf-mobile-id">{{ esarf_number }}</strong>
@@ -448,7 +455,6 @@
             </span>
             <div class="employee-esarf-mobile-actions">
               {{ view_action(req) }}
-              {{ approval_actions(req, raw_status, dept_manager_signed, operation_signed, current_role) }}
             </div>
           </div>
         </div>
@@ -496,7 +502,11 @@
     <section class="esarf-drawer-card">
       <div class="esarf-drawer-person-card">
         <div class="esarf-drawer-person">
+          {% if submit_emp and submit_emp.photopath %}
+          <img src="{{ url_for('static', filename=submit_emp.photopath) }}" alt="{{ submit_name[:1] }}" class="esarf-avatar">
+          {% else %}
           <span class="esarf-avatar">{{ submit_name[:1] }}</span>
+          {% endif %}
           <div>
             <strong>{{ submit_name }}</strong>
             <span>{{ submit_department }}</span>

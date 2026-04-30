@@ -3,17 +3,8 @@
 
 {% block page_content %}
 <style>
-
-/* ===== PAGE ===== */
-body {
-  background: #f6f7fb;
-}
-
-/* ===== FILTER BUTTONS ===== */
-.filter-bar {
-  margin-bottom: 1.5rem;
-}
-
+body { background: #f6f7fb; }
+.filter-bar { margin-bottom: 1.5rem; }
 .filter-btn {
   padding: 0.4rem 1rem;
   border-radius: 20px;
@@ -23,15 +14,12 @@ body {
   font-size: 0.8rem;
   margin-right: 8px;
 }
-
 .filter-btn.active {
   background: #ebfa14;
-  color:black;
+  color: black;
   border-color: #ecd90d;
   font-weight: bold;
 }
-
-/* ===== STATUS SECTIONS ===== */
 .section {
   background: #fff;
   border-radius: 12px;
@@ -39,25 +27,19 @@ body {
   margin-bottom: 1.8rem;
   box-shadow: 0 4px 12px rgba(0,0,0,0.05);
 }
-
 .section-title {
   font-size: 1rem;
   font-weight: 600;
   margin-bottom: 1rem;
 }
-
-/* subtle left border only */
 .section.pending { border-left: 4px solid #f59e0b; }
 .section.approved { border-left: 4px solid #10b981; }
 .section.rejected { border-left: 4px solid #ef4444; }
-
-/* ===== LEAVE ITEMS ===== */
 .leave-list {
   display: flex;
   flex-direction: column;
   gap: 0.8rem;
 }
-
 .leave-item {
   border: 1px solid #eee;
   border-radius: 10px;
@@ -65,27 +47,22 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 1rem;
 }
-
 .leave-info small {
   display: block;
   color: #777;
   margin-top: 2px;
   font-size: 0.8rem;
 }
-
-/* ===== STATUS TEXT ===== */
 .status-text {
   font-size: 0.75rem;
   font-weight: 600;
   margin-right: 8px;
 }
-
 .status-text.pending { color: #b45309; }
 .status-text.approved { color: #047857; }
 .status-text.rejected { color: #b91c1c; }
-
-/* ===== BUTTONS ===== */
 .btn {
   padding: 0.3rem 0.8rem;
   border-radius: 20px;
@@ -93,18 +70,46 @@ body {
   font-size: 0.7rem;
   cursor: pointer;
 }
-
-.btn-approve {
-  background: #10b981;
-  color: white;
+.btn-approve { background: #10b981; color: white; }
+.btn-reject { background: #ef4444; color: white; }
+.leave-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
-
-.btn-reject {
-  background: #ef4444;
-  color: white;
+.leave-actions form { margin: 0; }
+@media (max-width: 680px) {
+  .leave-item { align-items: flex-start; flex-direction: column; }
+  .leave-actions { justify-content: flex-start; }
 }
-
 </style>
+
+{% macro leave_card(leave, status_key) %}
+  {% set employee = leave.submitted_by_user.employee if leave.submitted_by_user else None %}
+  {% set employee_name = ((employee.first_name or '') ~ ' ' ~ (employee.last_name or '')).strip() if employee else (leave.submitted_by_user.username if leave.submitted_by_user else 'Employee') %}
+  <div class="leave-item">
+    <div class="leave-info">
+      <strong>{{ leave.leave_category }}</strong> ({{ employee_name }})
+      <small>{{ leave.start_date.strftime('%Y-%m-%d') }} -> {{ leave.end_date.strftime('%Y-%m-%d') }}</small>
+      <small>{{ leave.reason or 'No reason provided' }}</small>
+    </div>
+    <div class="leave-actions">
+      <span class="status-text {{ status_key }}">{{ status_key.upper() }}</span>
+      {% if status_key == 'pending' %}
+      <form method="POST" action="{{ url_for('admin.update_leave_status', leave_id=leave.id) }}">
+        <input type="hidden" name="status" value="Approved">
+        <button class="btn btn-approve" type="submit">Approve</button>
+      </form>
+      <form method="POST" action="{{ url_for('admin.update_leave_status', leave_id=leave.id) }}">
+        <input type="hidden" name="status" value="Rejected">
+        <button class="btn btn-reject" type="submit">Reject</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+{% endmacro %}
 
 <section class="page-header">
   <div>
@@ -113,7 +118,6 @@ body {
   </div>
 </section>
 
-<!-- FILTER BUTTONS -->
 <div class="filter-bar">
   <button class="filter-btn active" onclick="filterStatus('all', this)">All</button>
   <button class="filter-btn" onclick="filterStatus('pending', this)">Pending</button>
@@ -121,117 +125,50 @@ body {
   <button class="filter-btn" onclick="filterStatus('rejected', this)">Rejected</button>
 </div>
 
-<!-- PENDING -->
 <div class="section pending" id="pendingSection">
   <div class="section-title">Pending Requests</div>
-  <div class="leave-list" id="pendingList"></div>
+  <div class="leave-list">
+    {% for leave in grouped_leaves.pending %}
+      {{ leave_card(leave, 'pending') }}
+    {% else %}
+      <p class="text-muted mb-0">No pending leave requests.</p>
+    {% endfor %}
+  </div>
 </div>
 
-<!-- APPROVED -->
 <div class="section approved" id="approvedSection">
   <div class="section-title">Approved Requests</div>
-  <div class="leave-list" id="approvedList"></div>
+  <div class="leave-list">
+    {% for leave in grouped_leaves.approved %}
+      {{ leave_card(leave, 'approved') }}
+    {% else %}
+      <p class="text-muted mb-0">No approved leave requests.</p>
+    {% endfor %}
+  </div>
 </div>
 
-<!-- REJECTED -->
 <div class="section rejected" id="rejectedSection">
   <div class="section-title">Rejected Requests</div>
-  <div class="leave-list" id="rejectedList"></div>
+  <div class="leave-list">
+    {% for leave in grouped_leaves.rejected %}
+      {{ leave_card(leave, 'rejected') }}
+    {% else %}
+      <p class="text-muted mb-0">No rejected leave requests.</p>
+    {% endfor %}
+  </div>
 </div>
 
 <script>
-
-/* SAMPLE DATA */
-let leaves = [
-  {
-    id: 1,
-    employee_name: "John Doe",
-    leave_type: "Annual Leave",
-    start_date: "2026-03-10",
-    end_date: "2026-03-15",
-    reason: "Family vacation",
-    status: "pending"
-  },
-  {
-    id: 2,
-    employee_name: "Maria Santos",
-    leave_type: "Sick Leave",
-    start_date: "2026-03-08",
-    end_date: "2026-03-09",
-    reason: "Medical checkup",
-    status: "pending"
-  },
-  {
-    id: 3,
-    employee_name: "James Cruz",
-    leave_type: "Emergency Leave",
-    start_date: "2026-03-01",
-    end_date: "2026-03-02",
-    reason: "Family emergency",
-    status: "approved"
-  }
-];
-
-function renderLeaves(){
-  const pendingList = document.getElementById("pendingList");
-  const approvedList = document.getElementById("approvedList");
-  const rejectedList = document.getElementById("rejectedList");
-
-  pendingList.innerHTML = "";
-  approvedList.innerHTML = "";
-  rejectedList.innerHTML = "";
-
-  leaves.forEach(leave => {
-
-    const div = document.createElement("div");
-    div.className = "leave-item";
-    div.innerHTML = `
-      <div class="leave-info">
-        <strong>${leave.leave_type}</strong> (${leave.employee_name})
-        <small>${leave.start_date} → ${leave.end_date}</small>
-        <small>${leave.reason}</small>
-      </div>
-      <div>
-        <span class="status-text ${leave.status}">
-          ${leave.status.toUpperCase()}
-        </span>
-        ${leave.status==="pending"
-          ? `<button class="btn btn-approve" onclick="updateStatus(${leave.id}, 'approved')">Approve</button>
-             <button class="btn btn-reject" onclick="updateStatus(${leave.id}, 'rejected')">Reject</button>`
-          : ""}
-      </div>
-    `;
-
-    if(leave.status==="pending") pendingList.appendChild(div);
-    if(leave.status==="approved") approvedList.appendChild(div);
-    if(leave.status==="rejected") rejectedList.appendChild(div);
-  });
-}
-
-function updateStatus(id, status){
-  leaves = leaves.map(l => {
-    if(l.id === id) l.status = status;
-    return l;
-  });
-  renderLeaves();
-}
-
-function filterStatus(status, button){
+function filterStatus(status, button) {
   document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
   button.classList.add('active');
 
   document.getElementById("pendingSection").style.display =
-    (status==="all" || status==="pending") ? "block" : "none";
-
+    (status === "all" || status === "pending") ? "block" : "none";
   document.getElementById("approvedSection").style.display =
-    (status==="all" || status==="approved") ? "block" : "none";
-
+    (status === "all" || status === "approved") ? "block" : "none";
   document.getElementById("rejectedSection").style.display =
-    (status==="all" || status==="rejected") ? "block" : "none";
+    (status === "all" || status === "rejected") ? "block" : "none";
 }
-
-renderLeaves();
-
 </script>
-
 {% endblock %}

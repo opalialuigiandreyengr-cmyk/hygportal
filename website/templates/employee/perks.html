@@ -7,14 +7,6 @@
 
 {% block page_content %}
 
-<!-- ================= GREETING ================= -->
-<section class="page-header perks-greeting">
-  <div>
-    <h1>Employee Perks</h1>
-    <p>Apply for discounts and product charges.</p>
-  </div>
-</section>
-
 <!-- ================= TWO-CARD FORMS ================= -->
 <section class="perks-mobile-selector" aria-label="Choose perk request type">
   <button type="button" class="perks-select-card active" data-perk-select="discount" aria-pressed="true">
@@ -22,8 +14,8 @@
       <i class="fa-solid fa-percent"></i>
     </span>
     <span>
-      <strong>Goldilocks Discount</strong>
-      <small>15% off</small>
+      <strong>Employee Discount (Cash)</strong>
+      <small>15% off, PHP 3,000 yearly cap</small>
     </span>
   </button>
 
@@ -32,46 +24,57 @@
       <i class="fa-solid fa-cart-shopping"></i>
     </span>
     <span>
-      <strong>Product Charge</strong>
-      <small>Up to PHP 3,000</small>
+      <strong>Employee Charge (Credit)</strong>
+      <small>PHP 3,000 per transaction</small>
     </span>
   </button>
 </section>
 
 <section class="perks-forms-grid">
 
-  <!-- GOLDILOCKS DISCOUNT -->
+  <!-- EMPLOYEE DISCOUNT CASH -->
   <article class="card perks-form-card active" data-perk-card="discount">
     <div class="perks-form-header">
       <div class="perks-form-icon goldilocks-icon">
         <i class="fa-solid fa-percent"></i>
       </div>
       <div>
-        <h2 class="perks-form-title">Goldilocks Discount</h2>
-        <p class="perks-form-sub">15% off per transaction</p>
+        <h2 class="perks-form-title">Employee Discount (Cash)</h2>
+        <p class="perks-form-sub">15% off per transaction, up to PHP 3,000 per year</p>
       </div>
     </div>
 
     <div class="perks-limit-bar">
       <div class="perks-limit-info">
-        <span>Transactions Used</span>
-        <strong>{{ discount_used }}/6 this year</strong>
+        <span>Yearly cash discount used</span>
+        <strong>PHP {{ '%.2f'|format(discount_used) }} / {{ '%.0f'|format(annual_cash_limit) }}</strong>
       </div>
       <div class="perks-limit-track">
-        <div class="perks-limit-fill" style="width: {{ (discount_used / 6 * 100)|int }}%;"></div>
+        <div class="perks-limit-fill" style="width: {{ (discount_used / annual_cash_limit * 100)|int if annual_cash_limit else 0 }}%;"></div>
+      </div>
+      <div class="perks-limit-info">
+        <span>Transactions used</span>
+        <strong>{{ discount_transaction_count }} / {{ annual_cash_transaction_limit }} this year</strong>
+      </div>
+      <div class="perks-limit-track">
+        <div class="perks-limit-fill" style="width: {{ (discount_transaction_count / annual_cash_transaction_limit * 100)|int if annual_cash_transaction_limit else 0 }}%;"></div>
       </div>
     </div>
 
-    {% if discount_remaining <= 0 %}
+    {% if discount_remaining <= 0 or discount_transaction_remaining <= 0 %}
     <div class="perks-limit-reached">
       <i class="fa-solid fa-circle-exclamation"></i>
-      You have reached the maximum of 6 discount transactions for this year.
+      {% if discount_remaining <= 0 %}
+        You have reached the PHP 3,000 yearly employee discount limit.
+      {% else %}
+        You have reached the maximum of 6 employee discount transactions for this year.
+      {% endif %}
     </div>
     {% elif pending_discount %}
     <div class="perks-pending-notice">
       <i class="fa-solid fa-clock"></i>
       <div>
-        <strong>You have a pending discount request.</strong>
+        <strong>You have a pending employee discount request.</strong>
         <p>{{ pending_discount.product_name }} &mdash; PHP {{ '%.2f'|format(pending_discount.discounted_amount) }}</p>
         <small>Please wait for it to be processed before submitting another.</small>
       </div>
@@ -81,115 +84,175 @@
       <input type="hidden" name="form_type" value="discount">
 
       <div class="field">
-        <label>Transaction Date</label>
+        <label>Transaction date</label>
         <input type="date" name="transaction_date" required>
       </div>
 
-      <div class="field">
-        <label>Product Name</label>
-        <input type="text" name="product_name" required placeholder="e.g. Cake, Polvoron">
-      </div>
-
-      <div class="perks-qty-price-row">
-        <div class="field">
-          <label>Quantity</label>
-          <input type="number" name="quantity" id="discountQty" min="1" required placeholder="0" oninput="calcDiscount()">
+      <div class="perks-products-block" data-products="discount">
+        <div class="perks-products-head">
+          <label>Products</label>
+          <div class="perks-product-actions">
+            <button type="button" class="perks-remove-last-btn" data-remove-last-product="discount" aria-label="Remove last product">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+            <button type="button" class="perks-add-product-btn" data-add-product="discount">
+              <i class="fa-solid fa-plus"></i>
+              Add product
+            </button>
+          </div>
         </div>
-        <div class="field">
-          <label>Unit Price (PHP)</label>
-          <input type="number" name="price" id="discountPrice" step="0.01" min="0.01" required placeholder="0.00" oninput="calcDiscount()">
+        <div class="perks-product-list" id="discountProductList">
+          <div class="perks-product-row">
+            <div class="field">
+              <label>Product name</label>
+              <input type="text" name="discount_product_name[]" required placeholder="e.g. Cake">
+            </div>
+            <div class="field">
+              <label>Quantity</label>
+              <input type="number" name="discount_quantity[]" min="1" required placeholder="0" oninput="calcDiscount()">
+            </div>
+            <div class="field">
+              <label>Unit price (PHP)</label>
+              <input type="number" name="discount_price[]" step="0.01" min="0.01" required placeholder="0.00" oninput="calcDiscount()">
+            </div>
+          </div>
         </div>
       </div>
 
-      <div class="perks-calc-preview">
-        <span>Purchase Amount</span>
-        <strong id="discountAmountDisplay">0.00</strong>
-      </div>
-
-      <div class="perks-calc-preview" id="discountPreview">
-        <span>Discounted Amount (15% off)</span>
-        <strong id="discountResult">0.00</strong>
+      <div class="perks-calc-preview perks-calc-stack" id="discountPreview">
+        <div class="perks-calc-row">
+          <span>Purchase amount</span>
+          <strong id="discountAmountDisplay">0.00</strong>
+        </div>
+        <div class="perks-calc-row">
+          <span>Discounted amount (15% off)</span>
+          <div>
+            <strong id="discountResult">0.00</strong>
+            <small id="discountLimitWarn" class="perks-limit-warn" style="display:none;">Exceeds remaining yearly cash discount limit</small>
+          </div>
+        </div>
       </div>
 
       <button type="submit" class="primary-btn perks-submit-btn">
-        <i class="fa-solid fa-percent"></i> Apply Discount
+        <i class="fa-solid fa-percent"></i> Apply cash discount
       </button>
     </form>
     {% endif %}
   </article>
 
-  <!-- PRODUCT CHARGE -->
+  <!-- EMPLOYEE CHARGE CREDIT -->
   <article class="card perks-form-card" data-perk-card="charge">
     <div class="perks-form-header">
       <div class="perks-form-icon charge-icon">
         <i class="fa-solid fa-cart-shopping"></i>
       </div>
       <div>
-        <h2 class="perks-form-title">Product Charge</h2>
-        <p class="perks-form-sub">Charge products up to PHP 3,000</p>
+        <h2 class="perks-form-title">Employee Charge (Credit)</h2>
+        <p class="perks-form-sub">First yearly transaction gets 15% off; each transaction maxes at PHP 3,000</p>
       </div>
     </div>
 
     <div class="perks-limit-bar">
       <div class="perks-limit-info">
-        <span>Credit Used</span>
-        <strong>PHP {{ '%.2f'|format(charge_credit_used) }} / {{ '%.0f'|format(charge_credit_limit) }}</strong>
+        <span>First credit transaction</span>
+        <strong>15% off, max PHP {{ '%.0f'|format(charge_credit_limit) }}</strong>
       </div>
       <div class="perks-limit-track charge-track">
-        <div class="perks-limit-fill charge-fill" style="width: {{ (charge_credit_used / charge_credit_limit * 100)|int }}%;"></div>
+        <div class="perks-limit-fill charge-fill" style="width: {{ 0 if charge_first_available else 100 }}%;"></div>
+      </div>
+      <div class="perks-limit-info">
+        <span>Next credit transaction</span>
+        <strong><span id="chargeNextAmount">PHP 0.00</span> / {{ '%.0f'|format(charge_credit_limit) }}</strong>
+      </div>
+      <div class="perks-limit-track charge-track">
+        <div class="perks-limit-fill charge-fill" id="chargeNextProgress" style="width:0%;"></div>
       </div>
     </div>
 
-    {% if pending_charge %}
-    <div class="perks-pending-notice">
-      <i class="fa-solid fa-clock"></i>
-      <div>
-        <strong>You have a pending charge request.</strong>
-        <p>{{ pending_charge.product_name }} &mdash; PHP {{ '%.2f'|format(pending_charge.total_amount) }}</p>
-        <small>Please wait for it to be processed before submitting another.</small>
-      </div>
-    </div>
-    {% else %}
     <form method="POST" action="{{ url_for('employee.perks') }}">
       <input type="hidden" name="form_type" value="charge">
 
       <div class="field">
-        <label>Transaction Date</label>
+        <label>Transaction date</label>
         <input type="date" name="transaction_date" required>
       </div>
 
-      <div class="field">
-        <label>Product Name</label>
-        <input type="text" name="product_name" required placeholder="e.g. Rice, Grocery items">
+      <div class="perks-products-block" data-products="charge">
+        <div class="perks-products-head">
+          <label>Products</label>
+          <div class="perks-product-actions">
+            <button type="button" class="perks-remove-last-btn" data-remove-last-product="charge" aria-label="Remove last product">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+            <button type="button" class="perks-add-product-btn" data-add-product="charge">
+              <i class="fa-solid fa-plus"></i>
+              Add product
+            </button>
+          </div>
+        </div>
+        <div class="perks-product-list" id="chargeProductList">
+          <div class="perks-product-row">
+            <div class="field">
+              <label>Product name</label>
+              <input type="text" name="charge_product_name[]" required placeholder="e.g. Cake">
+            </div>
+            <div class="field">
+              <label>Quantity</label>
+              <input type="number" name="charge_quantity[]" min="1" required placeholder="0" oninput="calcTotal()">
+            </div>
+            <div class="field">
+              <label>Unit price (PHP)</label>
+              <input type="number" name="charge_price[]" step="0.01" min="0.01" required placeholder="0.00" oninput="calcTotal()">
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div class="perks-qty-price-row">
-        <div class="field">
-          <label>Quantity</label>
-          <input type="number" name="quantity" id="chargeQty" min="1" required placeholder="0" oninput="calcTotal()">
+      <div class="perks-calc-preview perks-calc-stack" id="chargePreview">
+        <div class="perks-calc-row">
+          <span>Credit amount</span>
+          <strong id="chargeAmountDisplay">0.00</strong>
         </div>
-        <div class="field">
-          <label>Unit Price (PHP)</label>
-          <input type="number" name="price" id="chargePrice" step="0.01" min="0.01" required placeholder="0.00" oninput="calcTotal()">
-        </div>
-      </div>
-
-      <div class="perks-calc-preview" id="chargePreview">
-        <span>Total Amount</span>
-        <div>
-          <strong id="chargeResult">0.00</strong>
-          <small id="chargeLimitWarn" class="perks-limit-warn" style="display:none;">Exceeds PHP 3,000 limit</small>
+        <div class="perks-calc-row">
+          <span>{% if charge_first_available %}Amount after 15% first-transaction discount{% else %}Total amount (no discount){% endif %}</span>
+          <div>
+            <strong id="chargeResult">0.00</strong>
+            <small id="chargeLimitWarn" class="perks-limit-warn" style="display:none;">Exceeds PHP 3,000 per-transaction limit</small>
+          </div>
         </div>
       </div>
 
       <button type="submit" class="primary-btn perks-submit-btn">
-        <i class="fa-solid fa-cart-shopping"></i> Submit Charge
+        <i class="fa-solid fa-cart-shopping"></i> Submit credit charge
       </button>
     </form>
-    {% endif %}
   </article>
 
 </section>
+
+{% if pending_perk_approval %}
+<section class="perks-code-card" aria-label="Perk approval code verification">
+  <div>
+    <h2>Approval code required</h2>
+    <p>{{ pending_perk_approval.request_label }} code was sent to {{ pending_perk_approval.email }}.</p>
+  </div>
+  <form method="POST" action="{{ url_for('employee.perks') }}" class="perks-code-form">
+    <input type="hidden" name="form_type" value="verify_perk_code">
+    <input type="text" name="approval_code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="Enter 6-digit code" required>
+    <button type="submit" class="primary-btn perks-code-submit">Verify</button>
+  </form>
+  <div class="perks-code-actions">
+    <form method="POST" action="{{ url_for('employee.perks') }}">
+      <input type="hidden" name="form_type" value="resend_perk_code">
+      <button type="submit">Resend code</button>
+    </form>
+    <form method="POST" action="{{ url_for('employee.perks') }}">
+      <input type="hidden" name="form_type" value="cancel_perk_code">
+      <button type="submit">Cancel</button>
+    </form>
+  </div>
+</section>
+{% endif %}
 
 <!-- ================= HISTORY ================= -->
 <section class="perks-history">
@@ -324,23 +387,54 @@
 
 {% block extra_scripts %}
 <script>
+const discountRemaining = {{ '%.2f'|format(discount_remaining) }};
+const chargeCreditLimit = {{ '%.2f'|format(charge_credit_limit) }};
+const chargeFirstAvailable = {{ 'true' if charge_first_available else 'false' }};
+
+function sumProductRows(type) {
+  const rows = document.querySelectorAll(`#${type}ProductList .perks-product-row`);
+  let total = 0;
+
+  rows.forEach((row) => {
+    const qty = parseInt(row.querySelector(`input[name="${type}_quantity[]"]`)?.value || "0", 10) || 0;
+    const price = parseFloat(row.querySelector(`input[name="${type}_price[]"]`)?.value || "0") || 0;
+    total += qty * price;
+  });
+
+  return total;
+}
+
 function calcDiscount() {
-  const qty = parseInt(document.getElementById('discountQty').value) || 0;
-  const price = parseFloat(document.getElementById('discountPrice').value) || 0;
-  const amount = qty * price;
+  const amount = sumProductRows('discount');
   const discounted = amount * 0.85;
+  const warn = document.getElementById('discountLimitWarn');
+
   document.getElementById('discountAmountDisplay').textContent = amount.toFixed(2);
   document.getElementById('discountResult').textContent = discounted.toFixed(2);
+
+  if (warn) {
+    warn.style.display = amount > discountRemaining ? 'inline' : 'none';
+  }
 }
 
 function calcTotal() {
-  const qty = parseInt(document.getElementById('chargeQty').value) || 0;
-  const price = parseFloat(document.getElementById('chargePrice').value) || 0;
-  const total = qty * price;
-  document.getElementById('chargeResult').textContent = total.toFixed(2);
+  const total = sumProductRows('charge');
+  const finalTotal = chargeFirstAvailable ? total * 0.85 : total;
+  document.getElementById('chargeAmountDisplay').textContent = total.toFixed(2);
+  document.getElementById('chargeResult').textContent = finalTotal.toFixed(2);
 
   const warn = document.getElementById('chargeLimitWarn');
-  if (total > 3000) {
+  const nextProgress = document.getElementById('chargeNextProgress');
+  const nextAmount = document.getElementById('chargeNextAmount');
+  if (nextAmount) {
+    nextAmount.textContent = `PHP ${total.toFixed(2)}`;
+  }
+  if (nextProgress) {
+    const progress = chargeCreditLimit > 0 ? Math.min(100, (total / chargeCreditLimit) * 100) : 0;
+    nextProgress.style.width = `${progress}%`;
+  }
+
+  if (total > chargeCreditLimit) {
     warn.style.display = 'inline';
   } else {
     warn.style.display = 'none';
@@ -350,6 +444,57 @@ function calcTotal() {
 document.addEventListener('DOMContentLoaded', function () {
   const selectCards = document.querySelectorAll('[data-perk-select]');
   const formCards = document.querySelectorAll('[data-perk-card]');
+  const productTemplate = {
+    discount: document.querySelector('#discountProductList .perks-product-row')?.cloneNode(true),
+    charge: document.querySelector('#chargeProductList .perks-product-row')?.cloneNode(true),
+  };
+
+  function resetRow(row) {
+    row.querySelectorAll('input').forEach((input) => {
+      input.value = '';
+    });
+  }
+
+  function refreshProductButtons(type) {
+    const list = document.getElementById(`${type}ProductList`);
+    if (!list) return;
+    const removeLastBtn = document.querySelector(`[data-remove-last-product="${type}"]`);
+    if (removeLastBtn) {
+      removeLastBtn.style.visibility = list.querySelectorAll('.perks-product-row').length > 1 ? 'visible' : 'hidden';
+      removeLastBtn.style.pointerEvents = list.querySelectorAll('.perks-product-row').length > 1 ? 'auto' : 'none';
+    }
+  }
+
+  document.querySelectorAll('[data-add-product]').forEach((button) => {
+    button.addEventListener('click', function () {
+      const type = button.dataset.addProduct;
+      const list = document.getElementById(`${type}ProductList`);
+      const template = productTemplate[type];
+      if (!list || !template) return;
+
+      const row = template.cloneNode(true);
+      resetRow(row);
+      list.appendChild(row);
+      refreshProductButtons(type);
+      if (type === 'discount') calcDiscount();
+      if (type === 'charge') calcTotal();
+    });
+  });
+
+  document.addEventListener('click', function (event) {
+    const removeBtn = event.target.closest('[data-remove-last-product]');
+    if (!removeBtn) return;
+
+    const type = removeBtn.dataset.removeLastProduct;
+    const list = document.getElementById(`${type}ProductList`);
+    const rows = list ? list.querySelectorAll('.perks-product-row') : [];
+    if (!list || rows.length <= 1) return;
+
+    rows[rows.length - 1].remove();
+    refreshProductButtons(type);
+    if (type === 'discount') calcDiscount();
+    if (type === 'charge') calcTotal();
+  });
 
   function showPerk(perkType) {
     selectCards.forEach(function (card) {
@@ -370,6 +515,10 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   showPerk('discount');
+  refreshProductButtons('discount');
+  refreshProductButtons('charge');
+  calcDiscount();
+  calcTotal();
 });
 </script>
 {% endblock %}

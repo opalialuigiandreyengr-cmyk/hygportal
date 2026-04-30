@@ -2,6 +2,7 @@ import os
 import uuid
 from datetime import datetime
 from functools import wraps
+from zoneinfo import ZoneInfo
 
 from flask import current_app, flash, redirect, url_for
 from flask_login import current_user, login_required
@@ -9,6 +10,11 @@ from werkzeug.utils import secure_filename
 
 ALLOWED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg"}
 MAX_EMPLOYEE_PHOTO_BYTES = 10 * 1024 * 1024
+PHILIPPINE_TZ = ZoneInfo("Asia/Manila")
+
+
+def philippine_now():
+    return datetime.now(PHILIPPINE_TZ).replace(tzinfo=None)
 
 
 def roles_required(*allowed_roles):
@@ -88,3 +94,21 @@ def _save_employee_photo(file_storage):
     file_path = os.path.join(photo_dir, unique_filename)
     file_storage.save(file_path)
     return f"images/employees/{unique_filename}", None
+
+
+def create_notification(user_id, title, message, category="info", link_url=None):
+    if not user_id:
+        return None
+
+    from . import db
+    from .models import Notification
+
+    notification = Notification(
+        user_id=user_id,
+        title=title,
+        message=message,
+        category=category,
+        link_url=link_url,
+    )
+    db.session.add(notification)
+    return notification

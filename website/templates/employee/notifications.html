@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Notifications | HYG Employee Portal{% endblock %}
+
+{% block page_content %}
+<section class="notifications-page">
+  <div class="notifications-head">
+    <div class="notifications-title-wrap">
+      <h1>Notifications</h1>
+      <span class="notifications-count">{{ unread_count }} unread</span>
+    </div>
+  </div>
+
+  {% if notifications %}
+    <div class="notifications-list">
+      {% for item in notifications %}
+      {% set display_title = item.title %}
+      {% set display_message = item.message %}
+      {% if item.title == 'ESARF status updated' %}
+        {% if 'Department Manager approval recorded' in item.message %}
+          {% set display_title = 'Approved by Dept Manager' %}
+          {% set display_message = 'Moved to the next approver.' %}
+        {% elif 'Operations approval recorded' in item.message %}
+          {% set display_title = 'Approved by Operations' %}
+          {% set display_message = 'Moved to General Manager.' %}
+        {% elif 'General Manager approval recorded' in item.message %}
+          {% set display_title = 'Approved by General Manager' %}
+          {% set display_message = 'Your ESARF was approved.' %}
+        {% elif 'Waiting for remaining signatories' in item.message or 'approval recorded' in item.message %}
+          {% set display_title = 'Approved' %}
+          {% set display_message = 'Moved to the next approver.' %}
+        {% elif 'Approved' in item.message or 'approved' in item.message %}
+          {% set display_title = 'ESARF approved' %}
+          {% set display_message = 'Your ESARF was approved.' %}
+        {% elif 'declined' in item.message or 'rejected' in item.message %}
+          {% set display_title = 'ESARF declined' %}
+          {% set display_message = 'Your ESARF was declined.' %}
+        {% endif %}
+      {% elif item.title == 'ESARF submitted' %}
+        {% set display_title = 'ESARF sent' %}
+        {% set display_message = 'You submitted an ESARF.' %}
+      {% elif item.title == 'Leave request submitted' %}
+        {% set display_title = 'Leave sent' %}
+        {% set display_message = 'You submitted a leave request.' %}
+      {% elif item.title == 'Perk request approved' %}
+        {% set display_title = 'Perk approved' %}
+        {% set display_message = 'Your perk request was approved.' %}
+      {% elif item.title == 'Perk request rejected' %}
+        {% set display_title = 'Perk declined' %}
+        {% set display_message = 'Your perk request was declined.' %}
+      {% endif %}
+      <article class="notification-card {% if not item.is_read %}is-unread{% endif %} is-{{ item.category }}">
+        <div class="notification-icon" aria-hidden="true">
+          {% if item.category == 'approved' %}
+            <i class="fa-solid fa-check"></i>
+          {% elif item.category == 'rejected' %}
+            <i class="fa-solid fa-xmark"></i>
+          {% elif item.category == 'success' %}
+            <i class="fa-solid fa-paper-plane"></i>
+          {% else %}
+            <i class="fa-regular fa-bell"></i>
+          {% endif %}
+        </div>
+        <div class="notification-body">
+          <div class="notification-title-row">
+            <h2>{{ display_title }}</h2>
+          </div>
+          <p>{{ display_message }}</p>
+          <time datetime="{{ item.created_at.isoformat() }}">{{ item.relative_time }}</time>
+        </div>
+        {% if not item.is_read %}<span class="notification-unread-dot" aria-label="Unread"></span>{% endif %}
+        <div class="notification-actions">
+          {% if item.link_url %}
+          <a href="{{ item.link_url }}" class="notification-action-link">Open</a>
+          {% endif %}
+          {% if not item.is_read %}
+          <form method="POST" action="{{ url_for('employee.mark_notification_read', notification_id=item.id) }}">
+            <button type="submit">Read</button>
+          </form>
+          {% endif %}
+          <form method="POST" action="{{ url_for('employee.delete_notification', notification_id=item.id) }}">
+            <button type="submit" class="is-danger">Delete</button>
+          </form>
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="notifications-empty">
+      <i class="fa-regular fa-bell"></i>
+      <h2>No notifications yet</h2>
+      <p>When you submit a request or an approval changes, your message will appear here.</p>
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

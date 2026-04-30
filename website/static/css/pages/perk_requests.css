@@ -324,6 +324,11 @@
   flex-shrink: 0;
 }
 
+img.pr-avatar {
+  object-fit: cover;
+  border: none;
+}
+
 .pr-avatar-0 { background: #f97316; }
 .pr-avatar-1 { background: #3b82f6; }
 .pr-avatar-2 { background: #22c55e; }
@@ -596,6 +601,11 @@
   flex-shrink: 0;
   background: #fff7ed;
   color: #92400e;
+}
+
+img.pr-panel-avatar {
+  object-fit: cover;
+  border: none;
 }
 
 /* Panel employee */

@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, render_template, request, flash, redirect,
 from flask_login import login_required, login_user, logout_user
 from sqlalchemy import func, or_
 from werkzeug.security import check_password_hash, generate_password_hash
+from datetime import datetime
 import unicodedata
 
 from . import db
@@ -21,9 +22,9 @@ def login():
             if check_password_hash(user.password, password):
                 flash('Logged in successfully!', category='success')
                 login_user(user)
-                if user.role == 'user':
+                if (user.role or '').strip().lower() == 'user':
                     return redirect(url_for('employee.employee_dashboard'))
-                if user.role == 'timekeeper':
+                if (user.role or '').strip().lower() == 'timekeeper':
                     return redirect(url_for('admin.esarf_requests'))
                 return redirect(url_for('views.home'))
             else:
@@ -54,9 +55,7 @@ def verify_employee():
     data = request.get_json()
     
     first_name = unicodedata.normalize('NFC', data.get('first_name', '').strip())
-    middle_name = unicodedata.normalize('NFC', data.get('middle_name', '').strip())
     last_name = unicodedata.normalize('NFC', data.get('last_name', '').strip())
-    email = unicodedata.normalize('NFC', data.get('email', '').strip())
     birth_date_str = data.get('birth_date') 
 
     if not first_name or not last_name or not birth_date_str:
@@ -75,30 +74,22 @@ def verify_employee():
         )
 
     try:
-        # Step 1: Find by first + last name
+        try:
+            birth_date = datetime.strptime(birth_date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return jsonify({'status': 'error', 'message': 'Please enter a valid Birth Date.'}), 400
+
+        # Registration verification is based only on first name, last name, and birth date.
         query = Employee.query.filter(
             ci_match(Employee.first_name, first_name),
-            ci_match(Employee.last_name, last_name)
+            ci_match(Employee.last_name, last_name),
+            Employee.birth_date == birth_date,
         )
-
-        if middle_name:
-            query = query.filter(ci_match(Employee.middle_name, middle_name))
-        
-        if email:
-            query = query.filter(func.lower(Employee.email) == email.lower())
         
         employee = query.first()
 
         if not employee:
-            return jsonify({'status': 'error', 'message': 'No employee record found with the provided First and Last Name.'}), 404
-
-        # Step 2: Check birth date if employee has one stored
-        if employee.birth_date and birth_date_str:
-            # Convert DB date to string for comparison (handles Date objects)
-            db_birth_str = employee.birth_date.strftime('%Y-%m-%d') if hasattr(employee.birth_date, 'strftime') else str(employee.birth_date)
-            if db_birth_str != birth_date_str:
-                return jsonify({'status': 'error', 'message': 'Birth Date does not match our records.'}), 404
-        # If employee.birth_date is NULL, skip birth date check
+            return jsonify({'status': 'error', 'message': 'No employee record found with the provided First Name, Last Name, and Birth Date.'}), 404
 
         existing_user = User.query.filter_by(employee_id=employee.id).first()
         if existing_user:

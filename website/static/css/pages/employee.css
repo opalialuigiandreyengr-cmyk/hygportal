@@ -486,12 +486,24 @@
   gap: 0.8rem;
 }
 
-.employee-cell .employee-id-pic {
+.employee-cell .employee-id-pic,
+.employee-cell .employee-id-pic-letter {
   width: 44px;
   height: 44px;
   border-radius: 12px;
   object-fit: cover;
   border: 1px solid #e2e8f0;
+}
+
+.employee-cell .employee-id-pic-letter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #dbeafe;
+  color: #2563eb;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
 }
 
 .employee-meta {
@@ -870,7 +882,8 @@
   box-sizing: border-box;
 }
 
-.employee-cell img.company-logo-table {
+.employee-cell img.company-logo-table,
+.employee-cell .company-logo-table-letter {
   width: 48px;
   height: 48px;
   border-radius: 8px;
@@ -880,6 +893,17 @@
   border: 1px solid #e2e8f0;
   padding: 4px;
   box-sizing: border-box;
+}
+
+.employee-cell .company-logo-table-letter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #dbeafe;
+  color: #2563eb;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
 }
 
 /* --- ESARF --- */

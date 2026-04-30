@@ -124,7 +124,11 @@
         <tr class="pr-row {% if req.status == 'Pending' %}pr-row-pending{% endif %}">
           <td>
             <div class="pr-employee">
+              {% if emp and emp.photopath %}
+              <img src="{{ url_for('static', filename=emp.photopath) }}" alt="{{ initials[:2] }}" class="pr-avatar">
+              {% else %}
               <div class="pr-avatar pr-avatar-{{ loop.index0 % 5 }}">{{ initials[:2] }}</div>
+              {% endif %}
               <div class="pr-employee-info">
                 <strong>{{ emp_name }}</strong>
                 {% if emp and emp.department %}
@@ -191,7 +195,11 @@
       <div class="pr-mobile-card {% if req.status == 'Pending' %}pr-row-pending{% endif %}" data-idx="{{ loop.index0 }}">
         <div class="pr-mc-row pr-mc-row1">
           <div class="pr-employee">
+            {% if emp and emp.photopath %}
+            <img src="{{ url_for('static', filename=emp.photopath) }}" alt="{{ initials[:2] }}" class="pr-avatar">
+            {% else %}
             <div class="pr-avatar pr-avatar-{{ loop.index0 % 5 }}">{{ initials[:2] }}</div>
+            {% endif %}
             <div class="pr-employee-info">
               <strong>{{ emp_name }}</strong>
               {% if emp and emp.department %}<span>{{ emp.department }}</span>{% endif %}
@@ -317,6 +325,7 @@ const perkData = [
     emp_id: '{{ "EMP-" ~ "%05d"|format(emp.id) if emp else "" }}',
     initials: '{{ initials }}',
     avatar_idx: {{ loop.index0 % 5 }},
+    photo_url: '{{ url_for('static', filename=emp.photopath) if emp and emp.photopath else '' }}',
     approve_url: '{{ url_for('admin.approve_perk', perk_type=req.type, perk_id=req.id) }}',
     decline_url: '{{ url_for('admin.decline_perk', perk_type=req.type, perk_id=req.id) }}',
   },
@@ -336,7 +345,11 @@ function openReviewPanel(idx) {
   // Header: avatar + name + requested date
   html += '<div class="pr-panel-header-row">';
   html += '  <div class="pr-panel-employee">';
-  html += '    <div class="pr-panel-avatar">' + r.initials + '</div>';
+  if (r.photo_url) {
+    html += '    <img src="' + r.photo_url + '" alt="' + r.initials + '" class="pr-panel-avatar">';
+  } else {
+    html += '    <div class="pr-panel-avatar">' + r.initials + '</div>';
+  }
   html += '    <div class="pr-panel-emp-info">';
   html += '      <strong>' + r.emp_name + '</strong>';
   if (r.emp_department) html += '      <span>' + r.emp_department + '</span>';

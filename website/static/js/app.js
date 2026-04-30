@@ -39,9 +39,54 @@
     });
   });
 
+  const mobileBottomNav = document.querySelector(".mobile-bottom-nav");
+  const mobileQuickActionBtn = document.getElementById("mobileQuickActionBtn");
+  const mobileQuickActions = document.getElementById("mobileQuickActions");
+
+  function setQuickActionsOpen(open) {
+    if (!mobileBottomNav || !mobileQuickActionBtn) return;
+    mobileBottomNav.classList.toggle("is-quick-open", open);
+    mobileQuickActionBtn.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+
+  if (mobileQuickActionBtn && mobileBottomNav) {
+    mobileQuickActionBtn.addEventListener("click", function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      setQuickActionsOpen(!mobileBottomNav.classList.contains("is-quick-open"));
+    });
+  }
+
+  if (mobileQuickActions) {
+    mobileQuickActions.addEventListener("click", function (event) {
+      event.stopPropagation();
+      const target = event.target;
+      if (target instanceof Element && target.closest("a")) {
+        setQuickActionsOpen(false);
+      }
+    });
+  }
+
+  document.addEventListener("click", function (event) {
+    if (!mobileBottomNav || !mobileBottomNav.classList.contains("is-quick-open")) {
+      return;
+    }
+    if (event.target instanceof Node && mobileBottomNav.contains(event.target)) {
+      return;
+    }
+    setQuickActionsOpen(false);
+  });
+
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape") {
+      setQuickActionsOpen(false);
+    }
+  });
+
   window.addEventListener("resize", function () {
     if (window.innerWidth > 860) {
       setSidebarOpen(false);
+      setQuickActionsOpen(false);
     }
   });
 

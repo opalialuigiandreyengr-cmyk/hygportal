@@ -18,15 +18,20 @@
 {% set selected_total_hours = esarf_form.get('total_hours', '') %}
 {% set selected_reason = esarf_form.get('reason', '') %}
 
-<header class="page-header esarf-page-header">
-  <div>
-    <h1>Employee Salary Adjustment Request</h1>
-    <p>Submit your ESARF request for adjustment, overtime, or time-related entries.</p>
+<header class="page-header esarf-page-header employee-esarf-form-header">
+  <div class="employee-esarf-history-title">
+    <span class="employee-esarf-history-icon" aria-hidden="true">
+      <i class="fa-solid fa-file-lines"></i>
+    </span>
+    <div>
+      <h1>ESARF Request</h1>
+      <p>Submit your salary adjustment request.</p>
+    </div>
   </div>
   <div class="esarf-header-actions">
     <a href="{{ url_for('employee.esarf_requests') }}" class="esarf-info-btn">
-      <i class="fa-solid fa-list-check"></i>
-      <span>ESARF Requests</span>
+      <i class="fa-solid fa-clock-rotate-left"></i>
+      <span>History</span>
     </a>
   </div>
 </header>
@@ -58,18 +63,18 @@
 
       <div class="full-width esarf-inline-meta">
         <div class="field">
-          <label>Time Schedule</label>
+          <label>Time schedule</label>
           <select name="time_schedule" required>
-            <option value="">Select Schedule</option>
+            <option value="">Select schedule</option>
             <option value="8AM - 6PM" {% if selected_time_schedule == '8AM - 6PM' %}selected{% endif %}>8AM - 6PM</option>
             <option value="9:00AM - 6:00PM" {% if selected_time_schedule == '9AM - 6PM' %}selected{% endif %}>9AM - 6PM</option>
             <option value="9AM - 7PM" {% if selected_time_schedule == '9AM - 7PM' %}selected{% endif %}>9AM - 7PM</option>
           </select>
         </div>
         <div class="field">
-          <label>Day Off</label>
+          <label>Day off</label>
           <select name="day_off" required>
-            <option value="">Select Day</option>
+            <option value="">Select day</option>
             <option value="Mon" {% if selected_day_off == 'Mon' %}selected{% endif %}>Monday</option>
             <option value="Tue" {% if selected_day_off == 'Tue' %}selected{% endif %}>Tuesday</option>
             <option value="Wed" {% if selected_day_off == 'Wed' %}selected{% endif %}>Wednesday</option>
@@ -80,9 +85,9 @@
           </select>
         </div>
         <div class="field">
-          <label>Payroll Class</label>
+          <label>Payroll class</label>
           <select name="payroll_class" required>
-            <option value="">Select Payroll Class</option>
+            <option value="">Select payroll class</option>
             <option value="Rank and File" {% if selected_payroll_class == 'Rank and File' %}selected{% endif %}>Rank and File</option>
             <option value="Admin" {% if selected_payroll_class == 'Admin' %}selected{% endif %}>Admin</option>
             <option value="Managerial" {% if selected_payroll_class == 'Managerial' %}selected{% endif %}>Managerial</option>
@@ -92,12 +97,12 @@
 
       <div class="full-width esarf-form-section-title">
         <span class="esarf-step-badge">2</span>
-        <span>Transaction Type</span>
+        <span>Transaction type</span>
       </div>
       <p class="full-width esarf-section-hint">Select one or more transactions.</p>
 
       <div class="field full-width">
-        <div class="transaction-checklist" role="group" aria-label="Transaction Type">
+        <div class="transaction-checklist" role="group" aria-label="Transaction type">
           <label class="transaction-option transaction-ut">
             <input type="checkbox" name="transaction_type" value="UT" {% if 'UT' in esarf_transaction_types %}checked{% endif %}>
             <span class="transaction-icon"><i class="fa-regular fa-clock"></i></span>
@@ -129,30 +134,30 @@
 
       <div class="full-width esarf-form-section-title">
         <span class="esarf-step-badge">3</span>
-        <span>Date and Time Range</span>
+        <span>Date and time range</span>
       </div>
 
       <div class="full-width esarf-date-time-columns">
         <div class="field">
-          <label>Date From</label>
+          <label>Date from</label>
           <input type="date" name="date_from" required value="{{ selected_date_from }}">
         </div>
         <div class="field">
-          <label>Date To</label>
+          <label>Date to</label>
           <input type="date" name="date_to" required value="{{ selected_date_to }}">
         </div>
         <div class="field">
-          <label>Time From</label>
+          <label>Time from</label>
           <input type="time" name="time_from" required value="{{ selected_time_from }}">
         </div>
         <div class="field">
-          <label>Time To</label>
+          <label>Time to</label>
           <input type="time" name="time_to" required value="{{ selected_time_to }}">
         </div>
       </div>
 
       <div class="field full-width esarf-total-hours-field">
-        <label>Total OT / UT / No. of Hours</label>
+        <label>Total OT / UT / no. of hours</label>
         <input type="text" name="total_hours" id="totalHoursInput" required readonly value="{{ selected_total_hours }}" placeholder="Auto-calculated">
       </div>
 

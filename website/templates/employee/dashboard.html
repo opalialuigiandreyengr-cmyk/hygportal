@@ -6,74 +6,199 @@
 {% endblock %}
 
 {% block page_content %}
+{% set display_name = ((employee.first_name or '') ~ ' ' ~ (employee.last_name or ''))|trim if employee else current_user.username %}
+{% set pending_total = leave_counts.pending + esarf_counts.pending %}
+{% set discount_percent = (discount_used / annual_cash_limit * 100) if annual_cash_limit else 0 %}
+{% set transaction_percent = (discount_transaction_count / annual_cash_transaction_limit * 100) if annual_cash_transaction_limit else 0 %}
 
-<!-- ================= GREETING ================= -->
-<section class="page-header dash-greeting">
-  <div class="greeting-text">
-    <h1>Hey, {{ current_user.username }}</h1>
-    <p>{{ employee.position if employee and employee.position else "Welcome to your dashboard" }}</p>
-  </div>
-  <a class="primary-btn btn-mini" href="{{ url_for('employee.esarf') }}">
-    <i class="fa-solid fa-plus"></i> ESARF
-  </a>
+<section class="employee-dash">
+  <section class="page-header dash-greeting">
+    <div class="greeting-text">
+      <h1>{{ greeting_label }}, {{ current_user.username }}! 👋</h1>
+      <p>Here's what's happening today.</p>
+    </div>
+  </section>
+
+  <section class="dash-overview-grid" aria-label="Employee overview">
+    <article class="dash-stat-card is-esarf">
+      <span class="dash-stat-icon is-esarf"><i class="fa-regular fa-file-lines"></i></span>
+      <div class="dash-stat-copy">
+        <span>ESARF Requests</span>
+        <strong>{{ esarf_counts.pending }}</strong>
+        <small>{{ esarf_counts.approved }} Approved</small>
+      </div>
+    </article>
+
+    <article class="dash-stat-card is-leave">
+      <span class="dash-stat-icon is-leave"><i class="fa-regular fa-calendar-check"></i></span>
+      <div class="dash-stat-copy">
+        <span>Leave Requests</span>
+        <strong>{{ leave_counts.pending }}</strong>
+        <small>Pending</small>
+      </div>
+    </article>
+
+    <article class="dash-stat-card is-time">
+      <span class="dash-stat-icon is-time"><i class="fa-regular fa-clock"></i></span>
+      <div class="dash-stat-copy">
+        <span>Overtime Hours</span>
+        <strong>{{ "%.1f"|format(pending_esarf_hours) }}</strong>
+        <small>This Month</small>
+      </div>
+    </article>
+
+    <article class="dash-stat-card is-perks">
+      <span class="dash-stat-icon is-perks"><i class="fa-solid fa-gift"></i></span>
+      <div class="dash-stat-copy">
+        <span>Cash Discount</span>
+        <strong>PHP {{ "{:,.0f}".format(discount_remaining) }}</strong>
+        <small>{{ discount_transaction_remaining }} Left</small>
+      </div>
+    </article>
+  </section>
+
+  <section class="dash-main-grid">
+    <div class="dash-main-column">
+      <section class="dash-panel">
+        <div class="dash-panel-head">
+          <div>
+            <h2><i class="fa-solid fa-bolt"></i> Quick Actions</h2>
+          </div>
+        </div>
+
+        <div class="dash-actions">
+          <a class="dash-action-card" href="{{ url_for('employee.esarf') }}">
+            <div class="dash-action-icon is-esarf"><i class="fa-solid fa-file-signature"></i></div>
+            <span>Request ESARF</span>
+          </a>
+
+          <a class="dash-action-card" href="{{ url_for('employee.leaves') }}">
+            <div class="dash-action-icon is-leave"><i class="fa-solid fa-calendar-day"></i></div>
+            <span>Request Leave</span>
+          </a>
+
+          <a class="dash-action-card" href="{{ url_for('employee.perks') }}">
+            <div class="dash-action-icon is-perks"><i class="fa-solid fa-gift"></i></div>
+            <span>Request Perks</span>
+          </a>
+
+          <a class="dash-action-card" href="{{ url_for('views.attendance') }}">
+            <div class="dash-action-icon is-attendance"><i class="fa-solid fa-clock"></i></div>
+            <span>View Attendance</span>
+          </a>
+
+          {% if employee %}
+          <a class="dash-action-card" href="{{ url_for('employee.view_employee', employee_id=employee.id) }}">
+            <div class="dash-action-icon is-profile"><i class="fa-solid fa-user"></i></div>
+            <span>View Profile</span>
+          </a>
+          {% endif %}
+        </div>
+      </section>
+
+      <section class="dash-panel">
+        <div class="dash-panel-head">
+          <div>
+            <h2>Recent Activity</h2>
+            <p>Your latest requests across leaves, ESARF, and perks.</p>
+          </div>
+        </div>
+
+        <div class="dash-activity-list">
+          {% for activity in recent_activity %}
+          {% set status_key = (activity.status or 'Pending')|lower|replace(' ', '-') %}
+          <article class="dash-activity-item">
+            <span class="dash-activity-icon"><i class="fa-solid {{ activity.icon }}"></i></span>
+            <div>
+              <strong>{{ activity.title }}</strong>
+              <small>{{ activity.type }}{% if activity.date %} &middot; {{ activity.date.strftime('%b %d, %Y') }}{% endif %}</small>
+            </div>
+            <span class="dash-status-pill is-{{ status_key }}">{{ activity.status }}</span>
+          </article>
+          {% else %}
+          <div class="dash-empty">
+            <i class="fa-regular fa-folder-open"></i>
+            <p>No requests yet. Once you file leaves, ESARF, or perks, they will appear here.</p>
+          </div>
+          {% endfor %}
+        </div>
+      </section>
+    </div>
+
+    <aside class="dash-side-column">
+      <section class="dash-panel">
+        <div class="dash-panel-head">
+          <div>
+            <h2>Pending Work</h2>
+            <p>Items waiting for approval.</p>
+          </div>
+          <strong class="dash-big-number">{{ pending_total }}</strong>
+        </div>
+        <div class="dash-mini-list">
+          <div><span>Leave requests</span><strong>{{ leave_counts.pending }}</strong></div>
+          <div><span>ESARF requests</span><strong>{{ esarf_counts.pending }}</strong></div>
+        </div>
+      </section>
+
+      <section class="dash-panel">
+        <div class="dash-panel-head">
+          <div>
+            <h2>Perks Usage</h2>
+            <p>Current year benefit counters.</p>
+          </div>
+        </div>
+        <div class="dash-progress-stack">
+          <div class="dash-progress-item">
+            <div class="dash-progress-label">
+              <span>Cash discount</span>
+              <strong>PHP {{ "{:,.0f}".format(discount_used) }} / {{ "{:,.0f}".format(annual_cash_limit) }}</strong>
+            </div>
+            <div class="dash-progress-track"><span style="width: {{ [discount_percent, 100]|min }}%;"></span></div>
+          </div>
+          <div class="dash-progress-item">
+            <div class="dash-progress-label">
+              <span>Discount transactions</span>
+              <strong>{{ discount_transaction_count }} / {{ annual_cash_transaction_limit }}</strong>
+            </div>
+            <div class="dash-progress-track is-gold"><span style="width: {{ [transaction_percent, 100]|min }}%;"></span></div>
+          </div>
+        </div>
+        <div class="dash-mini-list">
+          <div><span>Charge transactions</span><strong>{{ charge_transaction_count }}</strong></div>
+          <div><span>First charge discount</span><strong>{{ "Available" if charge_first_available else "Used" }}</strong></div>
+          <div><span>Charge limit</span><strong>PHP {{ "{:,.0f}".format(per_charge_limit) }}</strong></div>
+        </div>
+      </section>
+
+      <section class="dash-panel">
+        <div class="dash-panel-head">
+          <div>
+            <h2>Profile Snapshot</h2>
+            <p>Your saved employee details.</p>
+          </div>
+        </div>
+        <section class="dash-info-strip">
+          {% if employee and employee.employee_no %}
+          <div class="info-chip"><i class="fa-solid fa-id-card"></i><span>{{ employee.employee_no }}</span></div>
+          {% endif %}
+          {% if employee and employee.department %}
+          <div class="info-chip"><i class="fa-solid fa-building"></i><span>{{ employee.department }}</span></div>
+          {% endif %}
+          {% if employee and employee.employment_status %}
+          <div class="info-chip"><i class="fa-solid fa-circle-check"></i><span>{{ employee.employment_status }}</span></div>
+          {% endif %}
+          {% if employee and employee.company %}
+          <div class="info-chip"><i class="fa-solid fa-briefcase"></i><span>{{ employee.company }}</span></div>
+          {% endif %}
+        </section>
+        {% if missing_profile_items %}
+        <div class="dash-missing">
+          <strong>Update needed</strong>
+          <p>Add {{ missing_profile_items|join(', ') }} to keep your file complete.</p>
+        </div>
+        {% endif %}
+      </section>
+    </aside>
+  </section>
 </section>
-
-
-<!-- ================= QUICK ACTIONS ================= -->
-<section class="dash-actions">
-  {% if employee %}
-  <a class="dash-action-card" href="{{ url_for('employee.view_employee', employee_id=employee.id) }}">
-    <div class="dash-action-icon"><i class="fa-solid fa-user"></i></div>
-    <span>Profile</span>
-  </a>
-  {% endif %}
-
-  <a class="dash-action-card" href="{{ url_for('views.attendance') }}">
-    <div class="dash-action-icon"><i class="fa-solid fa-clock"></i></div>
-    <span>Attendance</span>
-  </a>
-
-  <a class="dash-action-card" href="{{ url_for('employee.leaves') }}">
-    <div class="dash-action-icon"><i class="fa-solid fa-calendar-day"></i></div>
-    <span>Leaves</span>
-  </a>
-
-  <a class="dash-action-card" href="{{ url_for('employee.esarf') }}">
-    <div class="dash-action-icon"><i class="fa-solid fa-file-signature"></i></div>
-    <span>ESARF</span>
-  </a>
-</section>
-
-
-<!-- ================= INFO STRIP ================= -->
-<section class="dash-info-strip">
-  {% if employee and employee.employee_no %}
-  <div class="info-chip">
-    <i class="fa-solid fa-id-card"></i>
-    <span>{{ employee.employee_no }}</span>
-  </div>
-  {% endif %}
-
-  {% if employee and employee.department %}
-  <div class="info-chip">
-    <i class="fa-solid fa-building"></i>
-    <span>{{ employee.department }}</span>
-  </div>
-  {% endif %}
-
-  {% if employee and employee.employment_status %}
-  <div class="info-chip">
-    <i class="fa-solid fa-circle-check"></i>
-    <span>{{ employee.employment_status }}</span>
-  </div>
-  {% endif %}
-
-  {% if employee and employee.company %}
-  <div class="info-chip">
-    <i class="fa-solid fa-briefcase"></i>
-    <span>{{ employee.company }}</span>
-  </div>
-  {% endif %}
-</section>
-
 {% endblock %}

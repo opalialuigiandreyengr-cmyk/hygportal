@@ -6,15 +6,16 @@
   <div class="notifications-head">
     <div class="notifications-title-wrap">
       <h1>Notifications</h1>
-      <span class="notifications-count">{{ unread_count }} unread</span>
+      <span class="notifications-count" >{{ unread_count }} unread</span>
     </div>
   </div>
 
   {% if notifications %}
-    <div class="notifications-list">
+    <div class="notifications-list" style="display: flex; gap: 10px; flex-direction: column;">
       {% for item in notifications %}
       {% set display_title = item.title %}
       {% set display_message = item.message %}
+
       {% if item.title == 'ESARF status updated' %}
         {% if 'Department Manager approval recorded' in item.message %}
           {% set display_title = 'Approved by Dept Manager' %}
@@ -48,51 +49,89 @@
         {% set display_title = 'Perk declined' %}
         {% set display_message = 'Your perk request was declined.' %}
       {% endif %}
-      <article class="notification-card {% if not item.is_read %}is-unread{% endif %} is-{{ item.category }}">
-        <div class="notification-icon" aria-hidden="true">
-          {% if item.category == 'approved' %}
-            <i class="fa-solid fa-check"></i>
-          {% elif item.category == 'rejected' %}
-            <i class="fa-solid fa-xmark"></i>
-          {% elif item.category == 'success' %}
-            <i class="fa-solid fa-paper-plane"></i>
-          {% else %}
-            <i class="fa-regular fa-bell"></i>
-          {% endif %}
-        </div>
-        <div class="notification-body">
-          <div class="notification-title-row">
-            <h2>{{ display_title }}</h2>
+
+      <article class="notification-card {% if not item.is_read %}is-unread{% endif %} is-{{ item.category }}"
+        style="position:relative; padding:16px; border-radius:10px; margin-bottom:12px; background:#fff">
+
+        <!-- LEFT SIDE (ICON RESTORED) -->
+        <div style="display:flex; align-items:flex-start; gap:15px; ">
+
+          <!-- ICON -->
+          <div style="font-size:18px; color:#555; margin-top:2px;">
+            {% if item.category == 'approved' %}
+              <i class="fa-solid fa-circle-check"></i>
+            {% elif item.category == 'rejected' %}
+              <i class="fa-solid fa-circle-xmark"></i>
+            {% elif item.category == 'success' %}
+              <i class="fa-solid fa-paper-plane"></i>
+            {% else %}
+              <i class="fa-regular fa-bell"></i>
+            {% endif %}
           </div>
-          <p>{{ display_message }}</p>
-          <time datetime="{{ item.created_at.isoformat() }}">{{ item.relative_time }}</time>
+
+          <!-- TEXT -->
+          <div>
+            <h2 style="margin:0 0 6px 0; font-size:16px;">{{ display_title }}</h2>
+            <p style="margin:0 0 6px 0; font-size:14px; color:#555;">{{ display_message }}</p>
+            <time style="font-size:12px; color:#888;"
+              datetime="{{ item.created_at.isoformat() }}">
+              {{ item.relative_time }}
+            </time>
+          </div>
+
         </div>
-        {% if not item.is_read %}<span class="notification-unread-dot" aria-label="Unread"></span>{% endif %}
-        <div class="notification-actions">
+
+        <!-- TOP RIGHT ACTIONS -->
+        <div style="
+          position:absolute;
+          top:10px;
+          right:10px;
+          display:flex;
+          align-items:center;
+          gap:8px;
+        ">
+
+          <!-- OPEN -->
           {% if item.link_url %}
-          <a href="{{ item.link_url }}" class="notification-action-link" aria-label="Open notification">
-            <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i>
-            <span>Open</span>
+          <a href="{{ item.link_url }}" title="Open"
+            style="font-size:14px; color:green;  padding:5px; border-radius:6px; text-decoration:none;">
+            <i class="fa-solid fa-arrow-up-right-from-square"></i>
           </a>
           {% endif %}
+
+          <!-- READ -->
           {% if not item.is_read %}
-          <form method="POST" action="{{ url_for('employee.mark_notification_read', notification_id=item.id) }}">
-            <button type="submit" aria-label="Mark notification as read">
-              <i class="fa-solid fa-check" aria-hidden="true"></i>
-              <span>Read</span>
+          <form method="POST"
+            action="{{ url_for('employee.mark_notification_read', notification_id=item.id) }}"
+            style="display:inline;">
+            <button type="submit" title="Mark as read"
+              style="background:none; border:none; cursor:pointer; padding:5px; border-radius:6px; font-size:14px; color:blue;">
+              <i class="fa-solid fa-check"></i>
             </button>
           </form>
           {% endif %}
-          <form method="POST" action="{{ url_for('employee.delete_notification', notification_id=item.id) }}">
-            <button type="submit" class="is-danger" aria-label="Delete notification">
-              <i class="fa-regular fa-trash-can" aria-hidden="true"></i>
-              <span>Delete</span>
+
+          <!-- DELETE -->
+          <form method="POST"
+            action="{{ url_for('employee.delete_notification', notification_id=item.id) }}"
+            style="display:inline;">
+            <button type="submit" title="Delete"
+              style="background:none; border:none; cursor:pointer; padding:5px; border-radius:6px; font-size:14px; color:#d9534f;">
+              <i class="fa-regular fa-trash-can"></i>
             </button>
           </form>
+
         </div>
+
+        {% if not item.is_read %}
+          <span aria-label="Unread"
+            style="position:absolute; bottom:10px; right:10px; width:8px; height:8px; background:rgb(233, 226, 30); border-radius:50%;"></span>
+        {% endif %}
+
       </article>
       {% endfor %}
     </div>
+
   {% else %}
     <div class="notifications-empty">
       <i class="fa-regular fa-bell"></i>

@@ -537,7 +537,7 @@
               {% endfor %}
             </select>
           </div>
-          <div class="field"><label>Store/Department</label><input name="department"></div>
+          <div class="field"><label>Store/Department</label><input name="department" list="departmentOptions"></div>
           <div class="field"><label>Date Hired</label><input type="date" name="hired_date"></div>
           <div class="field">
             <label>Employee Type</label>
@@ -552,6 +552,12 @@
         </div>
       </div>
     </div>
+
+    <datalist id="departmentOptions">
+      {% for department in departments %}
+      <option value="{{ department.department_name }}"></option>
+      {% endfor %}
+    </datalist>
 
     <!-- Step 3: Contact & Education -->
     <div class="step" data-step="3">

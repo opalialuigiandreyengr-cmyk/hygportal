@@ -6,7 +6,7 @@ from datetime import datetime
 import unicodedata
 
 from . import db
-from .models import Employee, User
+from .models import Employee, EsarfApprover, User
 
 auth = Blueprint('auth', __name__)
 
@@ -23,6 +23,8 @@ def login():
                 flash('Logged in successfully!', category='success')
                 login_user(user)
                 if (user.role or '').strip().lower() == 'user':
+                    if EsarfApprover.query.filter_by(user_id=user.id).first():
+                        return redirect(url_for('admin.esarf_requests'))
                     return redirect(url_for('employee.employee_dashboard'))
                 if (user.role or '').strip().lower() == 'timekeeper':
                     return redirect(url_for('admin.esarf_requests'))

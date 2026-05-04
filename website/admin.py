@@ -3,9 +3,9 @@ import csv
 import io
 from datetime import date, datetime
 
-from flask import Blueprint, flash, redirect, render_template, request, session, url_for, Response
+from flask import Blueprint, flash, redirect, render_template, request, session, url_for, Response, jsonify
 from flask_login import current_user
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from flask_login import login_required
 from werkzeug.security import generate_password_hash
@@ -18,8 +18,9 @@ from .helpers import (
     _save_company_logo,
     _save_employee_photo,
     roles_required,
+    sync_department_name,
 )
-from .models import Company, Employee, User, EsarfRequest, LeaveRequest, DiscountRequest, ProductChargeRequest, PerkApprover
+from .models import Company, Department, Employee, User, EsarfApprover, EsarfRequest, LeaveRequest, DiscountRequest, ProductChargeRequest, PerkApprover
 
 admin = Blueprint("admin", __name__)
 
@@ -35,6 +36,77 @@ ESARF_APPROVER_ROLES = [
     ("general manager", "General Manager"),
 ]
 ESARF_APPROVER_ROLE_KEYS = {role for role, _label in ESARF_APPROVER_ROLES}
+
+
+def _normalize_department_name(department_name):
+    return " ".join((department_name or "").strip().lower().split())
+
+
+def _user_department(user):
+    if not user or not user.employee:
+        return ""
+    return _normalize_department_name(user.employee.department)
+
+
+def _esarf_submitter_department(esarf_request):
+    submitter = esarf_request.submitted_by_user if esarf_request else None
+    if not submitter or not submitter.employee:
+        return ""
+    return _normalize_department_name(submitter.employee.department)
+
+
+def _current_esarf_approver_assignment():
+    return EsarfApprover.query.filter_by(user_id=current_user.id).first()
+
+
+def _current_esarf_workflow_role():
+    user_role = (current_user.role or "").strip().lower()
+    if user_role in {"admin", "timekeeper"}:
+        return user_role
+
+    assignment = _current_esarf_approver_assignment()
+    if assignment and assignment.approver_role in ESARF_APPROVER_ROLE_KEYS:
+        return assignment.approver_role
+
+    return ""
+
+
+def _current_user_can_manage_esarf():
+    return _current_esarf_workflow_role() in {
+        "admin",
+        "timekeeper",
+        *ESARF_APPROVER_ROLE_KEYS,
+    }
+
+
+def _department_manager_department():
+    assignment = _current_esarf_approver_assignment()
+    if assignment and assignment.approver_role == "dept manager":
+        return _normalize_department_name(assignment.department_name)
+    return _user_department(current_user)
+
+
+def _department_manager_can_access_esarf(esarf_request):
+    manager_department = _department_manager_department()
+    request_department = _esarf_submitter_department(esarf_request)
+    return bool(manager_department and request_department and manager_department == request_department)
+
+
+def _scope_esarf_query_for_current_user(esarf_request_query):
+    current_role = _current_esarf_workflow_role()
+    if current_role != "dept manager":
+        return esarf_request_query
+
+    manager_department = _department_manager_department()
+    if not manager_department:
+        return esarf_request_query.filter(EsarfRequest.id.is_(None))
+
+    return (
+        esarf_request_query
+        .join(EsarfRequest.submitted_by_user)
+        .join(User.employee)
+        .filter(func.lower(func.trim(Employee.department)) == manager_department)
+    )
 
 
 def _format_employee_no(hired_date, sequence):
@@ -222,12 +294,14 @@ def employees():
     )
     employee_items = employee_pagination.items
     company_items = Company.query.order_by(Company.company_name.asc()).all()
+    department_items = Department.query.order_by(Department.department_name.asc()).all()
     add_employee_form = session.pop("add_employee_form", {})
 
     return render_template(
         "admin/employees.html",
         employees=employee_items,
         companies=company_items,
+        departments=department_items,
         add_employee_form=add_employee_form,
         employee_pagination=employee_pagination,
         employee_filters={
@@ -293,11 +367,12 @@ def companies():
 @admin.route("/dashboard")
 @roles_required("admin", "hr")
 def dashboard():
-
-    # Total employees
+    # Totals
     total_employees = Employee.query.count()
+    total_companies = Company.query.count()
+    total_departments = Department.query.count()
 
-    # Pending employees (from your system: status or employment_status = "Pending")
+    # Pending employees
     pending_employees = Employee.query.filter(
         or_(
             Employee.status == "Pending",
@@ -305,17 +380,63 @@ def dashboard():
         )
     ).count()
 
+    # Status breakdown
+    status_breakdown = (
+        db.session.query(Employee.employment_status, func.count(Employee.id))
+        .group_by(Employee.employment_status)
+        .all()
+    )
+    status_counts = {s: c for s, c in status_breakdown if s}
+
+    # Recent employees (last 6)
+    recent_employees = (
+        Employee.query.order_by(Employee.id.desc()).limit(6).all()
+    )
+
+    # Department distribution
+    dept_breakdown = (
+        db.session.query(Employee.department, func.count(Employee.id))
+        .group_by(Employee.department)
+        .all()
+    )
+    dept_counts = [
+        {"name": d, "count": c}
+        for d, c in dept_breakdown
+        if d and d.strip()
+    ]
+    dept_counts.sort(key=lambda x: x["count"], reverse=True)
+
+    # Company distribution
+    company_breakdown = (
+        db.session.query(Employee.company, func.count(Employee.id))
+        .group_by(Employee.company)
+        .all()
+    )
+    company_counts = [
+        {"name": c, "count": n}
+        for c, n in company_breakdown
+        if c and c.strip()
+    ]
+    company_counts.sort(key=lambda x: x["count"], reverse=True)
+
     return render_template(
         "admin/dashboard.html",
         total_employees=total_employees,
-        pending_employees=pending_employees
+        total_companies=total_companies,
+        total_departments=total_departments,
+        pending_employees=pending_employees,
+        status_counts=status_counts,
+        recent_employees=recent_employees,
+        dept_counts=dept_counts,
+        company_counts=company_counts,
     )
 
 
 @admin.route('/register_employee')
 def register_employee():
     companies = Company.query.order_by(Company.company_name.asc()).all()
-    return render_template('admin/register_employee.html', companies=companies)
+    departments = Department.query.order_by(Department.department_name.asc()).all()
+    return render_template('admin/register_employee.html', companies=companies, departments=departments)
 
 @admin.route("/add-employee", methods=["POST"])
 def add_employee():
@@ -331,7 +452,7 @@ def add_employee():
     first_name = (request.form.get("first_name") or "").strip()
     last_name = (request.form.get("last_name") or "").strip()
 
-    # ✅ DUPLICATE CHECK ADDED (NO OTHER CHANGES)
+    # Duplicate check added for matching first and last names.
     existing_employee = Employee.query.filter(
         Employee.first_name.ilike(first_name),
         Employee.last_name.ilike(last_name)
@@ -396,6 +517,7 @@ def add_employee():
 
     try:
         db.session.add(new_employee)
+        sync_department_name(new_employee.department)
         db.session.flush()  # get new_employee.id before creating user
 
         # Create user account if username is provided
@@ -447,7 +569,10 @@ def add_employee():
 def edit_employee(employee_id):
     employee = Employee.query.filter_by(id=employee_id).first()
     if not employee:
-        flash("Employee not found.", category="error")
+        msg = "Employee not found."
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify({"success": False, "message": msg}), 404
+        flash(msg, category="error")
         return redirect(url_for("admin.employees"))
 
     fields_to_check = {
@@ -470,13 +595,21 @@ def edit_employee(employee_id):
         if not form_val:
             continue
 
-        clean_form = form_val.lower() if field == "email" else re.sub(r"[^a-zA-Z0-9]", "", form_val).lower()
+        # Normalize form value
+        norm_form = form_val.lower() if field == "email" else re.sub(r"[^a-zA-Z0-9]", "", form_val).lower()
+        if not norm_form:
+            continue
+
+        # Skip duplicate check if the user didn't change this field
+        raw_current = getattr(employee, field, None)
+        current_val = "" if raw_current is None else str(raw_current).strip()
+        norm_current = current_val.lower() if field == "email" else re.sub(r"[^a-zA-Z0-9]", "", current_val).lower()
+        if norm_form == norm_current:
+            continue
 
         for emp in existing_employees:
-            emp_val = getattr(emp, field, "") or ""
-
-            # ✅ FORCE STRING SAFETY
-            emp_val = str(emp_val)
+            emp_val = getattr(emp, field, None)
+            emp_val = "" if emp_val is None else str(emp_val).strip()
 
             if not emp_val:
                 continue
@@ -486,7 +619,7 @@ def edit_employee(employee_id):
             else:
                 clean_emp = re.sub(r"[^a-zA-Z0-9]", "", emp_val).lower()
 
-            if clean_form == clean_emp:
+            if norm_form == clean_emp:
                 duplicates.append(label)
                 break
 
@@ -495,7 +628,10 @@ def edit_employee(employee_id):
     biometric_no = (request.form.get("biometric_no") or "").strip()
 
     if duplicates:
-        flash(f"Duplicate data found for: {', '.join(duplicates)}.", category="error")
+        msg = f"Duplicate data found for: {', '.join(duplicates)}."
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify({"success": False, "message": msg}), 409
+        flash(msg, category="error")
         return redirect(url_for("admin.employees"))
 
     employment_status = (request.form.get("employment_status") or "").strip() or employee.employment_status
@@ -544,6 +680,7 @@ def edit_employee(employee_id):
     employee.employee_type = request.form.get("employee_type")
     employee.employment_status = employment_status
     employee.status = employment_status
+    sync_department_name(employee.department)
 
     # 4. Government IDs & Bank
     employee.sss_no = (request.form.get("sss_no") or "").strip()
@@ -556,10 +693,16 @@ def edit_employee(employee_id):
 
     try:
         db.session.commit()
-        flash("Employee updated successfully.", category="success")
+        msg = "Employee updated successfully."
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify({"success": True, "message": msg})
+        flash(msg, category="success")
     except IntegrityError:
         db.session.rollback()
-        flash("Duplicate data detected. Please use unique employee details.", category="error")
+        msg = "Duplicate data detected. Please use unique employee details."
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify({"success": False, "message": msg}), 409
+        flash(msg, category="error")
 
     return redirect(url_for("admin.employees"))
 
@@ -640,6 +783,110 @@ def edit_company(company_id):
     return redirect(url_for("admin.companies"))
 
 
+@admin.route("/departments")
+@roles_required("admin", "hr")
+def departments():
+    search = (request.args.get("search") or "").strip()
+    page = request.args.get("page", 1, type=int)
+    per_page = 10
+
+    department_query = Department.query
+    if search:
+        department_query = department_query.filter(
+            Department.department_name.ilike(f"%{search}%")
+        )
+
+    department_pagination = department_query.order_by(Department.department_name.asc()).paginate(
+        page=page,
+        per_page=per_page,
+        error_out=False,
+    )
+    department_items = department_pagination.items
+
+    employee_count_rows = (
+        db.session.query(Employee.department, func.count(Employee.id))
+        .filter(Employee.department.isnot(None), Employee.department != "")
+        .group_by(Employee.department)
+        .all()
+    )
+    employee_counts = {
+        department_name: count
+        for department_name, count in employee_count_rows
+    }
+
+    return render_template(
+        "admin/departments.html",
+        departments=department_items,
+        department_pagination=department_pagination,
+        department_filters={"search": search},
+        employee_counts=employee_counts,
+    )
+
+
+@admin.route("/departments/add", methods=["POST"])
+@roles_required("admin", "hr")
+def add_department():
+    department_name = (request.form.get("department_name") or "").strip()
+    if not department_name:
+        flash("Department name is required.", category="error")
+        return redirect(url_for("admin.departments"))
+
+    existing_department = Department.query.filter(
+        func.lower(Department.department_name) == department_name.lower()
+    ).first()
+    if existing_department:
+        flash("Department already exists.", category="error")
+        return redirect(url_for("admin.departments"))
+
+    db.session.add(Department(department_name=department_name))
+    try:
+        db.session.commit()
+        flash("Department added successfully.", category="success")
+    except IntegrityError:
+        db.session.rollback()
+        flash("Department already exists.", category="error")
+
+    return redirect(url_for("admin.departments"))
+
+
+@admin.route("/departments/<int:department_id>/edit", methods=["POST"])
+@roles_required("admin", "hr")
+def edit_department(department_id):
+    department = Department.query.get_or_404(department_id)
+    department_name = (request.form.get("department_name") or "").strip()
+    if not department_name:
+        flash("Department name is required.", category="error")
+        return redirect(url_for("admin.departments"))
+
+    duplicate_department = Department.query.filter(
+        Department.id != department.id,
+        func.lower(Department.department_name) == department_name.lower(),
+    ).first()
+    if duplicate_department:
+        flash("Department already exists.", category="error")
+        return redirect(url_for("admin.departments"))
+
+    old_department_name = department.department_name
+    department.department_name = department_name
+    Employee.query.filter(Employee.department == old_department_name).update(
+        {Employee.department: department_name},
+        synchronize_session=False,
+    )
+    EsarfApprover.query.filter(EsarfApprover.department_name == old_department_name).update(
+        {EsarfApprover.department_name: department_name},
+        synchronize_session=False,
+    )
+
+    try:
+        db.session.commit()
+        flash("Department updated successfully.", category="success")
+    except IntegrityError:
+        db.session.rollback()
+        flash("Department could not be updated.", category="error")
+
+    return redirect(url_for("admin.departments"))
+
+
 @admin.route('/users', methods=['GET'])
 @roles_required("admin")
 def users():
@@ -695,10 +942,15 @@ def update_user(user_id):
 
 
 @admin.route('/esarf_requests', methods=['GET'])
-@roles_required("admin", "timekeeper", "dept manager", "operation", "general manager")
+@login_required
 def esarf_requests():
+    if not _current_user_can_manage_esarf():
+        flash("You do not have permission to access that page.", category="error")
+        return redirect(url_for("views.home"))
+
     esarf_request_query = EsarfRequest.query
-    current_role = (current_user.role or "").strip().lower()
+    current_role = _current_esarf_workflow_role()
+    esarf_request_query = _scope_esarf_query_for_current_user(esarf_request_query)
     if current_role == "operation":
         esarf_request_query = esarf_request_query.filter(
             EsarfRequest.status.in_(
@@ -719,19 +971,31 @@ def esarf_requests():
             )
         )
     esarf_request_items = esarf_request_query.order_by(EsarfRequest.id.desc()).all()
-    return render_template('admin/esarf_requests.html', esarf_requests=esarf_request_items)
+    return render_template(
+        'admin/esarf_requests.html',
+        esarf_requests=esarf_request_items,
+        esarf_current_role=current_role,
+    )
 
 
 @admin.route("/esarf_requests/<int:esarf_id>/status", methods=["POST"])
-@roles_required("admin", "timekeeper", "dept manager", "operation", "general manager")
+@login_required
 def update_esarf_status(esarf_id):
+    if not _current_user_can_manage_esarf():
+        flash("You do not have permission to update this request.", category="error")
+        return redirect(url_for("views.home"))
+
     esarf_request = EsarfRequest.query.filter_by(id=esarf_id).first()
     if not esarf_request:
         flash("ESARF request not found.", category="error")
         return redirect(url_for("admin.esarf_requests"))
 
-    current_role = (current_user.role or "").strip().lower()
+    current_role = _current_esarf_workflow_role()
     action = (request.form.get("action") or "").strip().lower()
+
+    if current_role == "dept manager" and not _department_manager_can_access_esarf(esarf_request):
+        flash("You can only view or approve ESARF requests from your own department.", category="error")
+        return redirect(url_for("admin.esarf_requests"))
 
     # Backward-compatible fallback for old forms that still submit "status".
     legacy_status = (request.form.get("status") or "").strip().title()
@@ -1289,6 +1553,7 @@ def settings():
         if action == 'assign_esarf_approver':
             user_id = request.form.get('user_id')
             approver_role = (request.form.get('approver_role') or '').strip().lower()
+            department_name = (request.form.get('department_name') or '').strip()
 
             if approver_role not in ESARF_APPROVER_ROLE_KEYS:
                 flash('Please select a valid ESARF approver role.', category='error')
@@ -1304,9 +1569,44 @@ def settings():
             if user.role == 'admin':
                 flash('Admin users cannot be reassigned from approval settings.', category='error')
                 return redirect(url_for('admin.settings'))
+            if approver_role == 'dept manager':
+                if not department_name:
+                    flash('Please choose the department this manager can approve.', category='error')
+                    return redirect(url_for('admin.settings'))
+                selected_department = Department.query.filter(
+                    func.lower(Department.department_name) == department_name.lower()
+                ).first()
+                if not selected_department:
+                    flash('Selected department was not found.', category='error')
+                    return redirect(url_for('admin.settings'))
+                department_name = selected_department.department_name
+            else:
+                department_name = None
+
+            if approver_role == 'dept manager':
+                existing_role_assignment = EsarfApprover.query.filter(
+                    EsarfApprover.user_id != user.id,
+                    EsarfApprover.approver_role == approver_role,
+                    func.lower(EsarfApprover.department_name) == department_name.lower(),
+                ).first()
+                if existing_role_assignment:
+                    flash('That department already has a Department Manager approver.', category='error')
+                    return redirect(url_for('admin.settings'))
+
+            existing_assignment = EsarfApprover.query.filter_by(user_id=user.id).first()
+            if existing_assignment:
+                existing_assignment.approver_role = approver_role
+                existing_assignment.department_name = department_name
+            else:
+                db.session.add(
+                    EsarfApprover(
+                        user_id=user.id,
+                        approver_role=approver_role,
+                        department_name=department_name,
+                    )
+                )
 
             role_label = dict(ESARF_APPROVER_ROLES)[approver_role]
-            user.role = approver_role
             try:
                 db.session.commit()
                 flash(f'{user.username} assigned as {role_label}.', category='success')
@@ -1321,12 +1621,16 @@ def settings():
             if not user:
                 flash('User not found.', category='error')
                 return redirect(url_for('admin.settings'))
-            if user.role not in ESARF_APPROVER_ROLE_KEYS:
+            assignment = EsarfApprover.query.filter_by(user_id=user.id).first()
+            if not assignment:
                 flash('Selected user is not an ESARF approver.', category='error')
                 return redirect(url_for('admin.settings'))
 
-            previous_role = dict(ESARF_APPROVER_ROLES)[user.role]
-            user.role = 'user'
+            previous_role = dict(ESARF_APPROVER_ROLES).get(
+                assignment.approver_role,
+                'ESARF',
+            )
+            db.session.delete(assignment)
             try:
                 db.session.commit()
                 flash(f'{user.username} removed from {previous_role} approvers.', category='success')
@@ -1403,13 +1707,23 @@ def settings():
     approvers = PerkApprover.query.order_by(PerkApprover.id.desc()).all()
     approver_user_ids = [a.user_id for a in approvers]
     esarf_approvers_by_role = {
-        role: User.query.filter_by(role=role).order_by(User.username.asc()).all()
+        role: (
+            EsarfApprover.query
+            .join(EsarfApprover.user)
+            .filter(EsarfApprover.approver_role == role)
+            .order_by(User.username.asc())
+            .all()
+        )
         for role, _label in ESARF_APPROVER_ROLES
     }
+    esarf_approver_user_ids = [
+        user_id for user_id, in db.session.query(EsarfApprover.user_id).all()
+    ]
     esarf_eligible_users = User.query.filter(
         User.role != 'admin',
-        User.role.notin_(list(ESARF_APPROVER_ROLE_KEYS)),
+        User.id.notin_(esarf_approver_user_ids),
     ).order_by(User.username.asc()).all()
+    departments = Department.query.order_by(Department.department_name.asc()).all()
     # Users eligible to be approvers (non-admin users that are not already approvers)
     eligible_users = User.query.filter(
         User.id.notin_(approver_user_ids),
@@ -1423,4 +1737,5 @@ def settings():
         esarf_approver_roles=ESARF_APPROVER_ROLES,
         esarf_approvers_by_role=esarf_approvers_by_role,
         esarf_eligible_users=esarf_eligible_users,
+        departments=departments,
     )

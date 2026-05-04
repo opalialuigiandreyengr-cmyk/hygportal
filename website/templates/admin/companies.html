@@ -2,15 +2,18 @@
 {% block title %}Companies | HYG Employee Portal{% endblock %}
 
 {% block extra_head %}
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/employee.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/employee.css') }}?v={{ static_version }}">
 {% endblock %}
 
 {% block page_content %}
-  <section class="page-header employees-hero">
+  <section class="page-header employees-hero employees-hero-card">
     <div class="employees-hero-head">
-      <div class="employees-hero-copy">
-        <h1>Companies</h1>
-        <p class="employees-hero-subtitle">View and manage partner companies and subsidiaries.</p>
+      <div class="employees-hero-copy employees-title-row">
+        <span class="employees-title-icon" aria-hidden="true"><i class="fa-solid fa-building"></i></span>
+        <div>
+          <h1>Companies</h1>
+          <p class="employees-hero-subtitle">View and manage partner companies and subsidiaries.</p>
+        </div>
       </div>
       <div class="page-header-actions employees-hero-actions">
         <button type="button" data-bs-toggle="modal" data-bs-target="#addCompanyModal" class="primary-btn btn-mini">
@@ -51,7 +54,7 @@
             <th>Contact Number</th>
             <th>Address</th>
             <th>Status</th>
-            <th>Action</th>
+            <th class="action-col-head" title="Actions"><i class="fa-solid fa-sliders"></i></th>
           </tr>
         </thead>
         <tbody>
@@ -66,20 +69,23 @@
                 >
                 <div class="company-meta">
                   <strong class="company-name-text">{{ company.company_name }}</strong>
-                  <small class="company-subtext">Company ID: {{ company.id }}</small>
                 </div>
               </div>
             </td>
             <td><span class="company-contact">{{ company.contact_number or '-' }}</span></td>
-            <td><span class="company-address">{{ company.address or '-' }}</span></td>
+            <td><span class="company-address" title="{{ company.address or '' }}">{{ company.address or '-' }}</span></td>
             <td><span class="status active">Active</span></td>
             <td>
-              <button type="button"
-                      class="edit-btn"
-                      data-bs-toggle="modal"
-                      data-bs-target="#editCompanyModal{{ company.id }}">
-                <i class="fa-solid fa-pen-to-square"></i> Edit
-              </button>
+              <div class="employees-row-actions">
+                <button type="button"
+                        class="employees-icon-btn"
+                        data-bs-toggle="modal"
+                        data-bs-target="#editCompanyModal{{ company.id }}"
+                        aria-label="Edit company"
+                        title="Edit company">
+                  <i class="fa-solid fa-pen"></i>
+                </button>
+              </div>
             </td>
           </tr>
           {% else %}
@@ -235,5 +241,5 @@
 {% endblock %}
 
 {% block extra_scripts %}
-  <script src="{{ url_for('static', filename='js/company.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/company.js') }}?v={{ static_version }}"></script>
 {% endblock %}

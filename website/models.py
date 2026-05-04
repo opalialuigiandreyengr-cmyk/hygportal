@@ -13,6 +13,21 @@ class User(db.Model, UserMixin):
     employee = db.relationship('Employee', backref=db.backref('user', uselist=False))
 
 
+class MobileSession(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    token_hash = db.Column(db.String(64), unique=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=philippine_now, nullable=False)
+    last_used_at = db.Column(db.DateTime, default=philippine_now, nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    pending_perk_request = db.Column(db.JSON)
+
+    user = db.relationship(
+        'User',
+        backref=db.backref('mobile_sessions', lazy=True, cascade='all, delete-orphan'),
+    )
+
+
 class Employee(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     biometric_no = db.Column(db.String(50))
@@ -106,6 +121,18 @@ class Company(db.Model):
     logo_path = db.Column(db.String(255))
 
 
+class Department(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    department_name = db.Column(db.String(100), unique=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=philippine_now, nullable=False)
+    updated_at = db.Column(
+        db.DateTime,
+        default=philippine_now,
+        onupdate=philippine_now,
+        nullable=False,
+    )
+
+
 class EsarfRequest(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     esarf_number = db.Column(db.String(20), unique=True)
@@ -132,7 +159,26 @@ class EsarfRequest(db.Model):
         backref=db.backref('esarf_requests', lazy=True),
     )
 
-    
+
+class EsarfApprover(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, unique=True)
+    approver_role = db.Column(db.String(50), nullable=False)
+    department_name = db.Column(db.String(100))
+    created_at = db.Column(db.DateTime, default=philippine_now, nullable=False)
+    updated_at = db.Column(
+        db.DateTime,
+        default=philippine_now,
+        onupdate=philippine_now,
+        nullable=False,
+    )
+
+    user = db.relationship(
+        'User',
+        backref=db.backref('esarf_approver', uselist=False),
+    )
+
+
 class LeaveRequest(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     submitted_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)

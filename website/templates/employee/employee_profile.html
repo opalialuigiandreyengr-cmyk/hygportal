@@ -2,7 +2,7 @@
 {% block title %}My Profile | HYG Employee Portal{% endblock %}
 
 {% block extra_head %}
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/employee-profile.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/employee-profile.css') }}?v={{ static_version }}">
   <style>
     
   </style>
@@ -433,6 +433,7 @@
           </form>
         </article>
 
+        {% set has_spouse = employee.spouse_full_name or employee.spouse_age or employee.spouse_birth_date or employee.spouse_school or employee.spouse_course_degree or employee.spouse_occupation %}
         <article class="card emp-section" data-section="spouse">
           <div class="emp-section-head">
             <div style="display:flex;align-items:center;gap:0.55rem;">
@@ -446,15 +447,26 @@
             </div>
           </div>
           <form method="post" action="{{ url_for('employee.update_section', employee_id=employee.id, section='spouse') }}" class="emp-fields form-section">
+            {% if has_spouse %}
             <div class="emp-field full"><p class="emp-label">Full Name</p><div class="emp-value view-mode">{{ employee.spouse_full_name or 'N/A' }}</div><input type="text" name="spouse_full_name" class="emp-input edit-mode" value="{{ employee.spouse_full_name or '' }}" style="display:none;"></div>
             <div class="emp-field"><p class="emp-label">Age</p><div class="emp-value view-mode">{{ employee.spouse_age or 'N/A' }}</div><input type="number" name="spouse_age" class="emp-input edit-mode" value="{{ employee.spouse_age or '' }}" style="display:none;"></div>
             <div class="emp-field"><p class="emp-label">Birth Date</p><div class="emp-value view-mode">{{ employee.spouse_birth_date or 'N/A' }}</div><input type="date" name="spouse_birth_date" class="emp-input edit-mode" value="{{ employee.spouse_birth_date }}" style="display:none;"></div>
             <div class="emp-field"><p class="emp-label">School</p><div class="emp-value view-mode">{{ employee.spouse_school or 'N/A' }}</div><input type="text" name="spouse_school" class="emp-input edit-mode" value="{{ employee.spouse_school or '' }}" style="display:none;"></div>
             <div class="emp-field"><p class="emp-label">Course/Degree</p><div class="emp-value view-mode">{{ employee.spouse_course_degree or 'N/A' }}</div><input type="text" name="spouse_course_degree" class="emp-input edit-mode" value="{{ employee.spouse_course_degree or '' }}" style="display:none;"></div>
             <div class="emp-field"><p class="emp-label">Occupation</p><div class="emp-value view-mode">{{ employee.spouse_occupation or 'N/A' }}</div><input type="text" name="spouse_occupation" class="emp-input edit-mode" value="{{ employee.spouse_occupation or '' }}" style="display:none;"></div>
+            {% else %}
+            <div class="emp-field full na-row"><p class="emp-label">Spouse Information</p><div class="emp-value view-mode">N/A</div></div>
+            <input type="text" name="spouse_full_name" class="emp-input edit-mode" value="{{ employee.spouse_full_name or '' }}" style="display:none;">
+            <input type="number" name="spouse_age" class="emp-input edit-mode" value="{{ employee.spouse_age or '' }}" style="display:none;">
+            <input type="date" name="spouse_birth_date" class="emp-input edit-mode" value="{{ employee.spouse_birth_date }}" style="display:none;">
+            <input type="text" name="spouse_school" class="emp-input edit-mode" value="{{ employee.spouse_school or '' }}" style="display:none;">
+            <input type="text" name="spouse_course_degree" class="emp-input edit-mode" value="{{ employee.spouse_course_degree or '' }}" style="display:none;">
+            <input type="text" name="spouse_occupation" class="emp-input edit-mode" value="{{ employee.spouse_occupation or '' }}" style="display:none;">
+            {% endif %}
           </form>
         </article>
 
+        {% set has_children = employee.no_of_children is not none or employee.children_details_list %}
         <article class="card emp-section" data-section="children">
           <div class="emp-section-head">
             <div style="display:flex;align-items:center;gap:0.55rem;">
@@ -468,9 +480,10 @@
             </div>
           </div>
           <form method="post" action="{{ url_for('employee.update_section', employee_id=employee.id, section='children') }}" class="emp-fields form-section">
-            <div class="emp-field"><p class="emp-label">No. of Children</p><div class="emp-value view-mode">{{ employee.no_of_children or 'N/A' }}</div><input type="number" name="no_of_children" class="emp-input edit-mode" value="{{ employee.no_of_children or '' }}" style="display:none;"></div>
-            <div class="emp-field"><p class="emp-label">Male Children</p><div class="emp-value view-mode">{{ employee.no_of_male_children or 'N/A' }}</div><input type="number" name="no_of_male_children" class="emp-input edit-mode" value="{{ employee.no_of_male_children or '' }}" style="display:none;"></div>
-            <div class="emp-field"><p class="emp-label">Female Children</p><div class="emp-value view-mode">{{ employee.no_of_female_children or 'N/A' }}</div><input type="number" name="no_of_female_children" class="emp-input edit-mode" value="{{ employee.no_of_female_children or '' }}" style="display:none;"></div>
+            {% if has_children %}
+            <div class="emp-field"><p class="emp-label">No. of Children</p><div class="emp-value view-mode">{{ employee.no_of_children if employee.no_of_children is not none else 'N/A' }}</div><input type="number" name="no_of_children" class="emp-input edit-mode" value="{{ employee.no_of_children or '' }}" style="display:none;"></div>
+            <div class="emp-field"><p class="emp-label">Male Children</p><div class="emp-value view-mode">{{ employee.no_of_male_children if employee.no_of_male_children is not none else 'N/A' }}</div><input type="number" name="no_of_male_children" class="emp-input edit-mode" value="{{ employee.no_of_male_children or '' }}" style="display:none;"></div>
+            <div class="emp-field"><p class="emp-label">Female Children</p><div class="emp-value view-mode">{{ employee.no_of_female_children if employee.no_of_female_children is not none else 'N/A' }}</div><input type="number" name="no_of_female_children" class="emp-input edit-mode" value="{{ employee.no_of_female_children or '' }}" style="display:none;"></div>
             {% for child in employee.children_details_list %}
               <div class="emp-field full"><p class="emp-label">Child {{ loop.index }}</p><div class="emp-value view-mode">{{ child.full_name or 'N/A' }}</div><input type="text" name="child_full_name[]" class="emp-input edit-mode" value="{{ child.full_name or '' }}" style="display:none;"></div>
               <div class="emp-field"><p class="emp-label">Age</p><div class="emp-value view-mode">{{ child.age or 'N/A' }}</div><input type="number" name="child_age[]" class="emp-input edit-mode" value="{{ child.age or '' }}" style="display:none;"></div>
@@ -478,9 +491,13 @@
               <div class="emp-field"><p class="emp-label">School</p><div class="emp-value view-mode">{{ child.school or 'N/A' }}</div><input type="text" name="child_school[]" class="emp-input edit-mode" value="{{ child.school or '' }}" style="display:none;"></div>
               <div class="emp-field"><p class="emp-label">School Level</p><div class="emp-value view-mode">{{ child.school_level or 'N/A' }}</div><input type="text" name="child_school_level[]" class="emp-input edit-mode" value="{{ child.school_level or '' }}" style="display:none;"></div>
               <div class="emp-field"><p class="emp-label">Occupation</p><div class="emp-value view-mode">{{ child.occupation or 'N/A' }}</div><input type="text" name="child_occupation[]" class="emp-input edit-mode" value="{{ child.occupation or '' }}" style="display:none;"></div>
-            {% else %}
-              <div class="emp-field full"><p class="emp-label">Children Records</p><div class="emp-value view-mode">N/A</div><input type="text" class="emp-input edit-mode" value="N/A" readonly style="display:none;"></div>
             {% endfor %}
+            {% else %}
+            <div class="emp-field full na-row"><p class="emp-label">Children Information</p><div class="emp-value view-mode">N/A</div></div>
+            <input type="number" name="no_of_children" class="emp-input edit-mode" value="{{ employee.no_of_children or '' }}" style="display:none;">
+            <input type="number" name="no_of_male_children" class="emp-input edit-mode" value="{{ employee.no_of_male_children or '' }}" style="display:none;">
+            <input type="number" name="no_of_female_children" class="emp-input edit-mode" value="{{ employee.no_of_female_children or '' }}" style="display:none;">
+            {% endif %}
           </form>
         </article>
       </div>

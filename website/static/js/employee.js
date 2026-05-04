@@ -202,6 +202,20 @@ function initEditEmployeeMissingDataHighlights() {
   };
 
   const updateFieldState = (field) => {
+    // Skip Spouse and Children sections — these are optional and use N/A placeholders
+    const sectionCard = field.closest(".form-section-card");
+    if (sectionCard) {
+      const title = sectionCard.querySelector(".form-section-title");
+      if (title && /^(Spouse|Children)$/i.test(title.textContent.trim())) {
+        return;
+      }
+    }
+
+    // Skip Biometric No. — optional field that shows "None" when empty
+    if (field.name === "biometric_no") {
+      return;
+    }
+
     const isMissing = isEmptyField(field);
     field.classList.toggle("missing-data-highlight", isMissing);
 

@@ -70,15 +70,24 @@
         {% if not item.is_read %}<span class="notification-unread-dot" aria-label="Unread"></span>{% endif %}
         <div class="notification-actions">
           {% if item.link_url %}
-          <a href="{{ item.link_url }}" class="notification-action-link">Open</a>
+          <a href="{{ item.link_url }}" class="notification-action-link" aria-label="Open notification">
+            <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i>
+            <span>Open</span>
+          </a>
           {% endif %}
           {% if not item.is_read %}
           <form method="POST" action="{{ url_for('employee.mark_notification_read', notification_id=item.id) }}">
-            <button type="submit">Read</button>
+            <button type="submit" aria-label="Mark notification as read">
+              <i class="fa-solid fa-check" aria-hidden="true"></i>
+              <span>Read</span>
+            </button>
           </form>
           {% endif %}
           <form method="POST" action="{{ url_for('employee.delete_notification', notification_id=item.id) }}">
-            <button type="submit" class="is-danger">Delete</button>
+            <button type="submit" class="is-danger" aria-label="Delete notification">
+              <i class="fa-regular fa-trash-can" aria-hidden="true"></i>
+              <span>Delete</span>
+            </button>
           </form>
         </div>
       </article>

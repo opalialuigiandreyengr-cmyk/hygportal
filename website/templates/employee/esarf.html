@@ -2,7 +2,7 @@
 {% block title %}ESARF | HYG Employee Portal{% endblock %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/pages/esarf.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pages/esarf.css') }}?v={{ static_version }}">
 {% endblock %}
 
 {% block page_content %}
@@ -18,7 +18,7 @@
 {% set selected_total_hours = esarf_form.get('total_hours', '') %}
 {% set selected_reason = esarf_form.get('reason', '') %}
 
-<header class="page-header esarf-page-header employee-esarf-form-header">
+<header class="page-header esarf-page-header employee-esarf-form-header esarf-hero-card">
   <div class="employee-esarf-history-title">
     <span class="employee-esarf-history-icon" aria-hidden="true">
       <i class="fa-solid fa-file-lines"></i>
@@ -56,9 +56,20 @@
       <input type="hidden" name="company" value="{{ auto_company }}">
       <input type="hidden" name="department" value="{{ auto_department }}">
 
-      <div class="full-width esarf-form-section-title">
-        <span class="esarf-step-badge">1</span>
-        <span>Request Information</span>
+      <div class="full-width esarf-form-section-title esarf-request-info-title">
+        <div class="esarf-section-title-copy">
+          <span class="esarf-step-badge">1</span>
+          <span>Request Information</span>
+        </div>
+        <button
+          type="button"
+          class="esarf-mobile-notes-btn"
+          data-bs-toggle="modal"
+          data-bs-target="#esarfSubmissionNotesModal"
+          aria-label="Open submission notes"
+        >
+          <i class="fa-solid fa-circle-info"></i>
+        </button>
       </div>
 
       <div class="full-width esarf-inline-meta">
@@ -122,11 +133,6 @@
             <input type="checkbox" name="transaction_type" value="OB" {% if 'OB' in esarf_transaction_types %}checked{% endif %}>
             <span class="transaction-icon"><i class="fa-solid fa-briefcase"></i></span>
             <span>Official Business (OB)</span>
-          </label>
-          <label class="transaction-option transaction-adjustment">
-            <input type="checkbox" name="transaction_type" value="Adjustment" {% if 'Adjustment' in esarf_transaction_types %}checked{% endif %}>
-            <span class="transaction-icon"><i class="fa-solid fa-sliders"></i></span>
-            <span>Adjustment</span>
           </label>
         </div>
         <small class="field-hint hidden" id="otAutoHint"></small>
@@ -214,8 +220,35 @@
   </aside>
 </section>
 
+<div class="modal fade esarf-notes-modal" id="esarfSubmissionNotesModal" tabindex="-1" aria-labelledby="esarfSubmissionNotesModalTitle" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h5 class="modal-title" id="esarfSubmissionNotesModalTitle">Submission Notes</h5>
+          <p class="esarf-modal-subtitle">Review before sending your ESARF.</p>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <ul class="esarf-note-list esarf-modal-note-timeline">
+          <li>Prepare two copies of the form for every payroll period.</li>
+          <li>Select the correct transaction type for each entry.</li>
+          <li>For <strong>FIO</strong>, record only the missed time-in or time-out.</li>
+          <li>Leave dates should exclude rest days and holidays.</li>
+          <li>Overnight overtime must be written on its actual date.</li>
+        </ul>
+        <p class="esarf-note-deadline">
+          <i class="fa-regular fa-calendar-check"></i>
+          <span>Submit approved ESARF forms on or before <strong>the 5th and 20th.</strong></span>
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{{ url_for('static', filename='js/esarf.js') }}"></script>
+<script src="{{ url_for('static', filename='js/esarf.js') }}?v={{ static_version }}"></script>
 {% endblock %} 

@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}ESARF Request Detail | HYG Employee Portal{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pages/esarf.css') }}?v={{ static_version }}">
+{% endblock %}
+
+{% block page_content %}
+{% set req = esarf_request %}
+{% set employee = current_user.employee if current_user.is_authenticated and current_user.employee else None %}
+{% set employee_name = (
+    employee.first_name ~
+    (' ' ~ employee.middle_name[:1] ~ '.' if employee.middle_name else '') ~
+    ' ' ~ employee.last_name ~
+    (' ' ~ employee.suffix if employee.suffix else '')
+)|trim if employee else (current_user.username if current_user.is_authenticated else 'Employee') %}
+
+<section class="esarf-detail-page">
+  <header class="page-header esarf-page-header">
+    <h1>ESARF Request {{ req.esarf_number or '' }}</h1>
+    <p>Status: <strong>{{ req.status or 'Pending' }}</strong></p>
+  </header>
+
+  <article class="card esarf-detail-card">
+    <div class="field">
+      <label>Employee</label>
+      <div>{{ employee_name }}</div>
+    </div>
+    <div class="field">
+      <label>Company</label>
+      <div>{{ employee.company if employee else '' }}</div>
+    </div>
+    <div class="field">
+      <label>Department</label>
+      <div>{{ employee.department if employee else '' }}</div>
+    </div>
+    <div class="field">
+      <label>Time Schedule</label>
+      <div>{{ req.time_schedule }}</div>
+    </div>
+    <div class="field">
+      <label>Day Off</label>
+      <div>{{ req.day_off }}</div>
+    </div>
+    <div class="field">
+      <label>Payroll Class</label>
+      <div>{{ req.payroll_class }}</div>
+    </div>
+    <div class="field">
+      <label>Transaction Types</label>
+      <div>{{ req.transaction_types }}</div>
+    </div>
+    <div class="field">
+      <label>Date Range</label>
+      <div>{{ req.date_from.strftime('%b %d, %Y') if req.date_from else '' }} - {{ req.date_to.strftime('%b %d, %Y') if req.date_to else '' }}</div>
+    </div>
+    <div class="field">
+      <label>Time Range</label>
+      <div>{{ req.time_from.strftime('%I:%M %p') if req.time_from else '' }} - {{ req.time_to.strftime('%I:%M %p') if req.time_to else '' }}</div>
+    </div>
+    <div class="field">
+      <label>Total Hours</label>
+      <div>{{ req.total_hours }}</div>
+    </div>
+    <div class="field">
+      <label>Reason</label>
+      <div>{{ req.reason }}</div>
+    </div>
+  </article>
+</section>
+{% endblock %}

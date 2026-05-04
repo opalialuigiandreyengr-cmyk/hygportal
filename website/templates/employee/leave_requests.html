@@ -1,0 +1,404 @@
+{% extends "base.html" %}
+{% block title %}Leave History | HYG Employee Portal{% endblock %}
+
+{% block extra_head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/employee.css') }}?v={{ static_version }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/esarf.css') }}?v={{ static_version }}">
+{% endblock %}
+
+{% block page_content %}
+{% set request_items = leave_requests or [] %}
+{% set profile_employee = current_user.employee if current_user.is_authenticated and current_user.employee else None %}
+{% set profile_name = (
+  profile_employee.first_name ~
+  (' ' ~ profile_employee.middle_name[:1] ~ '.' if profile_employee.middle_name else '') ~
+  ' ' ~ profile_employee.last_name ~
+  (' ' ~ profile_employee.suffix if profile_employee.suffix else '')
+)|trim if profile_employee else (current_user.username if current_user.is_authenticated and current_user.username else 'Employee') %}
+{% set profile_department = profile_employee.department if profile_employee and profile_employee.department else 'Employee' %}
+{% set counts = namespace(total=0, pending=0, approved=0, rejected=0) %}
+{% for req in request_items %}
+  {% set counts.total = counts.total + 1 %}
+  {% set status_key = (req.status or 'Pending')|lower %}
+  {% if status_key == 'pending' %}
+    {% set counts.pending = counts.pending + 1 %}
+  {% elif status_key == 'approved' %}
+    {% set counts.approved = counts.approved + 1 %}
+  {% elif status_key == 'rejected' %}
+    {% set counts.rejected = counts.rejected + 1 %}
+  {% endif %}
+{% endfor %}
+
+<section class="employee-esarf-requests-page esarf-requests-redesign">
+  <header class="page-header esarf-page-header">
+    <div class="employee-esarf-history-title">
+      <span class="employee-esarf-history-icon" aria-hidden="true">
+        <i class="fa-solid fa-clock-rotate-left"></i>
+      </span>
+      <div>
+        <h1>Leave History</h1>
+        <p>View and track all your leave requests.</p>
+      </div>
+    </div>
+    <div class="employee-esarf-hero-tools esarf-header-actions">
+      <a href="{{ url_for('employee.leaves') }}" class="esarf-new-request-btn">
+        <i class="fa-solid fa-plus"></i>
+        New
+      </a>
+    </div>
+  </header>
+
+  <section class="card esarf-filters-card" aria-label="Leave request filters">
+    <form class="esarf-filters-form" id="leaveFilterForm">
+      <div class="esarf-filter-group esarf-filter-search">
+        <label for="leaveSearchInput">Search</label>
+        <div class="esarf-search-row">
+          <div class="esarf-search-wrap">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input type="search" id="leaveSearchInput" name="search" placeholder="Search leave requests..." autocomplete="off">
+          </div>
+          <button type="submit" class="esarf-filter-btn esarf-filter-btn-mobile" aria-label="Apply filters">
+            <i class="fa-solid fa-filter"></i>
+          </button>
+        </div>
+      </div>
+      <div class="esarf-filter-group esarf-filter-dates">
+        <label>Date Range</label>
+        <div class="esarf-date-range">
+          <input type="date" id="leaveDateFrom" name="date_from" aria-label="Date from">
+          <span class="esarf-date-sep">-</span>
+          <input type="date" id="leaveDateTo" name="date_to" aria-label="Date to">
+        </div>
+      </div>
+      <div class="esarf-filter-actions">
+        <button type="submit" class="esarf-filter-btn esarf-filter-btn-desktop" aria-label="Apply filters">
+          <i class="fa-solid fa-filter"></i>
+        </button>
+      </div>
+    </form>
+  </section>
+
+  <div class="esarf-status-bar">
+    <select id="leaveStatusFilter" name="status" class="esarf-status-select-hidden">
+      <option value="all">All Status</option>
+      <option value="pending">Pending</option>
+      <option value="approved">Approved</option>
+      <option value="rejected">Rejected</option>
+    </select>
+    <button type="button" class="esarf-status-tab active" data-value="all">All <span>{{ counts.total }}</span></button>
+    <button type="button" class="esarf-status-tab" data-value="pending">Pending <span>{{ counts.pending }}</span></button>
+    <button type="button" class="esarf-status-tab" data-value="approved">Approved <span>{{ counts.approved }}</span></button>
+    <button type="button" class="esarf-status-tab" data-value="rejected">Rejected <span>{{ counts.rejected }}</span></button>
+  </div>
+
+  <section class="card employee-esarf-table-card esarf-requests-table-card">
+    <div class="employee-esarf-table-wrap">
+      <table class="table align-middle employee-esarf-table">
+        <thead>
+          <tr>
+            <th>Request ID</th>
+            <th>Employee</th>
+            <th>Leave Category</th>
+            <th>Date Range</th>
+            <th>Duration</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for req in request_items %}
+          {% set raw_status = req.status if req.status else 'Pending' %}
+          {% set status_key = raw_status|lower %}
+          {% set leave_days = ((req.end_date - req.start_date).days + 1) if req.start_date and req.end_date else 0 %}
+          {% set date_from_display = req.start_date.strftime('%b') ~ '. ' ~ req.start_date.day ~ ', ' ~ req.start_date.year if req.start_date else '-' %}
+          {% set date_to_display = req.end_date.strftime('%b') ~ '. ' ~ req.end_date.day ~ ', ' ~ req.end_date.year if req.end_date else '-' %}
+          {% set date_range_display = req.start_date.strftime('%b') ~ '. ' ~ req.start_date.day ~ ' - ' ~ req.end_date.strftime('%b') ~ '. ' ~ req.end_date.day ~ ', ' ~ req.end_date.year if req.start_date and req.end_date and req.start_date.year == req.end_date.year else date_from_display ~ ' - ' ~ date_to_display %}
+          {% set leave_number = 'LEAVE-' ~ '%03d'|format(req.id) %}
+          <tr data-leave-status="{{ status_key }}" data-leave-date="{{ req.start_date.strftime('%Y-%m-%d') if req.start_date else '' }}" data-search-text="{{ leave_number ~ ' ' ~ profile_name ~ ' ' ~ profile_department ~ ' ' ~ (req.leave_category or '') ~ ' ' ~ (req.leave_type or '') ~ ' ' ~ raw_status }}">
+            <td>
+              <div class="company-meta esarf-request-id">
+                <strong class="company-name-text">{{ leave_number }}</strong>
+              </div>
+            </td>
+            <td>
+              <div class="esarf-employee-cell">
+                {% if profile_employee and profile_employee.photopath %}
+                <img src="{{ url_for('static', filename=profile_employee.photopath) }}" alt="{{ profile_name[:1] }}" class="esarf-avatar">
+                {% else %}
+                <span class="esarf-avatar">{{ profile_name[:1] }}</span>
+                {% endif %}
+                <div class="company-meta">
+                  <strong class="company-name-text">{{ profile_name }}</strong>
+                  <small class="company-subtext">{{ profile_department }}</small>
+                </div>
+              </div>
+            </td>
+            <td>
+              <span class="esarf-trxn-pill">
+                <i class="fa-regular fa-calendar-check"></i>
+                {{ req.leave_category or '-' }}
+              </span>
+              <small class="company-subtext d-block mt-1">{{ req.leave_type or '-' }}</small>
+            </td>
+            <td>
+              <div class="company-meta">
+                <strong class="company-name-text">{{ date_range_display }}</strong>
+              </div>
+            </td>
+            <td>{{ leave_days }} {{ 'day' if leave_days == 1 else 'days' }}</td>
+            <td><span class="esarf-status-chip is-{{ status_key }}">{{ raw_status }}</span></td>
+            <td class="action-cell">
+              <div class="action-icons">
+                <button type="button" class="edit-btn action-icon-btn" data-bs-toggle="offcanvas" data-bs-target="#employeeLeavePanel{{ req.id }}" aria-controls="employeeLeavePanel{{ req.id }}" title="View Request" aria-label="View Request">
+                  <i class="fa-regular fa-eye"></i>
+                </button>
+                <button type="button" class="edit-btn action-icon-btn" title="More Options" aria-label="More Options">
+                  <i class="fa-solid fa-ellipsis-vertical"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="7" class="text-center py-4">No leave requests yet.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer class="esarf-table-footer">
+    <span>Showing <strong id="leaveVisibleCount">{{ counts.total }}</strong> of {{ counts.total }} results</span>
+    <div class="esarf-pagination" aria-label="Pagination">
+      <button type="button" disabled><i class="fa-solid fa-chevron-left"></i></button>
+      <button type="button" class="active">1</button>
+      <button type="button">2</button>
+      <button type="button">3</button>
+      <button type="button"><i class="fa-solid fa-chevron-right"></i></button>
+    </div>
+    <label class="esarf-rows-select">
+      Rows per page:
+      <select aria-label="Rows per page">
+        <option>10</option>
+        <option>25</option>
+        <option>50</option>
+      </select>
+    </label>
+  </footer>
+
+  <section class="employee-esarf-mobile-list" aria-label="Leave requests">
+    {% for req in request_items %}
+    {% set raw_status = req.status if req.status else 'Pending' %}
+    {% set status_key = raw_status|lower %}
+    {% set leave_days = ((req.end_date - req.start_date).days + 1) if req.start_date and req.end_date else 0 %}
+    {% set date_from_display = req.start_date.strftime('%b') ~ '. ' ~ req.start_date.day ~ ', ' ~ req.start_date.year if req.start_date else '-' %}
+    {% set date_to_display = req.end_date.strftime('%b') ~ '. ' ~ req.end_date.day ~ ', ' ~ req.end_date.year if req.end_date else '-' %}
+    {% set date_range_display = req.start_date.strftime('%b') ~ '. ' ~ req.start_date.day ~ ' - ' ~ req.end_date.strftime('%b') ~ '. ' ~ req.end_date.day ~ ', ' ~ req.end_date.year if req.start_date and req.end_date and req.start_date.year == req.end_date.year else date_from_display ~ ' - ' ~ date_to_display %}
+    {% set leave_number = 'LEAVE-' ~ '%03d'|format(req.id) %}
+    <article class="employee-esarf-mobile-card is-{{ status_key }}" data-leave-status="{{ status_key }}" data-leave-date="{{ req.start_date.strftime('%Y-%m-%d') if req.start_date else '' }}" data-search-text="{{ leave_number ~ ' ' ~ profile_name ~ ' ' ~ profile_department ~ ' ' ~ (req.leave_category or '') ~ ' ' ~ (req.leave_type or '') ~ ' ' ~ raw_status }}">
+      <div class="employee-esarf-mobile-main">
+        {% if profile_employee and profile_employee.photopath %}
+        <img src="{{ url_for('static', filename=profile_employee.photopath) }}" alt="{{ profile_name[:1] }}" class="employee-esarf-mobile-avatar is-{{ status_key }}">
+        {% else %}
+        <span class="employee-esarf-mobile-avatar is-{{ status_key }}">{{ profile_name[:1] }}</span>
+        {% endif %}
+        <div class="employee-esarf-mobile-body">
+          <div class="employee-esarf-mobile-row employee-esarf-mobile-title-row">
+            <div class="employee-esarf-mobile-info">
+              <strong class="employee-esarf-mobile-id">{{ leave_number }}</strong>
+              <span class="employee-esarf-mobile-name">{{ profile_name }}</span>
+              <span class="employee-esarf-mobile-dept">{{ profile_department }}</span>
+            </div>
+            <div class="employee-esarf-mobile-side">
+              <span class="employee-esarf-mobile-status-text is-{{ status_key }}">{{ raw_status }}</span>
+              <div class="employee-esarf-mobile-datetime">
+                <span><i class="fa-regular fa-calendar"></i>{{ date_range_display }}</span>
+              </div>
+            </div>
+          </div>
+          <div class="employee-esarf-mobile-row employee-esarf-mobile-detail-row">
+            <span class="esarf-trxn-pill">
+              <i class="fa-regular fa-calendar-check"></i>
+              {{ req.leave_category or '-' }} · {{ req.leave_type or '-' }}
+            </span>
+            <div class="employee-esarf-mobile-side">
+              <strong class="employee-esarf-mobile-id">{{ leave_days }} {{ 'day' if leave_days == 1 else 'days' }}</strong>
+              <div class="employee-esarf-mobile-actions">
+                <button type="button" class="edit-btn action-icon-btn" data-bs-toggle="offcanvas" data-bs-target="#employeeLeavePanel{{ req.id }}" aria-controls="employeeLeavePanel{{ req.id }}" title="View Request" aria-label="View Request">
+                  <i class="fa-regular fa-eye"></i>
+                  <span>View</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </article>
+    {% else %}
+    <p class="employee-esarf-mobile-empty">No leave requests yet.</p>
+    {% endfor %}
+  </section>
+</section>
+
+{% for req in request_items %}
+{% set raw_status = req.status if req.status else 'Pending' %}
+{% set status_key = raw_status|lower %}
+{% set leave_days = ((req.end_date - req.start_date).days + 1) if req.start_date and req.end_date else 0 %}
+{% set date_from_display = req.start_date.strftime('%b') ~ '. ' ~ req.start_date.day ~ ', ' ~ req.start_date.year if req.start_date else '-' %}
+{% set date_to_display = req.end_date.strftime('%b') ~ '. ' ~ req.end_date.day ~ ', ' ~ req.end_date.year if req.end_date else '-' %}
+{% set leave_number = 'LEAVE-' ~ '%03d'|format(req.id) %}
+<aside class="offcanvas offcanvas-bottom employee-esarf-side-panel" tabindex="-1" id="employeeLeavePanel{{ req.id }}" aria-labelledby="employeeLeavePanelTitle{{ req.id }}">
+  <div class="offcanvas-header employee-esarf-panel-header">
+    <div class="employee-esarf-panel-title-wrap">
+      <h3 class="section-title mb-0" id="employeeLeavePanelTitle{{ req.id }}">Leave Request</h3>
+      <div class="employee-esarf-panel-meta">
+        <span class="employee-esarf-panel-number">{{ leave_number }}</span>
+        <span class="esarf-status-chip is-{{ status_key }}">{{ raw_status }}</span>
+      </div>
+    </div>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+  </div>
+  <div class="offcanvas-body employee-esarf-panel-body">
+    <section class="esarf-drawer-card">
+      <div class="esarf-drawer-person-card">
+        <div class="esarf-drawer-person">
+          {% if profile_employee and profile_employee.photopath %}
+          <img src="{{ url_for('static', filename=profile_employee.photopath) }}" alt="{{ profile_name[:1] }}" class="esarf-avatar">
+          {% else %}
+          <span class="esarf-avatar">{{ profile_name[:1] }}</span>
+          {% endif %}
+          <div>
+            <strong>{{ profile_name }}</strong>
+            <span>{{ profile_department }}</span>
+          </div>
+        </div>
+        <div class="esarf-drawer-submitted">
+          <span>Request ID</span>
+          <strong>{{ leave_number }}</strong>
+          <small>{{ raw_status }}</small>
+        </div>
+      </div>
+
+      <div class="esarf-drawer-section">
+        <h4>Date and Time Range</h4>
+        <div class="esarf-drawer-daterange-row">
+          <div class="esarf-drawer-daterange-item">
+            <span>Date From</span>
+            <strong>{{ date_from_display }}</strong>
+          </div>
+          <div class="esarf-drawer-daterange-item">
+            <span>Date To</span>
+            <strong>{{ date_to_display }}</strong>
+          </div>
+        </div>
+        <div class="esarf-drawer-total">
+          <span>Total Duration</span>
+          <strong>{{ leave_days }} {{ 'day' if leave_days == 1 else 'days' }}</strong>
+        </div>
+      </div>
+
+      <div class="esarf-drawer-section">
+        <h4>Leave Information</h4>
+        <div class="esarf-drawer-line">
+          <span>Leave Category</span>
+          <strong><span class="esarf-trxn-pill">{{ req.leave_category or '-' }}</span></strong>
+        </div>
+        <div class="esarf-drawer-line">
+          <span>Leave Pay Type</span>
+          <strong>{{ req.leave_type or '-' }}</strong>
+        </div>
+        <div class="esarf-drawer-line">
+          <span>Duration</span>
+          <strong>{{ leave_days }} {{ 'day' if leave_days == 1 else 'days' }}</strong>
+        </div>
+      </div>
+
+      <div class="esarf-drawer-section">
+        <h4>Reason / Details</h4>
+        <p class="esarf-drawer-reason">{{ req.reason or '-' }}</p>
+      </div>
+
+      <div class="esarf-drawer-section">
+        <h4>Status Timeline</h4>
+        <div class="esarf-timeline">
+          <div class="esarf-timeline-item is-active">
+            <span class="esarf-timeline-dot"></span>
+            <div>
+              <strong>{{ raw_status }}</strong>
+              <small>{% if raw_status == 'pending' %}Awaiting approval{% elif raw_status == 'rejected' %}Request declined{% else %}Current leave status{% endif %}</small>
+            </div>
+          </div>
+          <div class="esarf-timeline-item {% if raw_status == 'approved' %}is-done{% endif %}">
+            <span class="esarf-timeline-dot"></span>
+            <div>
+              <strong>Approval</strong>
+              <small>{% if raw_status == 'approved' %}Approved{% else %}Not yet completed{% endif %}</small>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</aside>
+{% endfor %}
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  const leaveFilterForm = document.getElementById("leaveFilterForm");
+  const leaveStatusFilter = document.getElementById("leaveStatusFilter");
+  const leaveSearchInput = document.getElementById("leaveSearchInput");
+  const leaveDateFrom = document.getElementById("leaveDateFrom");
+  const leaveDateTo = document.getElementById("leaveDateTo");
+  const leaveVisibleCount = document.getElementById("leaveVisibleCount");
+  const leaveRequestItems = document.querySelectorAll("[data-leave-status]");
+
+  function applyLeaveFilters() {
+    const activeStatus = leaveStatusFilter?.value || "all";
+    const searchTerm = (leaveSearchInput?.value || "").trim().toLowerCase();
+    const dateFrom = leaveDateFrom?.value || "";
+    const dateTo = leaveDateTo?.value || "";
+    let visibleCount = 0;
+
+    leaveRequestItems.forEach((item) => {
+      const matchesStatus = activeStatus === "all" || item.dataset.leaveStatus === activeStatus;
+      const matchesSearch = !searchTerm || (item.dataset.searchText || "").toLowerCase().includes(searchTerm);
+      const itemDate = item.dataset.leaveDate || "";
+      const matchesDateFrom = !dateFrom || (itemDate && itemDate >= dateFrom);
+      const matchesDateTo = !dateTo || (itemDate && itemDate <= dateTo);
+      const shouldShow = matchesStatus && matchesSearch && matchesDateFrom && matchesDateTo;
+
+      item.hidden = !shouldShow;
+      if (shouldShow && item.tagName === "TR") {
+        visibleCount += 1;
+      }
+    });
+
+    if (leaveVisibleCount) {
+      leaveVisibleCount.textContent = visibleCount;
+    }
+  }
+
+  document.querySelectorAll(".esarf-status-tab").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      document.querySelectorAll(".esarf-status-tab").forEach((item) => item.classList.remove("active"));
+      tab.classList.add("active");
+      if (leaveStatusFilter) {
+        leaveStatusFilter.value = tab.dataset.value;
+      }
+      applyLeaveFilters();
+    });
+  });
+
+  leaveFilterForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    applyLeaveFilters();
+  });
+
+  leaveStatusFilter?.addEventListener("change", applyLeaveFilters);
+  leaveSearchInput?.addEventListener("input", applyLeaveFilters);
+  leaveDateFrom?.addEventListener("change", applyLeaveFilters);
+  leaveDateTo?.addEventListener("change", applyLeaveFilters);
+</script>
+{% endblock %}

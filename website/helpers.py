@@ -112,3 +112,24 @@ def create_notification(user_id, title, message, category="info", link_url=None)
     )
     db.session.add(notification)
     return notification
+
+
+def sync_department_name(department_name):
+    department_name = (department_name or "").strip()
+    if not department_name:
+        return None
+
+    from sqlalchemy import func
+
+    from . import db
+    from .models import Department
+
+    department = Department.query.filter(
+        func.lower(Department.department_name) == department_name.lower()
+    ).first()
+    if department:
+        return department
+
+    department = Department(department_name=department_name)
+    db.session.add(department)
+    return department

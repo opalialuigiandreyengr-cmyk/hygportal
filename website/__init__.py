@@ -1,7 +1,8 @@
 import os
+import time
 from pathlib import Path
 
-from flask import Flask
+from flask import Flask, make_response, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
 from sqlalchemy import inspect, text, func
@@ -183,6 +184,56 @@ def _sync_perk_columns():
     db.session.commit()
 
 
+def _sync_departments():
+    from .helpers import sync_department_name
+    from .models import Employee
+
+    existing_departments = (
+        db.session.query(Employee.department)
+        .filter(Employee.department.isnot(None), Employee.department != "")
+        .distinct()
+        .all()
+    )
+    for department, in existing_departments:
+        sync_department_name(department)
+
+    db.session.commit()
+
+
+def _sync_esarf_approvers():
+    from .models import EsarfApprover, User
+
+    approver_roles = {"dept manager", "operation", "general manager"}
+    has_changes = False
+
+    for user in User.query.filter(User.role.in_(approver_roles)).all():
+        existing = EsarfApprover.query.filter_by(user_id=user.id).first()
+        if existing:
+            if existing.approver_role != user.role:
+                existing.approver_role = user.role
+                has_changes = True
+            if user.role != "dept manager" and existing.department_name:
+                existing.department_name = None
+                has_changes = True
+            continue
+
+        department_name = None
+        if user.role == "dept manager" and user.employee:
+            department_name = (user.employee.department or "").strip() or None
+
+        db.session.add(
+            EsarfApprover(
+                user_id=user.id,
+                approver_role=user.role,
+                department_name=department_name,
+            )
+        )
+        has_changes = True
+
+    if has_changes:
+        db.session.commit()
+
+
 def _migrate_employee_children_details():
     from .models import Employee
 
@@ -260,6 +311,23 @@ def create_app():
     app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{DB_NAME}'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['SECRET_KEY'] = os.getenv("SECRET_KEY", "thisisasecretkey")
+
+    def _static_version():
+        static_dir = Path(app.root_path) / 'static'
+        newest = 0
+        for pattern in ['css/**/*.css', 'js/**/*.js']:
+            for f in static_dir.glob(pattern):
+                try:
+                    mtime = f.stat().st_mtime
+                    if mtime > newest:
+                        newest = mtime
+                except OSError:
+                    continue
+        return str(int(newest)) if newest else str(int(time.time()))
+
+    @app.context_processor
+    def inject_static_version():
+        return dict(static_version=_static_version())
     
     db.init_app(app)
 
@@ -267,12 +335,14 @@ def create_app():
     from .auth import auth
     from .admin import admin
     from .employee import employee
+    from .mobile_api import mobile_api
     
 
     app.register_blueprint(auth, url_prefix='/')
     app.register_blueprint(views, url_prefix='/')
     app.register_blueprint(admin, url_prefix='/')
     app.register_blueprint(employee, url_prefix='/')
+    app.register_blueprint(mobile_api)
 
     from .models import User
 
@@ -281,6 +351,8 @@ def create_app():
         _sync_employee_columns()
         _sync_esarf_columns()
         _sync_perk_columns()
+        _sync_departments()
+        _sync_esarf_approvers()
         _migrate_employee_children_details()
         _sync_service_accounts()
         print("Created database!")
@@ -295,9 +367,11 @@ def create_app():
     def inject_global_user_status():
         from flask_login import current_user
         unread_notification_count = 0
+        is_esarf_approver = False
         if current_user.is_authenticated:
-            from .models import Notification, PerkApprover
+            from .models import EsarfApprover, Notification, PerkApprover
             is_perk_approver = PerkApprover.query.filter_by(user_id=current_user.id).first() is not None
+            is_esarf_approver = EsarfApprover.query.filter_by(user_id=current_user.id).first() is not None
             unread_notification_count = Notification.query.filter_by(
                 user_id=current_user.id,
                 is_read=False,
@@ -306,11 +380,23 @@ def create_app():
             is_perk_approver = False
         return dict(
             is_perk_approver=is_perk_approver,
+            is_esarf_approver=is_esarf_approver,
             unread_notification_count=unread_notification_count,
         )
 
     @login_manager.user_loader
     def load_user(id):
         return User.query.get(int(id))
+
+    @app.route("/sw.js")
+    def service_worker():
+        response = make_response(send_from_directory(app.static_folder, "sw.js"))
+        response.headers["Content-Type"] = "application/javascript; charset=utf-8"
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+    @app.route("/offline")
+    def offline():
+        return send_from_directory(app.static_folder, "offline.html")
     
     return app

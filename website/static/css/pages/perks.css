@@ -255,6 +255,22 @@
   margin-bottom: 10px;
 }
 
+.perks-loading {
+  font-size: 0.72rem;
+  color: #64748b;
+  font-weight: 500;
+  margin-left: 6px;
+}
+
+.perks-loading i {
+  margin-right: 4px;
+  color: #3b82f6;
+}
+
+.perks-loading.hidden {
+  display: none;
+}
+
 .perks-products-head {
   display: flex;
   align-items: center;

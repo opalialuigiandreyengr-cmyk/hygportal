@@ -2,7 +2,7 @@
 {% block title %}Dashboard | HYG Employee Portal{% endblock %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/pages/employee-dashboard.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pages/employee-dashboard.css') }}?v={{ static_version }}">
 {% endblock %}
 
 {% block page_content %}

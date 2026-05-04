@@ -8,7 +8,7 @@ from flask_login import current_user, login_required
 from werkzeug.security import generate_password_hash
 
 from . import db
-from .helpers import _save_employee_photo, create_notification, philippine_now
+from .helpers import _save_employee_photo, create_notification, philippine_now, sync_department_name
 from .models import Employee, EsarfRequest, LeaveRequest, DiscountRequest, ProductChargeRequest, Notification, User
 
 employee = Blueprint('employee', __name__)
@@ -383,6 +383,9 @@ def update_section(employee_id, section):
                 exclude_employee_id=employee_data.id,
             )
 
+        if section == 'employment':
+            sync_department_name(employee_data.department)
+
         if section == 'children':
             names = request.form.getlist('child_full_name[]')
             ages = request.form.getlist('child_age[]')
@@ -416,6 +419,30 @@ def update_section(employee_id, section):
         flash('Failed to update ' + section.replace('_', ' ').title() + '. Please check your inputs.', category='error')
 
     return redirect(url_for('employee.view_employee', employee_id=employee_id))
+
+
+@employee.route('/employee/esarf_requests')
+@login_required
+def esarf_requests():
+    profile_redirect = _require_employee_profile()
+    if profile_redirect:
+        return profile_redirect
+    # Get ESARF requests submitted by the current user
+    esarf_requests = EsarfRequest.query.filter_by(submitted_by_user_id=current_user.id).order_by(EsarfRequest.id.desc()).all()
+    return render_template('employee/esarf_requests.html', esarf_requests=esarf_requests)
+
+@employee.route('/employee/esarf_detail/<int:req_id>')
+@login_required
+def esarf_detail(req_id):
+    profile_redirect = _require_employee_profile()
+    if profile_redirect:
+        return profile_redirect
+    esarf_req = EsarfRequest.query.get_or_404(req_id)
+    # Ensure the request belongs to the current user
+    if esarf_req.submitted_by_user_id != current_user.id:
+        flash('You are not authorized to view this request.', category='error')
+        return redirect(url_for('employee.esarf_requests'))
+    return render_template('employee/esarf_detail.html', esarf_request=esarf_req)
 
 
 @employee.route('/employee/esarf', methods=['GET', 'POST'])
@@ -523,14 +550,7 @@ def esarf():
             )
             db.session.add(new_request)
             db.session.flush()
-            new_request.esarf_number = f"ESARF-{philippine_now().year}-{new_request.id:03d}"
-            create_notification(
-                current_user.id,
-                "ESARF sent",
-                f"You submitted {new_request.esarf_number}.",
-                category="success",
-                link_url=url_for("employee.esarf_requests"),
-            )
+            new_request.esarf_number = f"ESARF-{datetime.utcnow().year}-{new_request.id:03d}"
             db.session.commit()
 
             flash(
@@ -548,19 +568,6 @@ def esarf():
             )
 
     return render_template('employee/esarf.html', esarf_form=esarf_form, esarf_transaction_types=esarf_transaction_types)
-
-
-
-@employee.route('/employee/esarf_requests', methods=['GET'])
-@login_required
-def esarf_requests():
-    profile_redirect = _require_employee_profile()
-    if profile_redirect:
-        return profile_redirect
-
-    esarf_request_items = EsarfRequest.query.filter_by(submitted_by_user_id=current_user.id).order_by(EsarfRequest.id.desc()).all()
-    
-    return render_template('employee/esarf_requests.html', esarf_requests=esarf_request_items)
 
 
 @employee.route('/submit_leave', methods=['POST'])
@@ -601,7 +608,7 @@ def submit_leave():
             "Leave sent",
             f"You requested {final_category} leave.",
             category="success",
-            link_url=url_for("employee.leaves"),
+            link_url=url_for("employee.leave_requests"),
         )
         db.session.commit()
         flash("Leave request submitted successfully.", category="success")
@@ -611,6 +618,23 @@ def submit_leave():
         flash("Failed to submit leave. Check your inputs.", category="error")
 
     return redirect(url_for("employee.leaves"))
+
+
+@employee.route('/employee/leave_requests', methods=['GET'])
+@login_required
+def leave_requests():
+    profile_redirect = _require_employee_profile()
+    if profile_redirect:
+        return profile_redirect
+
+    leave_request_items = LeaveRequest.query.filter_by(
+        submitted_by_user_id=current_user.id
+    ).order_by(LeaveRequest.id.desc()).all()
+
+    return render_template(
+        'employee/leave_requests.html',
+        leave_requests=leave_request_items,
+    )
 
 
 
@@ -652,6 +676,30 @@ def leaves():
         approved_count=approved_count,
         rejected_count=rejected_count
     )
+
+
+@employee.route('/employee/proxy_inventory', methods=['GET'])
+@login_required
+def proxy_inventory():
+    import json
+    import os
+    from urllib.request import urlopen, Request
+    from urllib.error import URLError
+
+    inventory_url = os.environ.get(
+        'INVENTORY_API_URL',
+        'https://luigiandreyopalia.pythonanywhere.com/inventory/store_inventory_data'
+    )
+
+    try:
+        req = Request(inventory_url, headers={'Accept': 'application/json'})
+        with urlopen(req, timeout=10) as response:
+            data = json.loads(response.read().decode('utf-8'))
+            return data, 200
+    except URLError:
+        return {"success": True, "inventories": []}, 200
+    except Exception:
+        return {"success": True, "inventories": []}, 200
 
 
 @employee.route('/employee/perks', methods=['GET', 'POST'])

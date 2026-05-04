@@ -2,7 +2,7 @@
 {% block title %}Perks | HYG Employee Portal{% endblock %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/pages/perks.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pages/perks.css') }}?v={{ static_version }}">
 {% endblock %}
 
 {% block page_content %}
@@ -90,7 +90,7 @@
 
       <div class="perks-products-block" data-products="discount">
         <div class="perks-products-head">
-          <label>Products</label>
+          <label>Products <span class="perks-loading" id="discountProductLoading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading products...</span></label>
           <div class="perks-product-actions">
             <button type="button" class="perks-remove-last-btn" data-remove-last-product="discount" aria-label="Remove last product">
               <i class="fa-solid fa-xmark"></i>
@@ -105,7 +105,9 @@
           <div class="perks-product-row">
             <div class="field">
               <label>Product name</label>
-              <input type="text" name="discount_product_name[]" required placeholder="e.g. Cake">
+              <select name="discount_product_name[]" required onchange="onProductSelect(this, 'discount')">
+                <option value="" disabled selected>Select product</option>
+              </select>
             </div>
             <div class="field">
               <label>Quantity</label>
@@ -113,7 +115,7 @@
             </div>
             <div class="field">
               <label>Unit price (PHP)</label>
-              <input type="number" name="discount_price[]" step="0.01" min="0.01" required placeholder="0.00" oninput="calcDiscount()">
+              <input type="number" name="discount_price[]" step="0.01" min="0.01" required placeholder="0.00" oninput="calcDiscount()" readonly style="background:#f8fafc; color:#64748b; cursor:not-allowed;">
             </div>
           </div>
         </div>
@@ -179,7 +181,7 @@
 
       <div class="perks-products-block" data-products="charge">
         <div class="perks-products-head">
-          <label>Products</label>
+          <label>Products <span class="perks-loading" id="chargeProductLoading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading products...</span></label>
           <div class="perks-product-actions">
             <button type="button" class="perks-remove-last-btn" data-remove-last-product="charge" aria-label="Remove last product">
               <i class="fa-solid fa-xmark"></i>
@@ -194,7 +196,9 @@
           <div class="perks-product-row">
             <div class="field">
               <label>Product name</label>
-              <input type="text" name="charge_product_name[]" required placeholder="e.g. Cake">
+              <select name="charge_product_name[]" required onchange="onProductSelect(this, 'charge')">
+                <option value="" disabled selected>Select product</option>
+              </select>
             </div>
             <div class="field">
               <label>Quantity</label>
@@ -202,7 +206,7 @@
             </div>
             <div class="field">
               <label>Unit price (PHP)</label>
-              <input type="number" name="charge_price[]" step="0.01" min="0.01" required placeholder="0.00" oninput="calcTotal()">
+              <input type="number" name="charge_price[]" step="0.01" min="0.01" required placeholder="0.00" oninput="calcTotal()" readonly style="background:#f8fafc; color:#64748b; cursor:not-allowed;">
             </div>
           </div>
         </div>
@@ -391,6 +395,88 @@ const discountRemaining = {{ '%.2f'|format(discount_remaining) }};
 const chargeCreditLimit = {{ '%.2f'|format(charge_credit_limit) }};
 const chargeFirstAvailable = {{ 'true' if charge_first_available else 'false' }};
 
+window.inventoryProducts = [];
+
+async function fetchInventoryData() {
+  try {
+    const response = await fetch('/employee/proxy_inventory');
+    const data = await response.json();
+    if (data.success && Array.isArray(data.inventories)) {
+      window.inventoryProducts = data.inventories;
+      if (window.inventoryProducts.length === 0) {
+        enableManualProductEntry();
+      } else {
+        populateAllProductSelects();
+      }
+      const discountRow = document.querySelector('#discountProductList .perks-product-row');
+      const chargeRow = document.querySelector('#chargeProductList .perks-product-row');
+      if (discountRow) productTemplate.discount = discountRow.cloneNode(true);
+      if (chargeRow) productTemplate.charge = chargeRow.cloneNode(true);
+    } else {
+      console.error('Failed to fetch inventory:', data.message);
+      enableManualProductEntry();
+    }
+  } catch (err) {
+    console.error('Error fetching inventory:', err);
+    enableManualProductEntry();
+  } finally {
+    document.getElementById('discountProductLoading')?.classList.add('hidden');
+    document.getElementById('chargeProductLoading')?.classList.add('hidden');
+  }
+}
+
+function enableManualProductEntry() {
+  document.querySelectorAll('select[name="discount_product_name[]"], select[name="charge_product_name[]"]').forEach((select) => {
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.name = select.name;
+    input.required = true;
+    input.placeholder = 'Enter product name';
+    input.className = select.className;
+    input.onchange = select.onchange;
+    select.replaceWith(input);
+  });
+  document.querySelectorAll('input[name="discount_price[]"], input[name="charge_price[]"]').forEach((input) => {
+    input.readOnly = false;
+    input.removeAttribute('style');
+    input.placeholder = '0.00';
+  });
+}
+
+function populateProductSelect(select) {
+  if (!select || select.tagName !== 'SELECT') return;
+  const currentValue = select.value;
+  select.innerHTML = '<option value="" disabled selected>Select product</option>';
+  window.inventoryProducts.forEach((item) => {
+    const option = document.createElement('option');
+    option.value = item.item_name;
+    option.textContent = item.item_name + ' (PHP ' + parseFloat(item.price).toFixed(2) + ')';
+    option.dataset.price = item.price;
+    select.appendChild(option);
+  });
+  if (currentValue) {
+    select.value = currentValue;
+  }
+}
+
+function populateAllProductSelects() {
+  document.querySelectorAll('select[name="discount_product_name[]"], select[name="charge_product_name[]"]').forEach(populateProductSelect);
+}
+
+function onProductSelect(select, type) {
+  const row = select.closest('.perks-product-row');
+  if (!row) return;
+  if (select.tagName === 'SELECT') {
+    const selectedOption = select.options[select.selectedIndex];
+    const priceInput = row.querySelector(`input[name="${type}_price[]"]`);
+    if (priceInput && selectedOption && selectedOption.dataset.price) {
+      priceInput.value = parseFloat(selectedOption.dataset.price).toFixed(2);
+    }
+  }
+  if (type === 'discount') calcDiscount();
+  if (type === 'charge') calcTotal();
+}
+
 function sumProductRows(type) {
   const rows = document.querySelectorAll(`#${type}ProductList .perks-product-row`);
   let total = 0;
@@ -408,9 +494,11 @@ function calcDiscount() {
   const amount = sumProductRows('discount');
   const discounted = amount * 0.85;
   const warn = document.getElementById('discountLimitWarn');
+  const amountDisplay = document.getElementById('discountAmountDisplay');
+  const resultDisplay = document.getElementById('discountResult');
 
-  document.getElementById('discountAmountDisplay').textContent = amount.toFixed(2);
-  document.getElementById('discountResult').textContent = discounted.toFixed(2);
+  if (amountDisplay) amountDisplay.textContent = amount.toFixed(2);
+  if (resultDisplay) resultDisplay.textContent = discounted.toFixed(2);
 
   if (warn) {
     warn.style.display = amount > discountRemaining ? 'inline' : 'none';
@@ -420,8 +508,11 @@ function calcDiscount() {
 function calcTotal() {
   const total = sumProductRows('charge');
   const finalTotal = chargeFirstAvailable ? total * 0.85 : total;
-  document.getElementById('chargeAmountDisplay').textContent = total.toFixed(2);
-  document.getElementById('chargeResult').textContent = finalTotal.toFixed(2);
+  const amountDisplay = document.getElementById('chargeAmountDisplay');
+  const resultDisplay = document.getElementById('chargeResult');
+
+  if (amountDisplay) amountDisplay.textContent = total.toFixed(2);
+  if (resultDisplay) resultDisplay.textContent = finalTotal.toFixed(2);
 
   const warn = document.getElementById('chargeLimitWarn');
   const nextProgress = document.getElementById('chargeNextProgress');
@@ -434,17 +525,21 @@ function calcTotal() {
     nextProgress.style.width = `${progress}%`;
   }
 
-  if (total > chargeCreditLimit) {
-    warn.style.display = 'inline';
-  } else {
-    warn.style.display = 'none';
+  if (warn) {
+    if (total > chargeCreditLimit) {
+      warn.style.display = 'inline';
+    } else {
+      warn.style.display = 'none';
+    }
   }
 }
+
+let productTemplate = { discount: null, charge: null };
 
 document.addEventListener('DOMContentLoaded', function () {
   const selectCards = document.querySelectorAll('[data-perk-select]');
   const formCards = document.querySelectorAll('[data-perk-card]');
-  const productTemplate = {
+  productTemplate = {
     discount: document.querySelector('#discountProductList .perks-product-row')?.cloneNode(true),
     charge: document.querySelector('#chargeProductList .perks-product-row')?.cloneNode(true),
   };
@@ -452,6 +547,9 @@ document.addEventListener('DOMContentLoaded', function () {
   function resetRow(row) {
     row.querySelectorAll('input').forEach((input) => {
       input.value = '';
+    });
+    row.querySelectorAll('select').forEach((select) => {
+      select.value = '';
     });
   }
 
@@ -519,6 +617,7 @@ document.addEventListener('DOMContentLoaded', function () {
   refreshProductButtons('charge');
   calcDiscount();
   calcTotal();
+  fetchInventoryData();
 });
 </script>
 {% endblock %}

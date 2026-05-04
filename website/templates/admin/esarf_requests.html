@@ -2,8 +2,8 @@
 {% block title %}ESARF Requests | HYG Employee Portal{% endblock %}
 
 {% block extra_head %}
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/employee.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/esarf.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/employee.css') }}?v={{ static_version }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/esarf.css') }}?v={{ static_version }}">
 {% endblock %}
 
 {% macro approval_actions(req, raw_status, dept_manager_signed, operation_signed, current_role) %}
@@ -173,7 +173,7 @@
 
 {% block page_content %}
 {% set request_items = esarf_requests or [] %}
-{% set current_role = current_user.role if current_user.is_authenticated else '' %}
+{% set current_role = esarf_current_role if esarf_current_role is defined else (current_user.role if current_user.is_authenticated else '') %}
 {% set counts = namespace(total=0, pending=0, approved=0, rejected=0, returned=0) %}
 {% for req in request_items %}
   {% set counts.total = counts.total + 1 %}
@@ -190,7 +190,7 @@
 {% endfor %}
 
 <section class="employee-esarf-requests-page esarf-requests-redesign">
-  <header class="page-header esarf-page-header">
+  <header class="page-header esarf-page-header esarf-hero-card">
     <div class="employee-esarf-hero-main">
       <h1>ESARF Request Management</h1>
       <p>Track and manage employee ESARF requests.</p>

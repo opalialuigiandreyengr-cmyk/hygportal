@@ -2,225 +2,269 @@
 {% block title %}Settings | HYG Employee Portal{% endblock %}
 
 {% block extra_head %}
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/settings.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/settings.css') }}?v={{ static_version }}">
 {% endblock %}
 
+{% macro avatar_for(user) %}
+  {% if user.employee and user.employee.photopath %}
+    <img src="{{ url_for('static', filename=user.employee.photopath) }}" alt="{{ user.username[:1] }}" class="settings-avatar">
+  {% else %}
+    <span class="settings-avatar">{{ (user.employee.first_name[:1] if user.employee else user.username[:1])|upper }}</span>
+  {% endif %}
+{% endmacro %}
+
+{% macro person_name(user) %}
+  {% if user.employee %}
+    {{ user.employee.first_name }} {{ user.employee.last_name }}
+  {% else %}
+    No employee profile linked
+  {% endif %}
+{% endmacro %}
+
 {% block page_content %}
-<section class="page-header settings-hero">
-  <div>
-    <h1>Settings</h1>
-    <p>Manage ESARF and perk request approvers in one place.</p>
-  </div>
-</section>
-
-<!-- APPROVAL SETTINGS -->
-<section class="card settings-section">
-  <div class="settings-section-header">
+<section class="settings-page">
+  <header class="settings-header">
     <div>
-      <h2><i class="fa-solid fa-user-check"></i> Approval Settings</h2>
-      <p>Assign approvers for ESARF requests and employee perk requests.</p>
+      <span class="settings-kicker">Admin Settings</span>
+      <h1>Approval Settings</h1>
+      <p>Assign ESARF signatories and perk request approvers.</p>
     </div>
-  </div>
+  </header>
 
-  <!-- ESARF APPROVERS -->
-  <div class="settings-subsection">
-    <div class="settings-subsection-title">
-      <h3>ESARF Approvers</h3>
-      <p>Approval flow: Department Manager, Operations Manager, then General Manager.</p>
-    </div>
+  <div class="settings-grid">
+    <section class="settings-panel settings-panel-esarf" aria-labelledby="esarfSettingsTitle">
+      <div class="settings-panel-head">
+        <div class="settings-panel-icon"><i class="fa-solid fa-file-signature"></i></div>
+        <div>
+          <h2 id="esarfSettingsTitle">ESARF Approval Flow</h2>
+          <p>Department Manager approval starts the flow, followed by Operations and General Manager.</p>
+        </div>
+      </div>
 
-    {% if esarf_eligible_users %}
-    <div class="settings-add-form">
-      <h3>Assign ESARF Approver</h3>
-      <form method="POST" action="{{ url_for('admin.settings') }}">
-        <input type="hidden" name="action" value="assign_esarf_approver">
+      <div class="settings-form-box">
+        <div class="settings-form-title">
+          <strong>Assign ESARF Approver</strong>
+          <span>{{ esarf_eligible_users|length }} eligible</span>
+        </div>
 
-        <div class="add-approver-row">
-          <div class="field">
-            <label>Select User</label>
-            <select name="user_id" required>
-              <option value="">-- Choose a user --</option>
-              {% for u in esarf_eligible_users %}
-              <option value="{{ u.id }}">{{ u.username }} ({{ u.role }})</option>
+        {% if esarf_eligible_users %}
+        <form method="POST" action="{{ url_for('admin.settings') }}" class="settings-form-row" id="esarf-assign-form">
+          <input type="hidden" name="action" value="assign_esarf_approver">
+          <div class="settings-form-row-pair">
+            <label class="settings-field">
+              <span>User</span>
+              <select name="user_id" required>
+                <option value="">Choose user</option>
+                {% for u in esarf_eligible_users %}
+                <option value="{{ u.id }}">{{ u.username }}{% if u.employee and u.employee.department %} - {{ u.employee.department }}{% endif %}</option>
+                {% endfor %}
+              </select>
+            </label>
+            <label class="settings-field">
+              <span>Role</span>
+              <select name="approver_role" id="approver-role-select" required>
+                <option value="">Choose role</option>
+                {% for role_key, role_label in esarf_approver_roles %}
+                <option value="{{ role_key }}">{{ role_label }}</option>
+                {% endfor %}
+              </select>
+            </label>
+          </div>
+          <label class="settings-field" id="department-field">
+            <span>Department</span>
+            <select name="department_name">
+              <option value="">Only for Dept Manager</option>
+              {% for department in departments %}
+              <option value="{{ department.department_name }}">{{ department.department_name }}</option>
               {% endfor %}
             </select>
-          </div>
-
-          <div class="field">
-            <label>Approver Role</label>
-            <select name="approver_role" required>
-              <option value="">-- Choose role --</option>
-              {% for role_key, role_label in esarf_approver_roles %}
-              <option value="{{ role_key }}">{{ role_label }}</option>
-              {% endfor %}
-            </select>
-          </div>
-
-          <button type="submit" class="primary-btn">
-            <i class="fa-solid fa-plus"></i> Assign
+          </label>
+          <button type="submit" class="primary-btn settings-primary-btn">
+            <i class="fa-solid fa-plus"></i>
+            <span>Assign</span>
           </button>
+        </form>
+        <script>
+          (function() {
+            var roleSelect = document.getElementById('approver-role-select');
+            var deptField = document.getElementById('department-field');
+            function toggleDeptField() {
+              if (roleSelect.value === 'dept manager') {
+                deptField.style.display = '';
+              } else {
+                deptField.style.display = 'none';
+                deptField.querySelector('select').value = '';
+              }
+            }
+            roleSelect.addEventListener('change', toggleDeptField);
+            toggleDeptField();
+          })();
+        </script>
+        {% else %}
+        <div class="settings-message">
+          <i class="fa-solid fa-circle-info"></i>
+          <span>No eligible users available.</span>
         </div>
-      </form>
-    </div>
-    {% else %}
-    <div class="settings-no-eligible">
-      <i class="fa-solid fa-circle-info"></i>
-      <p>No eligible users to assign. Existing ESARF approvers can be removed below to make them eligible again.</p>
-    </div>
-    {% endif %}
+        {% endif %}
+      </div>
 
-    <div class="settings-role-grid">
-      {% for role_key, role_label in esarf_approver_roles %}
-      {% set assigned_users = esarf_approvers_by_role.get(role_key, []) %}
-      <div class="settings-role-card">
-        <div class="settings-role-card-head">
-          <span><i class="fa-solid fa-file-signature"></i></span>
-          <strong>{{ role_label }}</strong>
-        </div>
-
-        {% if assigned_users %}
-        <div class="settings-approvers-list">
-          {% for u in assigned_users %}
-          <div class="approver-card compact-card">
-            <div class="approver-info">
-              {% if u.employee and u.employee.photopath %}
-              <img src="{{ url_for('static', filename=u.employee.photopath) }}" alt="{{ u.username[:1] }}" class="approver-avatar">
+      <div class="settings-flow">
+        {% for role_key, role_label in esarf_approver_roles %}
+        {% set assigned_users = esarf_approvers_by_role.get(role_key, []) %}
+        <article class="settings-role-column">
+          <div class="settings-role-head">
+            <span class="settings-step">{{ loop.index }}</span>
+            <div>
+              <strong>{{ role_label }}</strong>
+              {% if role_key == 'dept manager' %}
+                <small>Department-scoped</small>
+              {% elif role_key == 'operation' %}
+                <small>Second approval</small>
               {% else %}
-              <div class="approver-avatar">{{ (u.employee.first_name[:1] if u.employee else u.username[:1])|upper }}</div>
+                <small>Final approval</small>
               {% endif %}
-              <div class="approver-details">
-                <strong>{{ u.username }}</strong>
-                {% if u.employee %}
-                <span class="approver-employee">{{ u.employee.first_name }} {{ u.employee.last_name }}</span>
-                {% endif %}
-              </div>
             </div>
-            <div class="approver-actions">
+          </div>
+
+          {% if assigned_users %}
+          <div class="settings-person-list">
+            {% for assignment in assigned_users %}
+            {% set u = assignment.user %}
+            <div class="settings-person-card">
+              <div class="settings-person-main">
+                {{ avatar_for(u) }}
+                <div class="settings-person-copy">
+                  <strong>{{ u.username }}</strong>
+                  <span>{{ person_name(u) }}</span>
+                  {% if role_key == 'dept manager' %}
+                  {% if assignment.department_name %}
+                    <em>{{ assignment.department_name }}</em>
+                  {% elif u.employee and u.employee.department %}
+                    <em>{{ u.employee.department }}</em>
+                  {% endif %}
+                {% endif %}
+                </div>
+              </div>
               <form method="POST" action="{{ url_for('admin.settings') }}" onsubmit="return confirm('Remove {{ u.username }} from {{ role_label }} approvers?')">
                 <input type="hidden" name="action" value="remove_esarf_approver">
                 <input type="hidden" name="user_id" value="{{ u.id }}">
-                <button type="submit" class="danger-btn-sm" title="Remove approver">
+                <button type="submit" class="settings-icon-btn settings-danger-btn" title="Remove approver" aria-label="Remove {{ u.username }}">
                   <i class="fa-solid fa-trash"></i>
                 </button>
               </form>
             </div>
-          </div>
-          {% endfor %}
-        </div>
-        {% else %}
-        <div class="settings-empty compact-empty">
-          <i class="fa-regular fa-folder-open"></i>
-          <p>No {{ role_label }} assigned yet.</p>
-        </div>
-        {% endif %}
-      </div>
-      {% endfor %}
-    </div>
-  </div>
-
-  <!-- PERK APPROVERS -->
-  <div class="settings-subsection">
-    <div class="settings-subsection-title">
-      <h3>PerkApprover</h3>
-      <p>Assign who can view and approve employee perk requests for discounts and charges.</p>
-    </div>
-
-  <!-- ADD PERK APPROVER FORM -->
-  {% if eligible_users %}
-  <div class="settings-add-form">
-    <h3>Add PerkApprover</h3>
-    <form method="POST" action="{{ url_for('admin.settings') }}">
-      <input type="hidden" name="action" value="add_approver">
-
-      <div class="add-approver-row">
-        <div class="field">
-          <label>Select User</label>
-          <select name="user_id" required>
-            <option value="">-- Choose a user --</option>
-            {% for u in eligible_users %}
-            <option value="{{ u.id }}">{{ u.username }} ({{ u.role }})</option>
             {% endfor %}
-          </select>
-        </div>
-
-        <div class="field checkbox-group">
-          <label class="checkbox-label">
-            <input type="checkbox" name="can_approve_discount" checked>
-            <span>Can approve <strong>Discount</strong> requests</span>
-          </label>
-          <label class="checkbox-label">
-            <input type="checkbox" name="can_approve_charge" checked>
-            <span>Can approve <strong>Charge</strong> requests</span>
-          </label>
-        </div>
-
-        <button type="submit" class="primary-btn">
-          <i class="fa-solid fa-plus"></i> Add PerkApprover
-        </button>
-      </div>
-    </form>
-  </div>
-  {% else %}
-  <div class="settings-no-eligible">
-    <i class="fa-solid fa-circle-info"></i>
-    <p>No eligible users to add as approvers. All non-admin users are already assigned or no users exist.</p>
-  </div>
-  {% endif %}
-
-  <!-- PERK APPROVERS LIST -->
-  {% if approvers %}
-  <div class="settings-approvers-list">
-    {% for a in approvers %}
-    <div class="approver-card">
-      <div class="approver-info">
-        {% if a.user.employee and a.user.employee.photopath %}
-        <img src="{{ url_for('static', filename=a.user.employee.photopath) }}" alt="{{ a.user.username[:1] }}" class="approver-avatar">
-        {% else %}
-        <div class="approver-avatar">{{ (a.user.employee.first_name[:1] if a.user.employee else a.user.username[:1])|upper }}</div>
-        {% endif %}
-        <div class="approver-details">
-          <strong>{{ a.user.username }}</strong>
-          <span class="approver-role">{{ a.user.role }}</span>
-          {% if a.user.employee %}
-          <span class="approver-employee">{{ a.user.employee.first_name }} {{ a.user.employee.last_name }}</span>
+          </div>
+          {% else %}
+          <div class="settings-empty">
+            <i class="fa-regular fa-user"></i>
+            <span>No approver assigned</span>
+          </div>
           {% endif %}
+        </article>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="settings-panel settings-panel-perks" aria-labelledby="perkSettingsTitle">
+      <div class="settings-panel-head">
+        <div class="settings-panel-icon"><i class="fa-solid fa-receipt"></i></div>
+        <div>
+          <h2 id="perkSettingsTitle">Perk Request Permissions</h2>
+          <p>Choose who can approve discount requests, charge requests, or both.</p>
         </div>
       </div>
 
-      <div class="approver-permissions">
-        <form method="POST" action="{{ url_for('admin.settings') }}" class="inline-form">
-          <input type="hidden" name="action" value="update_approver">
-          <input type="hidden" name="approver_id" value="{{ a.id }}">
-          <label class="checkbox-label compact">
-            <input type="checkbox" name="can_approve_discount" {% if a.can_approve_discount %}checked{% endif %} onchange="this.form.submit()">
-            <span>Discounts</span>
-          </label>
-          <label class="checkbox-label compact">
-            <input type="checkbox" name="can_approve_charge" {% if a.can_approve_charge %}checked{% endif %} onchange="this.form.submit()">
-            <span>Charges</span>
-          </label>
-        </form>
-      </div>
+      <div class="settings-form-box">
+        <div class="settings-form-title">
+          <strong>Add Perk Approver</strong>
+          <span>{{ eligible_users|length }} eligible</span>
+        </div>
 
-      <div class="approver-actions">
-        <form method="POST" action="{{ url_for('admin.settings') }}" onsubmit="return confirm('Remove {{ a.user.username }} as perk approver?')">
-          <input type="hidden" name="action" value="remove_approver">
-          <input type="hidden" name="approver_id" value="{{ a.id }}">
-          <button type="submit" class="danger-btn-sm" title="Remove approver">
-            <i class="fa-solid fa-trash"></i>
+        {% if eligible_users %}
+        <form method="POST" action="{{ url_for('admin.settings') }}" class="settings-form-row settings-perk-form">
+          <input type="hidden" name="action" value="add_approver">
+          <label class="settings-field settings-field-wide">
+            <span>User</span>
+            <select name="user_id" required>
+              <option value="">Choose user</option>
+              {% for u in eligible_users %}
+              <option value="{{ u.id }}">{{ u.username }} - {{ u.role }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <div class="settings-checks" aria-label="Perk approval permissions">
+            <label>
+              <input type="checkbox" name="can_approve_discount" checked>
+              <span>Discounts</span>
+            </label>
+            <label>
+              <input type="checkbox" name="can_approve_charge" checked>
+              <span>Charges</span>
+            </label>
+          </div>
+          <button type="submit" class="primary-btn settings-primary-btn">
+            <i class="fa-solid fa-plus"></i>
+            <span>Add</span>
           </button>
         </form>
+        {% else %}
+        <div class="settings-message">
+          <i class="fa-solid fa-circle-info"></i>
+          <span>No eligible users available.</span>
+        </div>
+        {% endif %}
       </div>
-    </div>
-    {% endfor %}
-  </div>
-  {% else %}
-  <div class="settings-empty">
-    <i class="fa-regular fa-folder-open"></i>
-    <p>No perk approvers assigned yet. Only admins and HR can approve requests by default.</p>
-  </div>
-  {% endif %}
+
+      {% if approvers %}
+      <div class="settings-table">
+        <div class="settings-table-head">
+          <span>Approver</span>
+          <span>Permissions</span>
+          <span></span>
+        </div>
+
+        {% for a in approvers %}
+        <div class="settings-table-row">
+          <div class="settings-person-main">
+            {{ avatar_for(a.user) }}
+            <div class="settings-person-copy">
+              <strong>{{ a.user.username }}</strong>
+              <span>{{ person_name(a.user) }}</span>
+              <em>{{ a.user.role }}</em>
+            </div>
+          </div>
+
+          <form method="POST" action="{{ url_for('admin.settings') }}" class="settings-permissions">
+            <input type="hidden" name="action" value="update_approver">
+            <input type="hidden" name="approver_id" value="{{ a.id }}">
+            <label>
+              <input type="checkbox" name="can_approve_discount" {% if a.can_approve_discount %}checked{% endif %} onchange="this.form.submit()">
+              <span>Discounts</span>
+            </label>
+            <label>
+              <input type="checkbox" name="can_approve_charge" {% if a.can_approve_charge %}checked{% endif %} onchange="this.form.submit()">
+              <span>Charges</span>
+            </label>
+          </form>
+
+          <form method="POST" action="{{ url_for('admin.settings') }}" class="settings-remove-form" onsubmit="return confirm('Remove {{ a.user.username }} as perk approver?')">
+            <input type="hidden" name="action" value="remove_approver">
+            <input type="hidden" name="approver_id" value="{{ a.id }}">
+            <button type="submit" class="settings-icon-btn settings-danger-btn" title="Remove approver" aria-label="Remove {{ a.user.username }}">
+              <i class="fa-solid fa-trash"></i>
+            </button>
+          </form>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="settings-empty settings-empty-large">
+        <i class="fa-regular fa-folder-open"></i>
+        <span>No perk approvers assigned</span>
+      </div>
+      {% endif %}
+    </section>
   </div>
 </section>
-
 {% endblock %}

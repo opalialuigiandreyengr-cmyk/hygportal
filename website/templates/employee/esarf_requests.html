@@ -2,8 +2,8 @@
 {% block title %}My ESARF Request History | HYG Employee Portal{% endblock %}
 
 {% block extra_head %}
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/employee.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/esarf.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/employee.css') }}?v={{ static_version }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/esarf.css') }}?v={{ static_version }}">
 {% endblock %}
 
 {% block page_content %}
@@ -32,7 +32,7 @@
 {% endfor %}
 
 <section class="employee-esarf-requests-page esarf-requests-redesign">
-  <header class="page-header esarf-page-header">
+  <header class="page-header esarf-page-header esarf-hero-card">
     <div class="employee-esarf-history-title">
       <span class="employee-esarf-history-icon" aria-hidden="true">
         <i class="fa-solid fa-clock-rotate-left"></i>
@@ -313,7 +313,7 @@
 {% set time_to_display = req.time_to.strftime('%I:%M %p') if req.time_to else '-' %}
 {% set esarf_number = req.esarf_number or ('ESARF-2026-' ~ '%03d'|format(req.id)) %}
 {% set transaction_display = (req.transaction_types or '-')|replace('UT', 'Undertime (UT)')|replace('OT', 'Overtime (OT)')|replace('FIO', 'Failure to Punch In/Out (FIO)')|replace('OB', 'Official Business (OB)')|replace('Adjustment', 'Adjustment')|replace(',', ', ') %}
-<aside class="offcanvas offcanvas-end employee-esarf-side-panel" tabindex="-1" id="employeeEsarfPanel{{ req.id }}" aria-labelledby="employeeEsarfPanelTitle{{ req.id }}">
+<aside class="offcanvas offcanvas-bottom employee-esarf-side-panel" tabindex="-1" id="employeeEsarfPanel{{ req.id }}" aria-labelledby="employeeEsarfPanelTitle{{ req.id }}">
   <div class="offcanvas-header employee-esarf-panel-header">
     <div class="employee-esarf-panel-title-wrap">
       <h3 class="section-title mb-0" id="employeeEsarfPanelTitle{{ req.id }}">ESARF Request</h3>

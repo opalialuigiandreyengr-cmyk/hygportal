@@ -620,6 +620,49 @@ def submit_leave():
     return redirect(url_for("employee.leaves"))
 
 
+@employee.route('/employee/leave_requests/<int:leave_id>/update', methods=['POST'])
+@login_required
+def update_leave_request(leave_id):
+    profile_redirect = _require_employee_profile()
+    if profile_redirect:
+        return profile_redirect
+
+    leave_request = LeaveRequest.query.get_or_404(leave_id)
+    if leave_request.submitted_by_user_id != current_user.id:
+        flash("You are not allowed to modify this leave request.", category="error")
+        return redirect(url_for("employee.leave_requests"))
+
+    if (leave_request.status or "").lower() != "pending":
+        flash("Only pending leave requests can be edited.", category="error")
+        return redirect(url_for("employee.leave_requests"))
+
+    leave_type = request.form.get("leave_type")
+    leave_category = request.form.get("leave_category")
+    other_leave = request.form.get("other_leave")
+    reason = request.form.get("reason")
+
+    if not leave_type:
+        flash("Please choose a leave pay type.", category="error")
+        return redirect(url_for("employee.leave_requests"))
+
+    if leave_category == "Others" and not other_leave:
+        flash("Please specify your 'Other' leave type.", category="error")
+        return redirect(url_for("employee.leave_requests"))
+
+    leave_request.leave_type = leave_type
+    leave_request.leave_category = other_leave if leave_category == "Others" else leave_category
+    leave_request.reason = reason
+
+    try:
+        db.session.commit()
+        flash("Leave request updated successfully.", category="success")
+    except Exception:
+        db.session.rollback()
+        flash("Unable to update leave request. Please try again.", category="error")
+
+    return redirect(url_for("employee.leave_requests"))
+
+
 @employee.route('/employee/leave_requests', methods=['GET'])
 @login_required
 def leave_requests():

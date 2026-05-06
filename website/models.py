@@ -9,6 +9,7 @@ class User(db.Model, UserMixin):
     username = db.Column(db.String(100), unique=True)
     password = db.Column(db.String(255))
     role = db.Column(db.String(50), default='user')
+    leave_credits = db.Column(db.Integer)
 
     employee = db.relationship('Employee', backref=db.backref('user', uselist=False))
 

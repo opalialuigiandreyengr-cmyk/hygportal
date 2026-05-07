@@ -1,4 +1,4 @@
-const CACHE_VERSION = "hyg-pwa-v51";
+const CACHE_VERSION = "hyg-pwa-v67";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const PAGE_CACHE = `${CACHE_VERSION}-pages`;
 

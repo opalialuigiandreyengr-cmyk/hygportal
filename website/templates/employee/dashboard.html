@@ -6,167 +6,117 @@
 {% endblock %}
 
 {% block page_content %}
-{% set display_name = ((employee.first_name or '') ~ ' ' ~ (employee.last_name or ''))|trim if employee else current_user.username %}
-{% set pending_total = leave_counts.pending + esarf_counts.pending %}
 {% set discount_percent = (discount_used / annual_cash_limit * 100) if annual_cash_limit else 0 %}
 {% set transaction_percent = (discount_transaction_count / annual_cash_transaction_limit * 100) if annual_cash_transaction_limit else 0 %}
+{% set display_first_name = (employee.first_name if employee and employee.first_name else current_user.username)|trim %}
 
-<section class="employee-dash">
+<section class="employee-dash-mobile">
+  <header class="edm-greeting">
+    <h1>{{ greeting_label }},<br>{{ display_first_name|lower }}! <span aria-hidden="true">👋</span></h1>
+    <p>Here's what's happening today.</p>
+  </header>
 
-  <!-- HEADER -->
-  <section class="page-header dash-greeting">
-    <div class="greeting-text">
-      <h1>{{ greeting_label }}, {{ current_user.username }}! 👋</h1>
-      <p>Here's what's happening today.</p>
+  {% if employee %}
+  <a href="{{ url_for('employee.view_employee', employee_id=employee.id) }}" class="edm-card edm-profile-card" aria-label="Open profile">
+    <div class="edm-ring" style="--progress: {{ [profile_completion, 100]|min }};">
+      <span>{{ [profile_completion, 100]|min }}%</span>
     </div>
-  </section>
-
-  <!-- 🔥 PROFILE COMPLETION MOVED TO TOP + CLICKABLE -->
-  <a href="{{ url_for('employee.view_employee', employee_id=employee.id) }}"
-     style="text-decoration:none; color:inherit;">
-
-    <section class="dash-panel"
-      style="border:1px solid #eee; border-radius:12px; padding:16px; margin-bottom:20px; transition:0.2s; cursor:pointer;">
-
-      <div class="dash-panel-head">
-        <div>
-          <h2 style="margin:0;">Profile Completion</h2>
-          <p style="margin:0; font-size:13px; color:#666;">
-            Click to view and complete your profile
-          </p>
-        </div>
-      </div>
-
-      <div style="margin-top:14px;">
-        <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:6px; color:#555;">
-          <span>Progress</span>
-          <span style="font-weight:600;">{{ profile_completion }}%</span>
-        </div>
-
-        <div style="width:100%; height:10px; background:#eaeaea; border-radius:20px; overflow:hidden;">
-          <div style="
-            width:{{ profile_completion }}%;
-            height:100%;
-            background:linear-gradient(90deg, #4caf50, #2196f3);
-            transition:0.4s ease;
-          "></div>
-        </div>
-      </div>
-
-    </section>
+    <div class="edm-profile-copy">
+      <h2>Profile Completion</h2>
+      <p>Click to view and complete your profile</p>
+    </div>
+    <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
   </a>
+  {% endif %}
 
-  <!-- STATS -->
-  <section class="dash-overview-grid" aria-label="Employee overview">
-    <article class="dash-stat-card is-esarf">
-      <span class="dash-stat-icon is-esarf"><i class="fa-regular fa-file-lines"></i></span>
-      <div class="dash-stat-copy">
-        <span>ESARF Requests</span>
-        <strong>{{ esarf_counts.pending }}</strong>
-        <small>{{ esarf_counts.approved }} Approved</small>
-      </div>
+  <section class="edm-kpi-grid" aria-label="Request summary">
+    <article class="edm-kpi-card">
+      <span class="edm-kpi-icon is-purple"><i class="fa-regular fa-file-lines"></i></span>
+      <h3>ESARF Requests</h3>
+      <strong>{{ esarf_counts.pending }}</strong>
+      <small>{{ esarf_counts.approved }} Approved</small>
     </article>
-
-    <article class="dash-stat-card is-leave">
-      <span class="dash-stat-icon is-leave"><i class="fa-regular fa-calendar-check"></i></span>
-      <div class="dash-stat-copy">
-        <span>Leave Requests</span>
-        <strong>{{ leave_counts.pending }}</strong>
-        <small>Pending</small>
-      </div>
+    <article class="edm-kpi-card">
+      <span class="edm-kpi-icon is-green"><i class="fa-regular fa-calendar-check"></i></span>
+      <h3>Leave Requests</h3>
+      <strong>{{ leave_counts.pending }}</strong>
+      <small>Pending</small>
     </article>
-
-    <article class="dash-stat-card is-time">
-      <span class="dash-stat-icon is-time"><i class="fa-regular fa-clock"></i></span>
-      <div class="dash-stat-copy">
-        <span>Overtime Hours</span>
-        <strong>{{ "%.1f"|format(pending_esarf_hours) }}</strong>
-        <small>This Month</small>
-      </div>
-    </article>
-
-    <article class="dash-stat-card is-perks">
-      <span class="dash-stat-icon is-perks"><i class="fa-solid fa-gift"></i></span>
-      <div class="dash-stat-copy">
-        <span>Cash Discount</span>
-        <strong>PHP {{ "{:,.0f}".format(discount_remaining) }}</strong>
-        <small>{{ discount_transaction_remaining }} Left</small>
-      </div>
+    <article class="edm-kpi-card">
+      <span class="edm-kpi-icon is-blue"><i class="fa-regular fa-clock"></i></span>
+      <h3>Offset Hours</h3>
+      <strong>{{ "%.1f"|format(pending_offset_hours) }}</strong>
+      <small>This Year</small>
     </article>
   </section>
 
-  <!-- MAIN GRID -->
-  <section class="dash-main-grid">
+  <article class="edm-card edm-discount-card">
+    <span class="edm-kpi-icon is-orange"><i class="fa-solid fa-wallet"></i></span>
+    <div>
+      <h3>Cash Discount</h3>
+      <strong>PHP {{ "{:,.0f}".format(discount_remaining) }}</strong>
+      <small>{{ discount_transaction_remaining }} Left</small>
+    </div>
+    <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+  </article>
 
-    <div class="dash-main-column">
-
-      <section class="dash-panel">
-        <div class="dash-panel-head">
-          <div>
-            <h2>Recent Activity</h2>
-            <p>Your latest requests across leaves, ESARF, and perks.</p>
-          </div>
-        </div>
-
-        <div class="dash-activity-list">
-          {% for activity in recent_activity %}
-          {% set status_key = (activity.status or 'Pending')|lower|replace(' ', '-') %}
-          <article class="dash-activity-item">
-            <span class="dash-activity-icon"><i class="fa-solid {{ activity.icon }}"></i></span>
-            <div>
-              <strong>{{ activity.title }}</strong>
-              <small>{{ activity.type }}{% if activity.date %} · {{ activity.date.strftime('%b %d, %Y') }}{% endif %}</small>
-            </div>
-            <span class="dash-status-pill is-{{ status_key }}">{{ activity.status }}</span>
-          </article>
-          {% else %}
-          <div class="dash-empty">
-            <i class="fa-regular fa-folder-open"></i>
-            <p>No requests yet.</p>
-          </div>
-          {% endfor %}
-        </div>
-      </section>
-
+  <section class="edm-card edm-activity-card">
+    <div class="edm-section-head">
+      <div>
+        <h2>Recent Activity</h2>
+        <p>Your latest requests across leaves, ESARF, and perks.</p>
+      </div>
+      <a href="{{ url_for('employee.notifications') }}">View all</a>
     </div>
 
-    <!-- SIDE -->
-    <aside class="dash-side-column">
-
-      <section class="dash-panel">
-        <div class="dash-panel-head">
-          <div>
-            <h2>Perks Usage</h2>
-            <p>Current year benefit counters.</p>
-          </div>
+    <div class="edm-activity-list">
+      {% for activity in recent_activity %}
+      {% set status_key = (activity.status or 'Pending')|lower|replace(' ', '-') %}
+      <article class="edm-activity-item">
+        <span class="edm-activity-icon"><i class="fa-solid {{ activity.icon }}"></i></span>
+        <div class="edm-activity-copy">
+          <strong>{{ activity.title }}</strong>
+          <small>{{ activity.type }}{% if activity.date %} · {{ activity.date.strftime('%b %d, %Y') }}{% endif %}</small>
         </div>
+        <span class="edm-status is-{{ status_key }}">{{ activity.status }}</span>
+      </article>
+      {% else %}
+      <div class="edm-empty-state">
+        <i class="fa-regular fa-folder-open"></i>
+        <p>No requests yet.</p>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
 
-        <div class="dash-progress-stack">
-          <div class="dash-progress-item">
-            <div class="dash-progress-label">
-              <span>Cash discount</span>
-              <strong>PHP {{ "{:,.0f}".format(discount_used) }} / {{ "{:,.0f}".format(annual_cash_limit) }}</strong>
-            </div>
-            <div class="dash-progress-track">
-              <span style="width: {{ [discount_percent, 100]|min }}%;"></span>
-            </div>
-          </div>
+  <section class="edm-card edm-perks-card">
+    <div class="edm-section-head no-link">
+      <div>
+        <h2>Perks Usage</h2>
+        <p>Current year benefit counters.</p>
+      </div>
+    </div>
 
-          <div class="dash-progress-item">
-            <div class="dash-progress-label">
-              <span>Discount transactions</span>
-              <strong>{{ discount_transaction_count }} / {{ annual_cash_transaction_limit }}</strong>
-            </div>
-            <div class="dash-progress-track is-gold">
-              <span style="width: {{ [transaction_percent, 100]|min }}%;"></span>
-            </div>
-          </div>
+    <div class="edm-perks-stack">
+      <div class="edm-perk-item">
+        <span class="edm-kpi-icon is-orange"><i class="fa-solid fa-wallet"></i></span>
+        <div class="edm-perk-copy">
+          <strong>Cash discount</strong>
+          <small>PHP {{ "{:,.0f}".format(discount_used) }} / {{ "{:,.0f}".format(annual_cash_limit) }}</small>
         </div>
+        <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+      </div>
+      <div class="edm-track"><span style="width: {{ [discount_percent, 100]|min }}%;"></span></div>
 
-      </section>
-
-    </aside>
-
+      <div class="edm-perk-item">
+        <span class="edm-kpi-icon is-blue"><i class="fa-solid fa-receipt"></i></span>
+        <div class="edm-perk-copy">
+          <strong>Discount transactions</strong>
+          <small>{{ discount_transaction_count }} / {{ annual_cash_transaction_limit }}</small>
+        </div>
+      </div>
+      <div class="edm-track is-blue"><span style="width: {{ [transaction_percent, 100]|min }}%;"></span></div>
+    </div>
   </section>
 </section>
 {% endblock %}

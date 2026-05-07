@@ -9,6 +9,52 @@
 {% endblock %}
 
 {% block page_content %}
+  {% set position_options = [
+    'IT Staff',
+    'IT Manager',
+    'Accounting Staff',
+    'Accounting Head',
+    'Cluster Manager',
+    'HR Head',
+    'HR Staff',
+    'Store Crew',
+    'Store Cashier',
+    'Store Supervisor',
+    'Store Manager',
+    'Logistics Manager',
+    'Logistics Driver',
+    'Logistics Staff',
+    'Maintenance Manager',
+    'Maintenance Staff',
+    'Payroll Officer',
+    'Inventory Staff',
+    'Inventory Manager',
+    'General Manager',
+    'Operation Manager',
+    'Area Manager',
+    'Training Officer',
+    'Marketing Manager',
+    'Marketing Staff',
+    'Internal Auditor',
+    'Finance Manager',
+    'Finance Staff',
+    'Purchasing Officer',
+    'Procurement Staff',
+    'Warehouse Staff',
+    'Warehouse Supervisor',
+    'Quality Assurance Staff',
+    'Quality Control Staff',
+    'Admin Assistant',
+    'Office Staff',
+    'Branch Manager',
+    'Team Leader',
+    'Supervisor',
+    'Cashier',
+    'Driver',
+    'Rider',
+    'Security Guard',
+    'Utility Staff'
+  ] %}
   {% set full_name = employee.first_name ~ (' ' ~ employee.middle_name[:1] ~ '.' if employee.middle_name else '') ~ ' ' ~ employee.last_name ~ (' ' ~ employee.suffix if employee.suffix else '') %}
   {% set status = employee.employment_status or 'Unknown' %}
   {% set username = employee.user.username if employee.user and employee.user.username else 'N/A' %}
@@ -301,7 +347,15 @@
             <div class="emp-field">
               <p class="emp-label">Position</p>
               <div class="emp-value view-mode">{{ employee.position or 'N/A' }}</div>
-              <input type="text" name="position" class="emp-input edit-mode" value="{{ employee.position or '' }}" style="display:none;">
+              <select name="position" class="emp-input edit-mode" style="display:none;">
+                <option value="">Select Position</option>
+                {% for position_name in position_options %}
+                <option value="{{ position_name }}" {% if employee.position == position_name %}selected{% endif %}>{{ position_name }}</option>
+                {% endfor %}
+                {% if employee.position and employee.position not in position_options %}
+                <option value="{{ employee.position }}" selected>{{ employee.position }}</option>
+                {% endif %}
+              </select>
             </div>
           </form>
         </article>
@@ -659,10 +713,23 @@
           exitEditMode();
         }
 
+        function ensureActiveSectionInput() {
+          var activeSectionName = section.dataset.section || 'personal';
+          var anchorInput = form.querySelector('input[name="active_section"]');
+          if (!anchorInput) {
+            anchorInput = document.createElement('input');
+            anchorInput.type = 'hidden';
+            anchorInput.name = 'active_section';
+            form.appendChild(anchorInput);
+          }
+          anchorInput.value = activeSectionName;
+        }
+
         btnEdit.addEventListener('click', enterEditMode);
         btnCancel.addEventListener('click', cancelEdit);
         btnSave.addEventListener('click', function(e) {
           e.preventDefault();
+          ensureActiveSectionInput();
           form.submit();
         });
       });

@@ -397,6 +397,52 @@
 {% endblock %}
 
 {% block page_content %}
+{% set position_options = [
+  'IT Staff',
+  'IT Manager',
+  'Accounting Staff',
+  'Accounting Head',
+  'Cluster Manager',
+  'HR Head',
+  'HR Staff',
+  'Store Crew',
+  'Store Cashier',
+  'Store Supervisor',
+  'Store Manager',
+  'Logistics Manager',
+  'Logistics Driver',
+  'Logistics Staff',
+  'Maintenance Manager',
+  'Maintenance Staff',
+  'Payroll Officer',
+  'Inventory Staff',
+  'Inventory Manager',
+  'General Manager',
+  'Operation Manager',
+  'Area Manager',
+  'Training Officer',
+  'Marketing Manager',
+  'Marketing Staff',
+  'Internal Auditor',
+  'Finance Manager',
+  'Finance Staff',
+  'Purchasing Officer',
+  'Procurement Staff',
+  'Warehouse Staff',
+  'Warehouse Supervisor',
+  'Quality Assurance Staff',
+  'Quality Control Staff',
+  'Admin Assistant',
+  'Office Staff',
+  'Branch Manager',
+  'Team Leader',
+  'Supervisor',
+  'Cashier',
+  'Driver',
+  'Rider',
+  'Security Guard',
+  'Utility Staff'
+] %}
 <section class="register-employee-page">
   <div class="register-employee-head">
     <p class="register-note"><strong>Note:</strong> Please fill in all applicable fields. Indicate <strong>N/A</strong> if a field is not applicable.</p>
@@ -538,6 +584,15 @@
             </select>
           </div>
           <div class="field"><label>Store/Department</label><input name="department" list="departmentOptions"></div>
+          <div class="field">
+            <label>Position</label>
+            <select name="position">
+              <option value="">Select Position</option>
+              {% for position_name in position_options %}
+              <option value="{{ position_name }}">{{ position_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
           <div class="field"><label>Date Hired</label><input type="date" name="hired_date"></div>
           <div class="field">
             <label>Employee Type</label>

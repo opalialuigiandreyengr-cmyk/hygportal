@@ -166,6 +166,136 @@
       </div>
     </section>
 
+    <section class="settings-panel settings-panel-esarf" aria-labelledby="leaveSettingsTitle">
+      <div class="settings-panel-head">
+        <div class="settings-panel-icon"><i class="fa-solid fa-calendar-check"></i></div>
+        <div>
+          <h2 id="leaveSettingsTitle">Leave Approval Flow</h2>
+          <p>Department and HR are first approvers, then Operations, then General Manager gives final approval.</p>
+        </div>
+      </div>
+
+      <div class="settings-form-box">
+        <div class="settings-form-title">
+          <strong>Assign Leave Approver</strong>
+          <span>{{ leave_eligible_users|length }} eligible</span>
+        </div>
+
+        {% if leave_eligible_users %}
+        <form method="POST" action="{{ url_for('admin.settings') }}" class="settings-form-row" id="leave-assign-form">
+          <input type="hidden" name="action" value="assign_leave_approver">
+          <div class="settings-form-row-pair">
+            <label class="settings-field">
+              <span>User</span>
+              <select name="user_id" required>
+                <option value="">Choose user</option>
+                {% for u in leave_eligible_users %}
+                <option value="{{ u.id }}">{{ u.username }}{% if u.employee and u.employee.department %} - {{ u.employee.department }}{% endif %}</option>
+                {% endfor %}
+              </select>
+            </label>
+            <label class="settings-field">
+              <span>Role</span>
+              <select name="approver_role" id="leave-approver-role-select" required>
+                <option value="">Choose role</option>
+                {% for role_key, role_label in leave_approver_roles %}
+                <option value="{{ role_key }}">{{ role_label }}</option>
+                {% endfor %}
+              </select>
+            </label>
+          </div>
+          <label class="settings-field" id="leave-department-field">
+            <span>Department</span>
+            <select name="department_name">
+              <option value="">Only for Department Approver</option>
+              {% for department in departments %}
+              <option value="{{ department.department_name }}">{{ department.department_name }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <button type="submit" class="primary-btn settings-primary-btn">
+            <i class="fa-solid fa-plus"></i>
+            <span>Assign</span>
+          </button>
+        </form>
+        <script>
+          (function() {
+            var roleSelect = document.getElementById('leave-approver-role-select');
+            var deptField = document.getElementById('leave-department-field');
+            function toggleDeptField() {
+              if (roleSelect.value === 'department') {
+                deptField.style.display = '';
+              } else {
+                deptField.style.display = 'none';
+                deptField.querySelector('select').value = '';
+              }
+            }
+            roleSelect.addEventListener('change', toggleDeptField);
+            toggleDeptField();
+          })();
+        </script>
+        {% else %}
+        <div class="settings-message">
+          <i class="fa-solid fa-circle-info"></i>
+          <span>No eligible users available.</span>
+        </div>
+        {% endif %}
+      </div>
+
+      <div class="settings-flow">
+        {% for role_key, role_label in leave_approver_roles %}
+        {% set assigned_users = leave_approvers_by_role.get(role_key, []) %}
+        <article class="settings-role-column">
+          <div class="settings-role-head">
+            <span class="settings-step">{{ loop.index }}</span>
+            <div>
+              <strong>{{ role_label }}</strong>
+              {% if role_key == 'department' %}
+                <small>First approval (by department)</small>
+              {% elif role_key == 'hr' %}
+                <small>First approval (by HR)</small>
+              {% else %}
+                <small>Final approval</small>
+              {% endif %}
+            </div>
+          </div>
+
+          {% if assigned_users %}
+          <div class="settings-person-list">
+            {% for assignment in assigned_users %}
+            {% set u = assignment.user %}
+            <div class="settings-person-card">
+              <div class="settings-person-main">
+                {{ avatar_for(u) }}
+                <div class="settings-person-copy">
+                  <strong>{{ u.username }}</strong>
+                  <span>{{ person_name(u) }}</span>
+                  {% if role_key == 'department' and assignment.department_name %}
+                    <em>{{ assignment.department_name }}</em>
+                  {% endif %}
+                </div>
+              </div>
+              <form method="POST" action="{{ url_for('admin.settings') }}" onsubmit="return confirm('Remove {{ u.username }} from {{ role_label }} approvers?')">
+                <input type="hidden" name="action" value="remove_leave_approver">
+                <input type="hidden" name="user_id" value="{{ u.id }}">
+                <button type="submit" class="settings-icon-btn settings-danger-btn" title="Remove approver" aria-label="Remove {{ u.username }}">
+                  <i class="fa-solid fa-trash"></i>
+                </button>
+              </form>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="settings-empty">
+            <i class="fa-regular fa-user"></i>
+            <span>No approver assigned</span>
+          </div>
+          {% endif %}
+        </article>
+        {% endfor %}
+      </div>
+    </section>
+
     <section class="settings-panel settings-panel-perks" aria-labelledby="perkSettingsTitle">
       <div class="settings-panel-head">
         <div class="settings-panel-icon"><i class="fa-solid fa-receipt"></i></div>
@@ -264,6 +394,50 @@
         <span>No perk approvers assigned</span>
       </div>
       {% endif %}
+    </section>
+
+    <section class="settings-panel settings-panel-perks" aria-labelledby="reportsSettingsTitle">
+      <div class="settings-panel-head">
+        <div class="settings-panel-icon"><i class="fa-solid fa-file-excel"></i></div>
+        <div>
+          <h2 id="reportsSettingsTitle">Export Reports</h2>
+          <p>Download ESARF, Leave, and Discount/Charge reports with a date range.</p>
+        </div>
+      </div>
+
+      <div class="settings-form-box">
+        <div class="settings-form-title">
+          <strong>Download Excel Report (.xlsx)</strong>
+          <span>Includes full request and submitter data</span>
+        </div>
+
+        <form method="POST" action="{{ url_for('admin.settings') }}" class="settings-form-row">
+          <input type="hidden" name="action" value="export_report">
+          <div class="settings-form-row-pair">
+            <label class="settings-field">
+              <span>Report Type</span>
+              <select name="report_type" required>
+                <option value="">Choose report</option>
+                <option value="esarf">ESARF</option>
+                <option value="leave">Leave</option>
+                <option value="discount_charge">Discount/Charge</option>
+              </select>
+            </label>
+            <label class="settings-field">
+              <span>Date From</span>
+              <input type="date" name="date_from" required>
+            </label>
+          </div>
+          <label class="settings-field settings-field-wide">
+            <span>Date To</span>
+            <input type="date" name="date_to" required>
+          </label>
+          <button type="submit" class="primary-btn settings-primary-btn">
+            <i class="fa-solid fa-download"></i>
+            <span>Download Report</span>
+          </button>
+        </form>
+      </div>
     </section>
   </div>
 </section>

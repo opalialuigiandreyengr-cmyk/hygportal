@@ -13,11 +13,19 @@
   const totalHoursEl = esarfForm.querySelector('input[name="total_hours"]');
   const otCheckbox = esarfForm.querySelector('input[name="transaction_type"][value="OT"]');
   const utCheckbox = esarfForm.querySelector('input[name="transaction_type"][value="UT"]');
+  const offsetCheckbox = esarfForm.querySelector('input[name="transaction_type"][value="Offset"]');
+  const useOffsetCheckbox = esarfForm.querySelector('input[name="transaction_type"][value="Use Offset"]');
+  const offsetSummaryEl = esarfForm.querySelector("#offsetCreditSummary");
+  const offsetAvailableEl = esarfForm.querySelector("#offsetAvailableHours");
+  const offsetDeductEl = esarfForm.querySelector("#offsetDeductHours");
+  const offsetRemainingEl = esarfForm.querySelector("#offsetRemainingHours");
   const transactionTypeEls = esarfForm.querySelectorAll('input[name="transaction_type"]');
   const transactionChecklistEl = esarfForm.querySelector(".transaction-checklist");
   const otAutoHintEl = esarfForm.querySelector("#otAutoHint");
 
-  if (!scheduleEl || !dayOffEl || !dateFromEl || !dateToEl || !timeFromEl || !timeToEl || !totalHoursEl || !otCheckbox || !utCheckbox) return;
+  if (!scheduleEl || !dayOffEl || !dateFromEl || !dateToEl || !timeFromEl || !timeToEl || !totalHoursEl || !otCheckbox || !utCheckbox || !offsetCheckbox || !useOffsetCheckbox) return;
+
+  const availableOffsetHours = offsetSummaryEl ? parseFloat(offsetSummaryEl.dataset.availableOffsetHours || "0") || 0 : 0;
 
   let manualTotalHoursValue = totalHoursEl.value || "";
   const formRequiredFieldEls = Array.from(
@@ -43,8 +51,14 @@
     if (mode === "ot") {
       return "OT auto-calculated. If Date From matches Day Off, full worked hours are counted.";
     }
+    if (mode === "offset") {
+      return "Offset auto-calculated like OT. If Date From matches Day Off, full worked hours are counted.";
+    }
     if (mode === "ut") {
       return "UT auto-calculated as the total hours/minutes not worked from the required schedule. If Date From matches Day Off, undertime is 0.";
+    }
+    if (mode === "use-offset") {
+      return "Use Offset auto-calculated from your selected Time from and Time to.";
     }
     return "";
   }
@@ -119,7 +133,7 @@
   }
 
   function validateAutoCalculationState(mode) {
-    if (mode !== "ot" && mode !== "ut") {
+    if (mode !== "ot" && mode !== "ut" && mode !== "offset" && mode !== "use-offset") {
       updateBaseTotalHours();
     }
 
@@ -136,6 +150,15 @@
     const calcOk = validateAutoCalculationState(mode);
 
     if (requiredOk && transactionOk && calcOk) {
+      if (useOffsetCheckbox.checked) {
+        const requestedHours = parseFloat(totalHoursEl.value || "0") || 0;
+        if (requestedHours > availableOffsetHours) {
+          setMissingState(totalHoursEl, true);
+          setAutoHint("Requested hours exceed available offset credits.", true);
+          focusFirstProblemField();
+          return false;
+        }
+      }
       return true;
     }
 
@@ -145,7 +168,7 @@
       return false;
     }
 
-    if (!calcOk && (mode === "ot" || mode === "ut")) {
+    if (!calcOk && (mode === "ot" || mode === "ut" || mode === "offset" || mode === "use-offset")) {
       setAutoHint("Complete highlighted fields to auto-calculate " + mode.toUpperCase() + ".", true);
       focusFirstProblemField();
       return false;
@@ -333,11 +356,68 @@
   function getCalculationMode() {
     const isOtSelected = otCheckbox.checked;
     const isUtSelected = utCheckbox.checked;
+    const isOffsetSelected = offsetCheckbox.checked;
+    const isUseOffsetSelected = useOffsetCheckbox.checked;
 
+    if (isUseOffsetSelected) return "use-offset";
+    if (isOffsetSelected) return "offset";
     if (isOtSelected && isUtSelected) return "mixed";
     if (isOtSelected) return "ot";
     if (isUtSelected) return "ut";
     return "none";
+  }
+
+  function enforceOffsetExclusivity() {
+    const isOffsetSelected = offsetCheckbox.checked;
+    const isUseOffsetSelected = useOffsetCheckbox.checked;
+
+    if (!isOffsetSelected && !isUseOffsetSelected) {
+      otCheckbox.disabled = false;
+      utCheckbox.disabled = false;
+      offsetCheckbox.disabled = false;
+      useOffsetCheckbox.disabled = false;
+      return;
+    }
+
+    // Offset and Use Offset are exclusive against OT/UT and each other.
+    if (isOffsetSelected) {
+      otCheckbox.checked = false;
+      utCheckbox.checked = false;
+      useOffsetCheckbox.checked = false;
+      otCheckbox.disabled = true;
+      utCheckbox.disabled = true;
+      useOffsetCheckbox.disabled = true;
+      offsetCheckbox.disabled = false;
+      setAutoHint("Offset selected: OT and UT are disabled. Total hours will be saved as offset hours.", true);
+      return;
+    }
+
+    if (isUseOffsetSelected) {
+      otCheckbox.checked = false;
+      utCheckbox.checked = false;
+      offsetCheckbox.checked = false;
+      otCheckbox.disabled = true;
+      utCheckbox.disabled = true;
+      offsetCheckbox.disabled = true;
+      useOffsetCheckbox.disabled = false;
+      setAutoHint("Use Offset selected: OT, UT, and Offset are disabled. Requested hours will deduct from your offset credits.", true);
+    }
+  }
+
+  function updateOffsetSummary() {
+    if (!offsetSummaryEl || !offsetAvailableEl || !offsetDeductEl || !offsetRemainingEl) return;
+
+    const requestedHours = parseFloat(totalHoursEl.value || "0") || 0;
+    const shouldDeduct = useOffsetCheckbox.checked;
+    const deductHours = shouldDeduct ? requestedHours : 0;
+    const remainingHours = availableOffsetHours - deductHours;
+
+    offsetAvailableEl.textContent = availableOffsetHours.toFixed(2) + " hrs";
+    offsetDeductEl.textContent = deductHours.toFixed(2) + " hrs";
+    offsetRemainingEl.textContent = Math.max(0, remainingHours).toFixed(2) + " hrs";
+
+    offsetSummaryEl.classList.toggle("is-error", shouldDeduct && requestedHours > availableOffsetHours);
+    offsetSummaryEl.classList.toggle("hidden", !shouldDeduct);
   }
 
   function updateBaseTotalHours() {
@@ -360,7 +440,31 @@
 
   function calculateAutoHours() {
     const mode = getCalculationMode();
-    if (mode !== "ot" && mode !== "ut") return;
+    if (mode !== "ot" && mode !== "ut" && mode !== "offset" && mode !== "use-offset") return;
+
+    if (mode === "use-offset") {
+      const workStart = parseTimeInput(timeFromEl.value);
+      const workEnd = parseTimeInput(timeToEl.value);
+      if (workStart === null || workEnd === null) {
+        totalHoursEl.value = "";
+        setAutoHint("Complete Time from and Time to to auto-calculate USE-OFFSET.", true);
+        updateOffsetSummary();
+        return;
+      }
+
+      const workedMinutes = computeWorkedMinutes(workStart, workEnd);
+      if (workedMinutes <= 0) {
+        totalHoursEl.value = "";
+        setAutoHint("Time To must be later than Time From for auto-calculation.", true);
+        updateOffsetSummary();
+        return;
+      }
+
+      totalHoursEl.value = (workedMinutes / 60).toFixed(2);
+      setAutoHint(getAutoHintText(mode), true);
+      updateOffsetSummary();
+      return;
+    }
 
     clearCalculationFieldStates();
 
@@ -393,7 +497,8 @@
 
     if (hasMissingDependency) {
       totalHoursEl.value = "";
-      setAutoHint("Complete highlighted fields to auto-calculate " + mode.toUpperCase() + ".", true);
+      const modeLabel = mode === "offset" ? "OFFSET" : mode.toUpperCase();
+      setAutoHint("Complete highlighted fields to auto-calculate " + modeLabel + ".", true);
       return;
     }
 
@@ -407,7 +512,7 @@
     }
 
     if (isDayOffDate()) {
-      if (mode === "ot") {
+      if (mode === "ot" || mode === "offset") {
         totalHoursEl.value = (workedMinutes / 60).toFixed(2);
       } else {
         totalHoursEl.value = "0.00";
@@ -416,21 +521,23 @@
       return;
     }
 
-    if (mode === "ot") {
+    if (mode === "ot" || mode === "offset") {
       const otMinutes = computeOvertimeMinutes(scheduleRange, workStart, workEnd);
       totalHoursEl.value = (otMinutes / 60).toFixed(2);
       setAutoHint(getAutoHintText(mode), true);
+      updateOffsetSummary();
       return;
     }
 
     const utMinutes = computeUndertimeMinutes(scheduleRange, workStart, workEnd);
     totalHoursEl.value = (utMinutes / 60).toFixed(2);
     setAutoHint(getAutoHintText(mode), true);
+    updateOffsetSummary();
   }
 
   function applyCalculationMode() {
     const mode = getCalculationMode();
-    const isAutoMode = mode === "ot" || mode === "ut";
+    const isAutoMode = mode === "ot" || mode === "ut" || mode === "offset" || mode === "use-offset";
 
     if (isAutoMode) {
       clearCalculationFieldStates();
@@ -439,6 +546,7 @@
       totalHoursEl.placeholder = "Auto-calculated";
       setAutoHint(getAutoHintText(mode), true);
       calculateAutoHours();
+      updateOffsetSummary();
       return;
     }
 
@@ -449,6 +557,7 @@
       totalHoursEl.placeholder = "";
       updateBaseTotalHours();
       setAutoHint("Total hours are auto-saved from the selected time range.", true);
+      updateOffsetSummary();
       return;
     }
 
@@ -459,15 +568,17 @@
     setAutoHint("", false);
 
     updateBaseTotalHours();
+    updateOffsetSummary();
   }
 
   totalHoursEl.addEventListener("input", function () {
-    if (getCalculationMode() !== "ot" && getCalculationMode() !== "ut") {
+    if (getCalculationMode() !== "ot" && getCalculationMode() !== "ut" && getCalculationMode() !== "offset" && getCalculationMode() !== "use-offset") {
       manualTotalHoursValue = totalHoursEl.value;
     }
     if (!isFieldMissing(totalHoursEl)) {
       setMissingState(totalHoursEl, false);
     }
+    updateOffsetSummary();
   });
 
   requiredFieldEls.forEach(function (fieldEl) {
@@ -484,16 +595,20 @@
     });
   });
 
-  scheduleEl.addEventListener("change", calculateAutoHours);
-  dayOffEl.addEventListener("change", calculateAutoHours);
-  dateFromEl.addEventListener("change", calculateAutoHours);
-  timeFromEl.addEventListener("input", calculateAutoHours);
-  timeToEl.addEventListener("input", calculateAutoHours);
+  scheduleEl.addEventListener("change", applyCalculationMode);
+  dayOffEl.addEventListener("change", applyCalculationMode);
+  dateFromEl.addEventListener("change", applyCalculationMode);
+  timeFromEl.addEventListener("input", applyCalculationMode);
+  timeToEl.addEventListener("input", applyCalculationMode);
 
   transactionTypeEls.forEach(function (checkbox) {
-    checkbox.addEventListener("change", applyCalculationMode);
+    checkbox.addEventListener("change", function () {
+      enforceOffsetExclusivity();
+      applyCalculationMode();
+    });
     checkbox.addEventListener("change", function () {
       validateTransactionSelection();
+      updateOffsetSummary();
     });
   });
 
@@ -510,5 +625,7 @@
     }
   });
 
+  enforceOffsetExclusivity();
   applyCalculationMode();
+  updateOffsetSummary();
 })();

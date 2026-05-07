@@ -6,6 +6,52 @@
 {% endblock %}
 
 {% block page_content %}
+  {% set position_options = [
+    'IT Staff',
+    'IT Manager',
+    'Accounting Staff',
+    'Accounting Head',
+    'Cluster Manager',
+    'HR Head',
+    'HR Staff',
+    'Store Crew',
+    'Store Cashier',
+    'Store Supervisor',
+    'Store Manager',
+    'Logistics Manager',
+    'Logistics Driver',
+    'Logistics Staff',
+    'Maintenance Manager',
+    'Maintenance Staff',
+    'Payroll Officer',
+    'Inventory Staff',
+    'Inventory Manager',
+    'General Manager',
+    'Operation Manager',
+    'Area Manager',
+    'Training Officer',
+    'Marketing Manager',
+    'Marketing Staff',
+    'Internal Auditor',
+    'Finance Manager',
+    'Finance Staff',
+    'Purchasing Officer',
+    'Procurement Staff',
+    'Warehouse Staff',
+    'Warehouse Supervisor',
+    'Quality Assurance Staff',
+    'Quality Control Staff',
+    'Admin Assistant',
+    'Office Staff',
+    'Branch Manager',
+    'Team Leader',
+    'Supervisor',
+    'Cashier',
+    'Driver',
+    'Rider',
+    'Security Guard',
+    'Utility Staff'
+  ] %}
   {% macro extended_employee_fields(employee=None, add_form=None) %}
     {% set form = add_form or {} %}
 
@@ -415,7 +461,19 @@
                     {% endfor %}
                   </select>
                 </div>
-                <div class="field"><label>Position </label><input type="text" name="position" value="{{ '' if employee and employee.position|lower == 'none' else (employee.position or '') }}"></div>
+                <div class="field">
+                  <label>Position </label>
+                  {% set selected_position = '' if employee and employee.position|lower == 'none' else (employee.position or '') %}
+                  <select name="position">
+                    <option value="" disabled {% if not selected_position %}selected{% endif %}>Select Position</option>
+                    {% for position_name in position_options %}
+                    <option value="{{ position_name }}" {% if selected_position == position_name %}selected{% endif %}>{{ position_name }}</option>
+                    {% endfor %}
+                    {% if selected_position and selected_position not in position_options %}
+                    <option value="{{ selected_position }}" selected>{{ selected_position }}</option>
+                    {% endif %}
+                  </select>
+                </div>
               </div>
               <div class="grid-2">
                 <div class="field"><label>Hired Date </label><input type="date" name="hired_date" value="{{ employee.hired_date }}"></div>
@@ -593,7 +651,19 @@
                       {% endfor %}
                     </select>
                   </div>
-                  <div class="field"><label>Position</label><input type="text" name="position" value="{{ add_form.get('position', '') }}"></div>
+                  <div class="field">
+                    <label>Position</label>
+                    {% set add_selected_position = add_form.get('position', '') %}
+                    <select name="position">
+                      <option value="" disabled {% if not add_selected_position %}selected{% endif %}>Select Position</option>
+                      {% for position_name in position_options %}
+                      <option value="{{ position_name }}" {% if add_selected_position == position_name %}selected{% endif %}>{{ position_name }}</option>
+                      {% endfor %}
+                      {% if add_selected_position and add_selected_position not in position_options %}
+                      <option value="{{ add_selected_position }}" selected>{{ add_selected_position }}</option>
+                      {% endif %}
+                    </select>
+                  </div>
                 </div>
                 <div class="grid-2">
                   <div class="field"><label>Hired Date <span class="req">*</span></label><input type="date" name="hired_date" value="{{ add_form.get('hired_date', '') }}" required></div>

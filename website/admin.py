@@ -9,6 +9,9 @@ from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from flask_login import login_required
 from werkzeug.security import generate_password_hash
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
 
 from . import db
 from .helpers import (
@@ -20,7 +23,7 @@ from .helpers import (
     roles_required,
     sync_department_name,
 )
-from .models import Company, Department, Employee, User, EsarfApprover, EsarfRequest, LeaveRequest, DiscountRequest, ProductChargeRequest, PerkApprover
+from .models import Company, Department, Employee, User, EsarfApprover, EsarfRequest, LeaveRequest, LeaveApprover, DiscountRequest, ProductChargeRequest, PerkApprover
 
 admin = Blueprint("admin", __name__)
 
@@ -36,6 +39,88 @@ ESARF_APPROVER_ROLES = [
     ("general manager", "General Manager"),
 ]
 ESARF_APPROVER_ROLE_KEYS = {role for role, _label in ESARF_APPROVER_ROLES}
+
+LEAVE_STATUS_PENDING = "Pending"
+LEAVE_STATUS_DEPT_HR_APPROVED = "Dept/HR Approved"
+LEAVE_STATUS_DEPT_HR_OPS_APPROVED = "Dept/HR Ops Approved"
+LEAVE_STATUS_APPROVED = "Approved"
+LEAVE_STATUS_REJECTED = "Rejected"
+
+LEAVE_APPROVER_ROLES = [
+    ("department", "Department Approver"),
+    ("hr", "HR Approver"),
+    ("operation", "Operations Approver"),
+    ("general manager", "General Manager Approver"),
+]
+LEAVE_APPROVER_ROLE_KEYS = {role for role, _label in LEAVE_APPROVER_ROLES}
+
+GM_REQUIRED_POSITIONS = {
+    "it manager",
+    "accounting head",
+    "cluster manager",
+    "hr head",
+    "logistics manager",
+    "maintenance manager",
+    "payroll officer",
+    "inventory manager",
+    "general manager",
+    "operation manager",
+    "area manager",
+    "training officer",
+    "marketing manager",
+    "internal auditor",
+    "finance manager",
+    "purchasing officer",
+    "warehouse supervisor",
+    "branch manager",
+    "team leader",
+    "supervisor",
+}
+
+
+def _requires_general_manager_approval(submitter_user):
+    employee = submitter_user.employee if submitter_user else None
+    position = (employee.position or "").strip().lower() if employee else ""
+    if not position:
+        return False
+    return position in GM_REQUIRED_POSITIONS
+
+
+def _leave_total_days(leave_request):
+    if not leave_request or not leave_request.start_date or not leave_request.end_date:
+        return 0
+    return max(0, (leave_request.end_date - leave_request.start_date).days + 1)
+
+
+def _deductible_leave_days(leave_request):
+    leave_type_raw = (leave_request.leave_type or "").strip()
+    leave_type = leave_type_raw.lower()
+    total_days = _leave_total_days(leave_request)
+    if total_days <= 0:
+        return 0
+    if leave_type.startswith("without pay"):
+        return 0
+    if leave_type.startswith("with pay"):
+        return total_days
+    if leave_type.startswith("both"):
+        match = re.search(r"with\s*pay\s*:\s*(\d+)", leave_type_raw, re.IGNORECASE)
+        if match:
+            return max(0, int(match.group(1)))
+        return total_days
+    return total_days
+
+
+def _apply_leave_credit_deduction(leave_request):
+    submitter = leave_request.submitted_by_user if leave_request else None
+    if not submitter:
+        return 0
+    if submitter.leave_credits is None:
+        submitter.leave_credits = 0
+    deducted_days = _deductible_leave_days(leave_request)
+    if deducted_days <= 0:
+        return 0
+    submitter.leave_credits = max(0, int(submitter.leave_credits) - deducted_days)
+    return deducted_days
 
 
 def _normalize_department_name(department_name):
@@ -109,6 +194,56 @@ def _scope_esarf_query_for_current_user(esarf_request_query):
     )
 
 
+def _current_leave_approver_assignment():
+    return LeaveApprover.query.filter_by(user_id=current_user.id).first()
+
+
+def _current_leave_workflow_role():
+    if (current_user.role or "").strip().lower() == "admin":
+        return "admin"
+
+    assignment = _current_leave_approver_assignment()
+    if assignment and assignment.approver_role in LEAVE_APPROVER_ROLE_KEYS:
+        return assignment.approver_role
+    return ""
+
+
+def _current_user_can_manage_leaves():
+    return _current_leave_workflow_role() in {"admin", *LEAVE_APPROVER_ROLE_KEYS}
+
+
+def _leave_submitter_department(leave_request):
+    submitter = leave_request.submitted_by_user if leave_request else None
+    if not submitter or not submitter.employee:
+        return ""
+    return _normalize_department_name(submitter.employee.department)
+
+
+def _department_leave_approver_can_access(leave_request):
+    assignment = _current_leave_approver_assignment()
+    if not assignment or assignment.approver_role != "department":
+        return False
+    manager_department = _normalize_department_name(assignment.department_name)
+    request_department = _leave_submitter_department(leave_request)
+    return bool(manager_department and request_department and manager_department == request_department)
+
+
+def _scope_leave_query_for_current_user(leave_query):
+    current_role = _current_leave_workflow_role()
+    if current_role == "department":
+        assignment = _current_leave_approver_assignment()
+        manager_department = _normalize_department_name(assignment.department_name if assignment else "")
+        if not manager_department:
+            return leave_query.filter(LeaveRequest.id.is_(None))
+        return (
+            leave_query
+            .join(LeaveRequest.submitted_by_user)
+            .join(User.employee)
+            .filter(func.lower(func.trim(Employee.department)) == manager_department)
+        )
+    return leave_query
+
+
 def _format_employee_no(hired_date, sequence):
     date_part = hired_date.strftime("%m%d%Y") if hired_date else "00000000"
     return f"{date_part}-{sequence:02d}"
@@ -151,6 +286,17 @@ def _compute_age_from_birth_date(birth_date):
         (today.month, today.day) < (birth_date.month, birth_date.day)
     )
     return age if age >= 0 else None
+
+
+def _is_at_least_one_year_from_hired_date(hired_date):
+    if not hired_date:
+        return False
+
+    today = date.today()
+    years = today.year - hired_date.year
+    if (today.month, today.day) < (hired_date.month, hired_date.day):
+        years -= 1
+    return years >= 1
 
 
 EMPLOYEE_TEXT_FIELDS = [
@@ -551,6 +697,8 @@ def add_employee():
                 password=generate_password_hash(reg_password, method="pbkdf2:sha256"),
                 role=reg_role,
                 employee_id=new_employee.id,
+                leave_credits=7 if _is_at_least_one_year_from_hired_date(new_employee.hired_date) else 0,
+                offset_credits=0.0,
             )
             db.session.add(new_user)
 
@@ -944,37 +1092,100 @@ def update_user(user_id):
 @admin.route('/esarf_requests', methods=['GET'])
 @login_required
 def esarf_requests():
-    if not _current_user_can_manage_esarf():
+    if not (_current_user_can_manage_esarf() or _current_user_can_manage_leaves()):
         flash("You do not have permission to access that page.", category="error")
         return redirect(url_for("views.home"))
 
     esarf_request_query = EsarfRequest.query
     current_role = _current_esarf_workflow_role()
-    esarf_request_query = _scope_esarf_query_for_current_user(esarf_request_query)
-    if current_role == "operation":
-        esarf_request_query = esarf_request_query.filter(
-            EsarfRequest.status.in_(
-                [
-                    ESARF_STATUS_DEPT_MGR_APPROVED,
-                    ESARF_STATUS_DEPT_MGR_OPS_APPROVED,
-                    ESARF_STATUS_APPROVED,
-                ]
+    if _current_user_can_manage_esarf():
+        esarf_request_query = _scope_esarf_query_for_current_user(esarf_request_query)
+        if current_role == "dept manager":
+            esarf_request_query = esarf_request_query.filter(
+                EsarfRequest.status == ESARF_STATUS_PENDING
             )
-        )
-    elif current_role == "general manager":
-        esarf_request_query = esarf_request_query.filter(
-            EsarfRequest.status.in_(
-                [
-                    ESARF_STATUS_DEPT_MGR_OPS_APPROVED,
-                    ESARF_STATUS_APPROVED,
-                ]
+        elif current_role == "operation":
+            esarf_request_query = esarf_request_query.filter(
+                EsarfRequest.status.in_(
+                    [
+                        ESARF_STATUS_DEPT_MGR_APPROVED,
+                    ]
+                )
             )
-        )
-    esarf_request_items = esarf_request_query.order_by(EsarfRequest.id.desc()).all()
+        elif current_role == "general manager":
+            esarf_request_query = esarf_request_query.filter(
+                EsarfRequest.status.in_(
+                    [
+                        ESARF_STATUS_DEPT_MGR_OPS_APPROVED,
+                    ]
+                )
+            )
+        esarf_request_items = esarf_request_query.order_by(EsarfRequest.id.desc()).all()
+        if current_role == "general manager":
+            esarf_request_items = [
+                req for req in esarf_request_items if _requires_general_manager_approval(req.submitted_by_user)
+            ]
+    else:
+        esarf_request_items = []
+
+    leave_current_role = _current_leave_workflow_role()
+    if _current_user_can_manage_leaves():
+        leave_request_query = _scope_leave_query_for_current_user(LeaveRequest.query)
+        if leave_current_role in {"department", "hr"}:
+            leave_request_query = leave_request_query.filter(
+                LeaveRequest.status == LEAVE_STATUS_PENDING
+            )
+        elif leave_current_role == "operation":
+            leave_request_query = leave_request_query.filter(
+                LeaveRequest.status == LEAVE_STATUS_DEPT_HR_APPROVED
+            )
+        elif leave_current_role == "general manager":
+            leave_request_query = leave_request_query.filter(
+                LeaveRequest.status == LEAVE_STATUS_DEPT_HR_OPS_APPROVED
+            )
+        leave_request_items = leave_request_query.order_by(LeaveRequest.id.desc()).all()
+        if leave_current_role == "general manager":
+            leave_request_items = [
+                req for req in leave_request_items if _requires_general_manager_approval(req.submitted_by_user)
+            ]
+    else:
+        leave_request_items = []
+
+    esarf_counts = {"total": 0, "pending": 0, "approved": 0, "rejected": 0, "returned": 0}
+    for req in esarf_request_items:
+        esarf_counts["total"] += 1
+        status = (req.status or ESARF_STATUS_PENDING).strip()
+        if status == ESARF_STATUS_PENDING:
+            esarf_counts["pending"] += 1
+        elif status == ESARF_STATUS_APPROVED:
+            esarf_counts["approved"] += 1
+        elif status == ESARF_STATUS_REJECTED:
+            esarf_counts["rejected"] += 1
+        else:
+            esarf_counts["returned"] += 1
+
+    leave_counts = {"total": 0, "pending": 0, "approved": 0, "rejected": 0, "returned": 0}
+    for leave in leave_request_items:
+        leave_counts["total"] += 1
+        status = (leave.status or LEAVE_STATUS_PENDING).strip()
+        if status == LEAVE_STATUS_PENDING:
+            leave_counts["pending"] += 1
+        elif status == LEAVE_STATUS_APPROVED:
+            leave_counts["approved"] += 1
+        elif status == LEAVE_STATUS_REJECTED:
+            leave_counts["rejected"] += 1
+        else:
+            leave_counts["returned"] += 1
+
     return render_template(
         'admin/esarf_requests.html',
         esarf_requests=esarf_request_items,
+        leave_requests=leave_request_items,
         esarf_current_role=current_role,
+        leave_current_role=leave_current_role,
+        esarf_counts=esarf_counts,
+        leave_counts=leave_counts,
+        initial_request_type=(request.args.get("type") or "all").strip().lower(),
     )
 
 
@@ -992,6 +1203,7 @@ def update_esarf_status(esarf_id):
 
     current_role = _current_esarf_workflow_role()
     action = (request.form.get("action") or "").strip().lower()
+    previous_status = esarf_request.status
 
     if current_role == "dept manager" and not _department_manager_can_access_esarf(esarf_request):
         flash("You can only view or approve ESARF requests from your own department.", category="error")
@@ -1053,40 +1265,76 @@ def update_esarf_status(esarf_id):
             )
             return redirect(url_for("admin.esarf_requests"))
     elif current_role == "operation":
-        if action != "operation_approve":
-            flash("Operation role can only record second-signatory approval.", category="error")
-            return redirect(url_for("admin.esarf_requests"))
-        if esarf_request.status in {ESARF_STATUS_REJECTED, ESARF_STATUS_APPROVED}:
-            flash("This request can no longer be operation-approved.", category="error")
-            return redirect(url_for("admin.esarf_requests"))
-        if esarf_request.status == ESARF_STATUS_PENDING:
-            flash("Department manager approval is required before operation approval.", category="error")
-            return redirect(url_for("admin.esarf_requests"))
-        if esarf_request.status == ESARF_STATUS_DEPT_MGR_OPS_APPROVED:
-            flash("Operation approval is already recorded.", category="info")
-            return redirect(url_for("admin.esarf_requests"))
-        if esarf_request.status != ESARF_STATUS_DEPT_MGR_APPROVED:
-            flash("Current request status is not valid for operation approval.", category="error")
-            return redirect(url_for("admin.esarf_requests"))
+        if action == "reject":
+            if esarf_request.status != ESARF_STATUS_DEPT_MGR_APPROVED:
+                flash("Only requests awaiting operations approval can be declined.", category="error")
+                return redirect(url_for("admin.esarf_requests"))
+            reject_reason = (request.form.get("reject_reason") or "").strip()
+            if not reject_reason:
+                flash("Decline reason is required.", category="error")
+                return redirect(url_for("admin.esarf_requests"))
 
-        esarf_request.status = ESARF_STATUS_DEPT_MGR_OPS_APPROVED
-        success_message = (
-            f"ESARF request #{esarf_request.id}: Operations approval recorded. "
-            "Waiting for remaining signatory."
-        )
+            esarf_request.status = ESARF_STATUS_REJECTED
+            esarf_request.declined_reason = f"Operations: {reject_reason}"
+            success_message = f"ESARF request #{esarf_request.id} declined by Operations. Reason: {reject_reason}"
+        elif action == "operation_approve":
+            if esarf_request.status in {ESARF_STATUS_REJECTED, ESARF_STATUS_APPROVED}:
+                flash("This request can no longer be operation-approved.", category="error")
+                return redirect(url_for("admin.esarf_requests"))
+            if esarf_request.status == ESARF_STATUS_PENDING:
+                flash("Department manager approval is required before operation approval.", category="error")
+                return redirect(url_for("admin.esarf_requests"))
+            if esarf_request.status == ESARF_STATUS_DEPT_MGR_OPS_APPROVED:
+                flash("Operation approval is already recorded.", category="info")
+                return redirect(url_for("admin.esarf_requests"))
+            if esarf_request.status != ESARF_STATUS_DEPT_MGR_APPROVED:
+                flash("Current request status is not valid for operation approval.", category="error")
+                return redirect(url_for("admin.esarf_requests"))
+
+            if _requires_general_manager_approval(esarf_request.submitted_by_user):
+                esarf_request.status = ESARF_STATUS_DEPT_MGR_OPS_APPROVED
+                success_message = (
+                    f"ESARF request #{esarf_request.id}: Operations approval recorded. "
+                    "Waiting for remaining signatory."
+                )
+            else:
+                esarf_request.status = ESARF_STATUS_APPROVED
+                success_message = (
+                    f"ESARF request #{esarf_request.id}: Operations approval recorded. "
+                    "Request is now Approved."
+                )
+        else:
+            flash("Operation role can approve or decline requests awaiting second-signatory action.", category="error")
+            return redirect(url_for("admin.esarf_requests"))
     elif current_role == "general manager":
-        if action != "general_manager_approve":
-            flash("General manager can only record final-signatory approval.", category="error")
+        if not _requires_general_manager_approval(esarf_request.submitted_by_user):
+            flash("General Manager approval is not required for this request.", category="info")
             return redirect(url_for("admin.esarf_requests"))
-        if esarf_request.status in {ESARF_STATUS_REJECTED, ESARF_STATUS_APPROVED}:
-            flash("This request can no longer be general-manager approved.", category="error")
-            return redirect(url_for("admin.esarf_requests"))
-        if esarf_request.status != ESARF_STATUS_DEPT_MGR_OPS_APPROVED:
-            flash("Operations approval is required before general manager approval.", category="error")
-            return redirect(url_for("admin.esarf_requests"))
+        if action == "reject":
+            if esarf_request.status != ESARF_STATUS_DEPT_MGR_OPS_APPROVED:
+                flash("Only requests awaiting general manager approval can be declined.", category="error")
+                return redirect(url_for("admin.esarf_requests"))
+            reject_reason = (request.form.get("reject_reason") or "").strip()
+            if not reject_reason:
+                flash("Decline reason is required.", category="error")
+                return redirect(url_for("admin.esarf_requests"))
 
-        esarf_request.status = ESARF_STATUS_APPROVED
-        success_message = f"ESARF request #{esarf_request.id}: General Manager approval recorded. Request is now Approved."
+            esarf_request.status = ESARF_STATUS_REJECTED
+            esarf_request.declined_reason = f"General Manager: {reject_reason}"
+            success_message = f"ESARF request #{esarf_request.id} declined by General Manager. Reason: {reject_reason}"
+        elif action == "general_manager_approve":
+            if esarf_request.status in {ESARF_STATUS_REJECTED, ESARF_STATUS_APPROVED}:
+                flash("This request can no longer be general-manager approved.", category="error")
+                return redirect(url_for("admin.esarf_requests"))
+            if esarf_request.status != ESARF_STATUS_DEPT_MGR_OPS_APPROVED:
+                flash("Operations approval is required before general manager approval.", category="error")
+                return redirect(url_for("admin.esarf_requests"))
+
+            esarf_request.status = ESARF_STATUS_APPROVED
+            success_message = f"ESARF request #{esarf_request.id}: General Manager approval recorded. Request is now Approved."
+        else:
+            flash("General manager can approve or decline requests awaiting final-signatory action.", category="error")
+            return redirect(url_for("admin.esarf_requests"))
     elif current_role in {"admin", "timekeeper"}:
         if action == "approve":
             if esarf_request.status != ESARF_STATUS_PENDING:
@@ -1115,6 +1363,26 @@ def update_esarf_status(esarf_id):
         return redirect(url_for("admin.esarf_requests"))
 
     try:
+        moved_to_approved = previous_status != ESARF_STATUS_APPROVED and esarf_request.status == ESARF_STATUS_APPROVED
+        if moved_to_approved:
+            submitter = esarf_request.submitted_by_user
+            submitter.offset_credits = float(submitter.offset_credits or 0)
+
+            transaction_csv = esarf_request.transaction_types or ""
+            tokens = [token.strip() for token in transaction_csv.split(",") if token.strip()]
+            if "Use Offset" in tokens:
+                if submitter.offset_credits < float(esarf_request.total_hours or 0):
+                    flash(
+                        f"Cannot approve: insufficient offset credits. Available {submitter.offset_credits:.2f} hrs, "
+                        f"requested {float(esarf_request.total_hours or 0):.2f} hrs.",
+                        category="error",
+                    )
+                    db.session.rollback()
+                    return redirect(url_for("admin.esarf_requests"))
+                submitter.offset_credits = max(0.0, submitter.offset_credits - float(esarf_request.total_hours or 0))
+            elif "Offset" in tokens:
+                submitter.offset_credits = submitter.offset_credits + float(esarf_request.total_hours or 0)
+
         notification_category = "approved" if esarf_request.status == ESARF_STATUS_APPROVED else (
             "rejected" if esarf_request.status == ESARF_STATUS_REJECTED else "info"
         )
@@ -1126,7 +1394,10 @@ def update_esarf_status(esarf_id):
             notification_message = "Your ESARF was approved."
         elif action == "operation_approve":
             notification_title = "Approved by Operations"
-            notification_message = "Moved to General Manager."
+            if esarf_request.status == ESARF_STATUS_APPROVED:
+                notification_message = "Your ESARF was approved."
+            else:
+                notification_message = "Moved to General Manager."
         else:
             notification_title = "Approved by Dept Manager"
             notification_message = "Moved to the next approver."
@@ -1148,53 +1419,130 @@ def update_esarf_status(esarf_id):
 
 
 @admin.route('/leave_requests', methods=['GET'])
-@roles_required("admin", "timekeeper")
+@login_required
 def leave_requests():
-    leave_request_items = LeaveRequest.query.order_by(LeaveRequest.id.desc()).all()
-    grouped_leaves = {
-        "pending": [],
-        "approved": [],
-        "rejected": [],
-    }
-    for leave in leave_request_items:
-        status_key = (leave.status or "Pending").strip().lower()
-        grouped_leaves.setdefault(status_key, []).append(leave)
-
-    return render_template(
-        'admin/leave_requests.html',
-        grouped_leaves=grouped_leaves,
-    )
+    return redirect(url_for("admin.esarf_requests"))
 
 
 @admin.route('/leave_requests/<int:leave_id>/status', methods=['POST'])
-@roles_required("admin", "timekeeper")
+@login_required
 def update_leave_status(leave_id):
+    if not _current_user_can_manage_leaves():
+        flash('You do not have permission to update leave requests.', category='error')
+        return redirect(url_for('views.home'))
+
     leave_request = LeaveRequest.query.get_or_404(leave_id)
+    current_role = _current_leave_workflow_role()
+    if current_role == "department" and not _department_leave_approver_can_access(leave_request):
+        flash('You can only approve leave requests from your own department.', category='error')
+        return redirect(url_for('admin.esarf_requests'))
+
     status = (request.form.get('status') or '').strip().title()
-    if status not in {'Approved', 'Rejected'}:
+    if status not in {LEAVE_STATUS_APPROVED, LEAVE_STATUS_REJECTED}:
         flash('Please choose a valid leave status.', category='error')
-        return redirect(url_for('admin.leave_requests'))
+        return redirect(url_for('admin.esarf_requests'))
 
-    if (leave_request.status or '').strip().lower() != 'pending':
-        flash('Only pending leave requests can be updated.', category='error')
-        return redirect(url_for('admin.leave_requests'))
+    leave_status = (leave_request.status or LEAVE_STATUS_PENDING).strip()
+    if leave_status not in {
+        LEAVE_STATUS_PENDING,
+        LEAVE_STATUS_DEPT_HR_APPROVED,
+        LEAVE_STATUS_DEPT_HR_OPS_APPROVED,
+    }:
+        flash('This leave request can no longer be updated.', category='error')
+        return redirect(url_for('admin.esarf_requests'))
 
-    leave_request.status = status
+    if current_role in {"department", "hr"}:
+        if leave_status != LEAVE_STATUS_PENDING:
+            flash('First approval can only be done while leave is pending.', category='error')
+            return redirect(url_for('admin.esarf_requests'))
+        if status == LEAVE_STATUS_APPROVED:
+            leave_request.status = LEAVE_STATUS_DEPT_HR_APPROVED
+            notification_title = "Leave pre-approved"
+            notification_message = "Your leave request passed Department/HR approval and moved to Operations."
+            notification_category = "info"
+        else:
+            leave_request.status = LEAVE_STATUS_REJECTED
+            notification_title = "Leave rejected"
+            notification_message = f"Your {leave_request.leave_category} leave was rejected."
+            notification_category = "rejected"
+    elif current_role == "operation":
+        if leave_status != LEAVE_STATUS_DEPT_HR_APPROVED:
+            flash('Operations can only act after Department/HR approval.', category='error')
+            return redirect(url_for('admin.esarf_requests'))
+        if status == LEAVE_STATUS_APPROVED:
+            if _requires_general_manager_approval(leave_request.submitted_by_user):
+                leave_request.status = LEAVE_STATUS_DEPT_HR_OPS_APPROVED
+                notification_title = "Leave approved by Operations"
+                notification_message = (
+                    f"Your {leave_request.leave_category} leave passed Operations approval and moved to General Manager."
+                )
+                notification_category = "info"
+            else:
+                leave_request.status = LEAVE_STATUS_APPROVED
+                deducted_days = _apply_leave_credit_deduction(leave_request)
+                notification_title = "Leave approved"
+                notification_message = f"Your {leave_request.leave_category} leave was approved."
+                notification_category = "approved"
+        else:
+            leave_request.status = LEAVE_STATUS_REJECTED
+            notification_title = "Leave rejected"
+            notification_message = f"Your {leave_request.leave_category} leave was rejected by Operations."
+            notification_category = "rejected"
+    elif current_role == "general manager":
+        if not _requires_general_manager_approval(leave_request.submitted_by_user):
+            flash('General Manager approval is not required for this request.', category='info')
+            return redirect(url_for('admin.esarf_requests'))
+        if leave_status != LEAVE_STATUS_DEPT_HR_OPS_APPROVED:
+            flash('General Manager can only act after Operations approval.', category='error')
+            return redirect(url_for('admin.esarf_requests'))
+        if status == LEAVE_STATUS_APPROVED:
+            leave_request.status = LEAVE_STATUS_APPROVED
+            deducted_days = _apply_leave_credit_deduction(leave_request)
+            notification_title = "Leave approved"
+            notification_message = f"Your {leave_request.leave_category} leave was approved."
+            notification_category = "approved"
+        else:
+            leave_request.status = LEAVE_STATUS_REJECTED
+            notification_title = "Leave rejected"
+            notification_message = f"Your {leave_request.leave_category} leave was rejected by General Manager."
+            notification_category = "rejected"
+    elif current_role == "admin":
+        leave_request.status = status
+        deducted_days = 0
+        if status == LEAVE_STATUS_APPROVED:
+            deducted_days = _apply_leave_credit_deduction(leave_request)
+        notification_title = "Leave approved" if status == LEAVE_STATUS_APPROVED else "Leave rejected"
+        notification_message = (
+            f"Your {leave_request.leave_category} leave was approved."
+            if status == LEAVE_STATUS_APPROVED else
+            f"Your {leave_request.leave_category} leave was rejected."
+        )
+        notification_category = "approved" if status == LEAVE_STATUS_APPROVED else "rejected"
+    else:
+        flash('You do not have permission to update this request.', category='error')
+        return redirect(url_for('admin.esarf_requests'))
     try:
         create_notification(
             leave_request.submitted_by_user_id,
-            f"Leave {status.lower()}",
-            f"Your {leave_request.leave_category} leave was {status.lower()}.",
-            category="approved" if status == "Approved" else "rejected",
+            notification_title,
+            notification_message,
+            category=notification_category,
             link_url=url_for("employee.leaves"),
         )
         db.session.commit()
-        flash(f'Leave request #{leave_id} {status.lower()}.', category='success')
+        if leave_request.status == LEAVE_STATUS_APPROVED:
+            flash(
+                f'Leave request #{leave_id} updated to {leave_request.status}. '
+                f'Leave credits deducted: {deducted_days} day(s).',
+                category='success',
+            )
+        else:
+            flash(f'Leave request #{leave_id} updated to {leave_request.status}.', category='success')
     except Exception:
         db.session.rollback()
         flash('Unable to update leave request status.', category='error')
 
-    return redirect(url_for('admin.leave_requests'))
+    return redirect(url_for('admin.esarf_requests'))
 
 
 @admin.route('/perk_requests', methods=['GET'])
@@ -1550,6 +1898,198 @@ def settings():
     if request.method == 'POST':
         action = request.form.get('action')
 
+        if action == 'export_report':
+            report_type = (request.form.get('report_type') or '').strip().lower()
+            date_from_raw = (request.form.get('date_from') or '').strip()
+            date_to_raw = (request.form.get('date_to') or '').strip()
+
+            if report_type not in {'esarf', 'leave', 'discount_charge'}:
+                flash('Please select a valid report type.', category='error')
+                return redirect(url_for('admin.settings'))
+            if not date_from_raw or not date_to_raw:
+                flash('Please select both Date From and Date To.', category='error')
+                return redirect(url_for('admin.settings'))
+
+            try:
+                date_from = datetime.strptime(date_from_raw, '%Y-%m-%d').date()
+                date_to = datetime.strptime(date_to_raw, '%Y-%m-%d').date()
+            except ValueError:
+                flash('Invalid date format.', category='error')
+                return redirect(url_for('admin.settings'))
+
+            if date_to < date_from:
+                flash('Date To cannot be earlier than Date From.', category='error')
+                return redirect(url_for('admin.settings'))
+
+            def _serialize(value):
+                if value is None:
+                    return ''
+                if isinstance(value, datetime):
+                    return value.strftime('%Y-%m-%d %H:%M:%S')
+                if isinstance(value, date):
+                    return value.strftime('%Y-%m-%d')
+                return str(value)
+
+            def _submitter_context(user):
+                employee = user.employee if user else None
+                full_name = ''
+                if employee:
+                    parts = [employee.first_name or '', employee.middle_name or '', employee.last_name or '', employee.suffix or '']
+                    full_name = ' '.join(part for part in parts if part).strip()
+                return {
+                    'submitted_by_user_id': user.id if user else '',
+                    'submitted_by_username': user.username if user else '',
+                    'submitted_by_role': user.role if user else '',
+                    'submitted_by_employee_id': employee.id if employee else '',
+                    'submitted_by_employee_no': employee.employee_no if employee else '',
+                    'submitted_by_full_name': full_name,
+                    'submitted_by_company': employee.company if employee else '',
+                    'submitted_by_department': employee.department if employee else '',
+                    'submitted_by_position': employee.position if employee else '',
+                }
+
+            rows = []
+
+            if report_type == 'esarf':
+                items = EsarfRequest.query.filter(
+                    func.date(EsarfRequest.created_at) >= date_from,
+                    func.date(EsarfRequest.created_at) <= date_to,
+                ).order_by(EsarfRequest.created_at.asc(), EsarfRequest.id.asc()).all()
+                base_columns = [column.name for column in EsarfRequest.__table__.columns]
+                context_columns = list(_submitter_context(None).keys())
+                headers = base_columns + context_columns
+
+                for item in items:
+                    row_dict = {column: _serialize(getattr(item, column)) for column in base_columns}
+                    row_dict.update({k: _serialize(v) for k, v in _submitter_context(item.submitted_by_user).items()})
+                    rows.append([row_dict.get(header, '') for header in headers])
+
+                filename = f"esarf_report_{date_from}_{date_to}.xlsx"
+                report_label = "ESARF Report"
+
+            elif report_type == 'leave':
+                items = LeaveRequest.query.filter(
+                    LeaveRequest.start_date >= date_from,
+                    LeaveRequest.start_date <= date_to,
+                ).order_by(LeaveRequest.start_date.asc(), LeaveRequest.id.asc()).all()
+                base_columns = [column.name for column in LeaveRequest.__table__.columns]
+                context_columns = list(_submitter_context(None).keys())
+                headers = base_columns + context_columns
+
+                for item in items:
+                    row_dict = {column: _serialize(getattr(item, column)) for column in base_columns}
+                    row_dict.update({k: _serialize(v) for k, v in _submitter_context(item.submitted_by_user).items()})
+                    rows.append([row_dict.get(header, '') for header in headers])
+
+                filename = f"leave_report_{date_from}_{date_to}.xlsx"
+                report_label = "Leave Report"
+
+            else:
+                discount_items = DiscountRequest.query.filter(
+                    DiscountRequest.transaction_date >= date_from,
+                    DiscountRequest.transaction_date <= date_to,
+                ).order_by(DiscountRequest.transaction_date.asc(), DiscountRequest.id.asc()).all()
+                charge_items = ProductChargeRequest.query.filter(
+                    ProductChargeRequest.transaction_date >= date_from,
+                    ProductChargeRequest.transaction_date <= date_to,
+                ).order_by(ProductChargeRequest.transaction_date.asc(), ProductChargeRequest.id.asc()).all()
+
+                discount_columns = [column.name for column in DiscountRequest.__table__.columns]
+                charge_columns = [column.name for column in ProductChargeRequest.__table__.columns]
+                all_request_columns = sorted(set(discount_columns + charge_columns))
+                context_columns = list(_submitter_context(None).keys())
+                headers = ['request_type'] + all_request_columns + context_columns
+
+                for item in discount_items:
+                    row_dict = {'request_type': 'Discount'}
+                    for column in all_request_columns:
+                        row_dict[column] = _serialize(getattr(item, column, ''))
+                    row_dict.update({k: _serialize(v) for k, v in _submitter_context(item.submitted_by_user).items()})
+                    rows.append([row_dict.get(header, '') for header in headers])
+
+                for item in charge_items:
+                    row_dict = {'request_type': 'Charge'}
+                    for column in all_request_columns:
+                        row_dict[column] = _serialize(getattr(item, column, ''))
+                    row_dict.update({k: _serialize(v) for k, v in _submitter_context(item.submitted_by_user).items()})
+                    rows.append([row_dict.get(header, '') for header in headers])
+
+                filename = f"discount_charge_report_{date_from}_{date_to}.xlsx"
+                report_label = "Discount/Charge Report"
+
+            workbook = Workbook()
+            sheet = workbook.active
+            sheet.title = "Report"
+
+            title_row = [f"{report_label} ({date_from} to {date_to})"]
+            sheet.append(title_row)
+            sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=max(1, len(headers)))
+            sheet.append(headers)
+            for row in rows:
+                sheet.append(row)
+
+            title_fill = PatternFill("solid", fgColor="0F172A")
+            header_fill = PatternFill("solid", fgColor="1D4ED8")
+            stripe_fill = PatternFill("solid", fgColor="F8FAFC")
+            white_font = Font(color="FFFFFF", bold=True)
+            title_font = Font(color="FFFFFF", bold=True, size=13)
+            thin_border = Border(
+                left=Side(style="thin", color="E2E8F0"),
+                right=Side(style="thin", color="E2E8F0"),
+                top=Side(style="thin", color="E2E8F0"),
+                bottom=Side(style="thin", color="E2E8F0"),
+            )
+
+            title_cell = sheet.cell(row=1, column=1)
+            title_cell.fill = title_fill
+            title_cell.font = title_font
+            title_cell.alignment = Alignment(horizontal="left", vertical="center")
+            sheet.row_dimensions[1].height = 26
+
+            for col_idx, header in enumerate(headers, start=1):
+                cell = sheet.cell(row=2, column=col_idx, value=header)
+                cell.fill = header_fill
+                cell.font = white_font
+                cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+                cell.border = thin_border
+            sheet.row_dimensions[2].height = 24
+
+            max_row = sheet.max_row
+            max_col = sheet.max_column
+
+            for row_idx in range(3, max_row + 1):
+                if row_idx % 2 == 1:
+                    for col_idx in range(1, max_col + 1):
+                        sheet.cell(row=row_idx, column=col_idx).fill = stripe_fill
+                for col_idx in range(1, max_col + 1):
+                    data_cell = sheet.cell(row=row_idx, column=col_idx)
+                    data_cell.border = thin_border
+                    data_cell.alignment = Alignment(vertical="top", wrap_text=True)
+
+            for col_idx in range(1, max_col + 1):
+                column_letter = get_column_letter(col_idx)
+                max_len = 0
+                for row_idx in range(1, max_row + 1):
+                    value = sheet.cell(row=row_idx, column=col_idx).value
+                    value_len = len(str(value)) if value is not None else 0
+                    if value_len > max_len:
+                        max_len = value_len
+                sheet.column_dimensions[column_letter].width = min(max(max_len + 2, 14), 42)
+
+            sheet.auto_filter.ref = f"A2:{get_column_letter(max_col)}{max_row}"
+            sheet.freeze_panes = "A3"
+
+            output = io.BytesIO()
+            workbook.save(output)
+            output.seek(0)
+
+            response = Response(
+                output.getvalue(),
+                mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            )
+            response.headers['Content-Disposition'] = f'attachment; filename={filename}'
+            return response
+
         if action == 'assign_esarf_approver':
             user_id = request.form.get('user_id')
             approver_role = (request.form.get('approver_role') or '').strip().lower()
@@ -1639,6 +2179,96 @@ def settings():
                 flash('Failed to remove ESARF approver.', category='error')
             return redirect(url_for('admin.settings'))
 
+        elif action == 'assign_leave_approver':
+            user_id = request.form.get('user_id')
+            approver_role = (request.form.get('approver_role') or '').strip().lower()
+            department_name = (request.form.get('department_name') or '').strip()
+
+            if approver_role not in LEAVE_APPROVER_ROLE_KEYS:
+                flash('Please select a valid Leave approver role.', category='error')
+                return redirect(url_for('admin.settings'))
+            if not user_id:
+                flash('Please select a user.', category='error')
+                return redirect(url_for('admin.settings'))
+
+            user = User.query.get(user_id)
+            if not user:
+                flash('User not found.', category='error')
+                return redirect(url_for('admin.settings'))
+            if user.role == 'admin':
+                flash('Admin users cannot be reassigned from approval settings.', category='error')
+                return redirect(url_for('admin.settings'))
+
+            if approver_role == 'department':
+                if not department_name:
+                    flash('Please choose the department for this approver.', category='error')
+                    return redirect(url_for('admin.settings'))
+                selected_department = Department.query.filter(
+                    func.lower(Department.department_name) == department_name.lower()
+                ).first()
+                if not selected_department:
+                    flash('Selected department was not found.', category='error')
+                    return redirect(url_for('admin.settings'))
+                department_name = selected_department.department_name
+            else:
+                department_name = None
+
+            if approver_role == 'department':
+                existing_role_assignment = LeaveApprover.query.filter(
+                    LeaveApprover.user_id != user.id,
+                    LeaveApprover.approver_role == 'department',
+                    func.lower(LeaveApprover.department_name) == department_name.lower(),
+                ).first()
+                if existing_role_assignment:
+                    flash('That department already has a Department Leave approver.', category='error')
+                    return redirect(url_for('admin.settings'))
+
+            existing_assignment = LeaveApprover.query.filter_by(user_id=user.id).first()
+            if existing_assignment:
+                existing_assignment.approver_role = approver_role
+                existing_assignment.department_name = department_name
+            else:
+                db.session.add(
+                    LeaveApprover(
+                        user_id=user.id,
+                        approver_role=approver_role,
+                        department_name=department_name,
+                    )
+                )
+
+            role_label = dict(LEAVE_APPROVER_ROLES)[approver_role]
+            try:
+                db.session.commit()
+                flash(f'{user.username} assigned as {role_label}.', category='success')
+            except Exception:
+                db.session.rollback()
+                flash('Failed to assign Leave approver.', category='error')
+            return redirect(url_for('admin.settings'))
+
+        elif action == 'remove_leave_approver':
+            user_id = request.form.get('user_id')
+            user = User.query.get(user_id)
+            if not user:
+                flash('User not found.', category='error')
+                return redirect(url_for('admin.settings'))
+            assignment = LeaveApprover.query.filter_by(user_id=user.id).first()
+            if not assignment:
+                flash('Selected user is not a Leave approver.', category='error')
+                return redirect(url_for('admin.settings'))
+
+            previous_role = dict(LEAVE_APPROVER_ROLES).get(
+                assignment.approver_role,
+                'Leave',
+            )
+            db.session.delete(assignment)
+            try:
+                db.session.commit()
+                flash(f'{user.username} removed from {previous_role} approvers.', category='success')
+            except Exception:
+                db.session.rollback()
+                flash('Failed to remove Leave approver.', category='error')
+            return redirect(url_for('admin.settings'))
+
         elif action == 'add_approver':
             user_id = request.form.get('user_id')
             can_discount = 'can_approve_discount' in request.form
@@ -1724,6 +2354,23 @@ def settings():
         User.id.notin_(esarf_approver_user_ids),
     ).order_by(User.username.asc()).all()
     departments = Department.query.order_by(Department.department_name.asc()).all()
+    leave_approvers_by_role = {
+        role: (
+            LeaveApprover.query
+            .join(LeaveApprover.user)
+            .filter(LeaveApprover.approver_role == role)
+            .order_by(User.username.asc())
+            .all()
+        )
+        for role, _label in LEAVE_APPROVER_ROLES
+    }
+    leave_approver_user_ids = [
+        user_id for user_id, in db.session.query(LeaveApprover.user_id).all()
+    ]
+    leave_eligible_users = User.query.filter(
+        User.role != 'admin',
+        User.id.notin_(leave_approver_user_ids),
+    ).order_by(User.username.asc()).all()
     # Users eligible to be approvers (non-admin users that are not already approvers)
     eligible_users = User.query.filter(
         User.id.notin_(approver_user_ids),
@@ -1737,5 +2384,8 @@ def settings():
         esarf_approver_roles=ESARF_APPROVER_ROLES,
         esarf_approvers_by_role=esarf_approvers_by_role,
         esarf_eligible_users=esarf_eligible_users,
+        leave_approver_roles=LEAVE_APPROVER_ROLES,
+        leave_approvers_by_role=leave_approvers_by_role,
+        leave_eligible_users=leave_eligible_users,
         departments=departments,
     )

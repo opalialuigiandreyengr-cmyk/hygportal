@@ -35,6 +35,7 @@ body { background: #f6f7fb; }
 .section.pending { border-left: 4px solid #f59e0b; }
 .section.approved { border-left: 4px solid #10b981; }
 .section.rejected { border-left: 4px solid #ef4444; }
+.section.dept-hr-approved { border-left: 4px solid #3b82f6; }
 .leave-list {
   display: flex;
   flex-direction: column;
@@ -63,6 +64,7 @@ body { background: #f6f7fb; }
 .status-text.pending { color: #b45309; }
 .status-text.approved { color: #047857; }
 .status-text.rejected { color: #b91c1c; }
+.status-text.dept_hr_approved { color: #1d4ed8; }
 .btn {
   padding: 0.3rem 0.8rem;
   border-radius: 20px;
@@ -96,11 +98,20 @@ body { background: #f6f7fb; }
       <small>{{ leave.reason or 'No reason provided' }}</small>
     </div>
     <div class="leave-actions">
-      <span class="status-text {{ status_key }}">{{ status_key.upper() }}</span>
-      {% if status_key == 'pending' %}
+      <span class="status-text {{ status_key }}">{{ status_key.replace('_', ' ')|upper }}</span>
+      {% if status_key == 'pending' and current_leave_role in ['admin', 'department', 'hr'] %}
       <form method="POST" action="{{ url_for('admin.update_leave_status', leave_id=leave.id) }}">
         <input type="hidden" name="status" value="Approved">
-        <button class="btn btn-approve" type="submit">Approve</button>
+        <button class="btn btn-approve" type="submit">First Approve</button>
+      </form>
+      <form method="POST" action="{{ url_for('admin.update_leave_status', leave_id=leave.id) }}">
+        <input type="hidden" name="status" value="Rejected">
+        <button class="btn btn-reject" type="submit">Reject</button>
+      </form>
+      {% elif status_key == 'dept_hr_approved' and current_leave_role in ['admin', 'operation'] %}
+      <form method="POST" action="{{ url_for('admin.update_leave_status', leave_id=leave.id) }}">
+        <input type="hidden" name="status" value="Approved">
+        <button class="btn btn-approve" type="submit">Final Approve</button>
       </form>
       <form method="POST" action="{{ url_for('admin.update_leave_status', leave_id=leave.id) }}">
         <input type="hidden" name="status" value="Rejected">
@@ -121,6 +132,7 @@ body { background: #f6f7fb; }
 <div class="filter-bar">
   <button class="filter-btn active" onclick="filterStatus('all', this)">All</button>
   <button class="filter-btn" onclick="filterStatus('pending', this)">Pending</button>
+  <button class="filter-btn" onclick="filterStatus('dept_hr_approved', this)">Dept/HR Approved</button>
   <button class="filter-btn" onclick="filterStatus('approved', this)">Approved</button>
   <button class="filter-btn" onclick="filterStatus('rejected', this)">Rejected</button>
 </div>
@@ -132,6 +144,17 @@ body { background: #f6f7fb; }
       {{ leave_card(leave, 'pending') }}
     {% else %}
       <p class="text-muted mb-0">No pending leave requests.</p>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="section dept-hr-approved" id="deptHrApprovedSection">
+  <div class="section-title">Dept/HR Approved (Waiting for Operations)</div>
+  <div class="leave-list">
+    {% for leave in grouped_leaves.dept_hr_approved %}
+      {{ leave_card(leave, 'dept_hr_approved') }}
+    {% else %}
+      <p class="text-muted mb-0">No leave requests waiting for Operations.</p>
     {% endfor %}
   </div>
 </div>
@@ -165,6 +188,8 @@ function filterStatus(status, button) {
 
   document.getElementById("pendingSection").style.display =
     (status === "all" || status === "pending") ? "block" : "none";
+  document.getElementById("deptHrApprovedSection").style.display =
+    (status === "all" || status === "dept_hr_approved") ? "block" : "none";
   document.getElementById("approvedSection").style.display =
     (status === "all" || status === "approved") ? "block" : "none";
   document.getElementById("rejectedSection").style.display =

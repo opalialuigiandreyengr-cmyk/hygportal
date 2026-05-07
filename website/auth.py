@@ -6,9 +6,19 @@ from datetime import datetime
 import unicodedata
 
 from . import db
-from .models import Employee, EsarfApprover, User
+from .models import Employee, User
 
 auth = Blueprint('auth', __name__)
+
+def _is_at_least_one_year_from_hired_date(hired_date):
+    if not hired_date:
+        return False
+
+    today = datetime.now().date()
+    years = today.year - hired_date.year
+    if (today.month, today.day) < (hired_date.month, hired_date.day):
+        years -= 1
+    return years >= 1
 
 
 @auth.route('/login', methods=['GET', 'POST'])
@@ -23,11 +33,7 @@ def login():
                 flash('Logged in successfully!', category='success')
                 login_user(user)
                 if (user.role or '').strip().lower() == 'user':
-                    if EsarfApprover.query.filter_by(user_id=user.id).first():
-                        return redirect(url_for('admin.esarf_requests'))
                     return redirect(url_for('employee.employee_dashboard'))
-                if (user.role or '').strip().lower() == 'timekeeper':
-                    return redirect(url_for('admin.esarf_requests'))
                 return redirect(url_for('views.home'))
             else:
                 flash('Incorrect password, try again.', category='error')
@@ -147,7 +153,9 @@ def complete_registration():
             username=username,
             password=generate_password_hash(password, method='pbkdf2:sha256'),
             role='user',
-            employee_id=employee_id
+            employee_id=employee_id,
+            leave_credits=7 if _is_at_least_one_year_from_hired_date(employee.hired_date) else 0,
+            offset_credits=0.0,
         )
 
         db.session.add(new_user)

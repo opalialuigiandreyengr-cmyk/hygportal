@@ -10,6 +10,7 @@ class User(db.Model, UserMixin):
     password = db.Column(db.String(255))
     role = db.Column(db.String(50), default='user')
     leave_credits = db.Column(db.Integer)
+    offset_credits = db.Column(db.Float, nullable=False, default=0.0)
 
     employee = db.relationship('Employee', backref=db.backref('user', uselist=False))
 
@@ -192,6 +193,25 @@ class LeaveRequest(db.Model):
     submitted_by_user = db.relationship(
         'User',
         backref=db.backref('leave_requests', lazy=True),
+    )
+
+
+class LeaveApprover(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, unique=True)
+    approver_role = db.Column(db.String(50), nullable=False)
+    department_name = db.Column(db.String(100))
+    created_at = db.Column(db.DateTime, default=philippine_now, nullable=False)
+    updated_at = db.Column(
+        db.DateTime,
+        default=philippine_now,
+        onupdate=philippine_now,
+        nullable=False,
+    )
+
+    user = db.relationship(
+        'User',
+        backref=db.backref('leave_approver', uselist=False),
     )
 
 

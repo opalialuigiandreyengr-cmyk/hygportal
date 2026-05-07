@@ -118,7 +118,7 @@
           {% set date_range_display = req.date_from.strftime('%b') ~ '. ' ~ req.date_from.day ~ ' - ' ~ req.date_to.strftime('%b') ~ '. ' ~ req.date_to.day ~ ', ' ~ req.date_to.year if req.date_from and req.date_to and req.date_from.year == req.date_to.year else date_from_display ~ ' - ' ~ date_to_display %}
           {% set esarf_number = req.esarf_number or ('ESARF-2026-' ~ '%03d'|format(req.id)) %}
           {% set trxn_lower = (req.transaction_types or '')|lower %}
-          {% set transaction_display = (req.transaction_types or '-')|replace('UT', 'Undertime (UT)')|replace('OT', 'Overtime (OT)')|replace('FIO', 'Failure to Punch In/Out (FIO)')|replace('OB', 'Official Business (OB)')|replace('Adjustment', 'Adjustment')|replace(',', ', ') %}
+          {% set transaction_display = (req.transaction_types or '-')|replace('UT', 'Undertime (UT)')|replace('OT', 'Overtime (OT)')|replace('FIO', 'Failure to Punch In/Out (FIO)')|replace('OB', 'Official Business (OB)')|replace('Adjustment', 'Adjustment')|replace('Use Offset', 'Use Offset Credits')|replace('Offset', 'Offset Hours')|replace(',', ', ') %}
           {% set approval_count = 0 %}
           {% if raw_status == 'Dept Mgr Approved' %}
             {% set approval_count = 1 %}
@@ -147,7 +147,7 @@
               </div>
             </td>
             <td>
-              <span class="esarf-trxn-pill {% if 'ot' in trxn_lower %}is-ot{% elif 'ob' in trxn_lower %}is-ob{% elif 'fio' in trxn_lower %}is-fio{% elif 'adjust' in trxn_lower %}is-adjustment{% endif %}">
+              <span class="esarf-trxn-pill {% if 'use offset' in trxn_lower %}is-use-offset{% elif 'ot' in trxn_lower %}is-ot{% elif 'ob' in trxn_lower %}is-ob{% elif 'fio' in trxn_lower %}is-fio{% elif 'adjust' in trxn_lower %}is-adjustment{% elif 'offset' in trxn_lower %}is-offset{% endif %}">
                 {% if 'ot' in trxn_lower %}<i class="fa-regular fa-clock"></i>
                 {% elif 'ob' in trxn_lower %}<i class="fa-solid fa-briefcase"></i>
                 {% elif 'fio' in trxn_lower %}<i class="fa-solid fa-ban"></i>
@@ -220,7 +220,7 @@
     {% set date_to_display = req.date_to.strftime('%b') ~ '. ' ~ req.date_to.day ~ ', ' ~ req.date_to.year if req.date_to else '-' %}
     {% set date_range_display = req.date_from.strftime('%b') ~ '. ' ~ req.date_from.day ~ ' - ' ~ req.date_to.strftime('%b') ~ '. ' ~ req.date_to.day ~ ', ' ~ req.date_to.year if req.date_from and req.date_to and req.date_from.year == req.date_to.year else date_from_display ~ ' - ' ~ date_to_display %}
     {% set esarf_number = req.esarf_number or ('ESARF-2026-' ~ '%03d'|format(req.id)) %}
-    {% set transaction_display = (req.transaction_types or '-')|replace('UT', 'Undertime (UT)')|replace('OT', 'Overtime (OT)')|replace('FIO', 'Failure to Punch In/Out (FIO)')|replace('OB', 'Official Business (OB)')|replace('Adjustment', 'Adjustment')|replace(',', ', ') %}
+    {% set transaction_display = (req.transaction_types or '-')|replace('UT', 'Undertime (UT)')|replace('OT', 'Overtime (OT)')|replace('FIO', 'Failure to Punch In/Out (FIO)')|replace('OB', 'Official Business (OB)')|replace('Adjustment', 'Adjustment')|replace('Use Offset', 'Use Offset Credits')|replace('Offset', 'Offset Hours')|replace(',', ', ') %}
     {% set trxn_lower = (req.transaction_types or '')|lower %}
     {% set filed_time_display = req.created_at.strftime('%I:%M %p') if req.created_at else '' %}
     {% set approval_count = 0 %}
@@ -254,7 +254,7 @@
             </div>
           </div>
           <div class="employee-esarf-mobile-row employee-esarf-mobile-detail-row">
-            <span class="esarf-trxn-pill {% if 'ot' in trxn_lower %}is-ot{% elif 'ob' in trxn_lower %}is-ob{% elif 'fio' in trxn_lower %}is-fio{% elif 'adjust' in trxn_lower %}is-adjustment{% endif %}">
+            <span class="esarf-trxn-pill {% if 'use offset' in trxn_lower %}is-use-offset{% elif 'ot' in trxn_lower %}is-ot{% elif 'ob' in trxn_lower %}is-ob{% elif 'fio' in trxn_lower %}is-fio{% elif 'adjust' in trxn_lower %}is-adjustment{% elif 'offset' in trxn_lower %}is-offset{% endif %}">
               {% if 'ot' in trxn_lower %}<i class="fa-regular fa-clock"></i>
               {% elif 'ob' in trxn_lower %}<i class="fa-solid fa-briefcase"></i>
               {% elif 'fio' in trxn_lower %}<i class="fa-solid fa-ban"></i>
@@ -312,7 +312,7 @@
 {% set time_from_display = req.time_from.strftime('%I:%M %p') if req.time_from else '-' %}
 {% set time_to_display = req.time_to.strftime('%I:%M %p') if req.time_to else '-' %}
 {% set esarf_number = req.esarf_number or ('ESARF-2026-' ~ '%03d'|format(req.id)) %}
-{% set transaction_display = (req.transaction_types or '-')|replace('UT', 'Undertime (UT)')|replace('OT', 'Overtime (OT)')|replace('FIO', 'Failure to Punch In/Out (FIO)')|replace('OB', 'Official Business (OB)')|replace('Adjustment', 'Adjustment')|replace(',', ', ') %}
+{% set transaction_display = (req.transaction_types or '-')|replace('UT', 'Undertime (UT)')|replace('OT', 'Overtime (OT)')|replace('FIO', 'Failure to Punch In/Out (FIO)')|replace('OB', 'Official Business (OB)')|replace('Adjustment', 'Adjustment')|replace('Use Offset', 'Use Offset Credits')|replace('Offset', 'Offset Hours')|replace(',', ', ') %}
 <aside class="offcanvas offcanvas-bottom employee-esarf-side-panel" tabindex="-1" id="employeeEsarfPanel{{ req.id }}" aria-labelledby="employeeEsarfPanelTitle{{ req.id }}">
   <div class="offcanvas-header employee-esarf-panel-header">
     <div class="employee-esarf-panel-title-wrap">

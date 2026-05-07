@@ -42,6 +42,56 @@
   const mobileBottomNav = document.querySelector(".mobile-bottom-nav");
   const mobileQuickActionBtn = document.getElementById("mobileQuickActionBtn");
   const mobileQuickActions = document.getElementById("mobileQuickActions");
+  const pwaInstallBtn = document.getElementById("pwaInstallBtn");
+  let deferredInstallPrompt = null;
+
+  function isStandalonePwa() {
+    return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+  }
+
+  function setInstallButtonVisible(visible) {
+    if (!pwaInstallBtn) return;
+    pwaInstallBtn.classList.toggle("hidden", !visible);
+  }
+
+  setInstallButtonVisible(false);
+
+  window.addEventListener("beforeinstallprompt", function (event) {
+    if (isStandalonePwa()) return;
+    event.preventDefault();
+    deferredInstallPrompt = event;
+    setInstallButtonVisible(true);
+  });
+
+  window.addEventListener("appinstalled", function () {
+    deferredInstallPrompt = null;
+    setInstallButtonVisible(false);
+    if (window.HYGToast) {
+      HYGToast.show("success", "HYG Portal installed.");
+    }
+  });
+
+  if (pwaInstallBtn) {
+    pwaInstallBtn.addEventListener("click", async function () {
+      if (!deferredInstallPrompt) {
+        if (window.HYGToast) {
+          HYGToast.show("info", "Use your browser menu to install HYG Portal on this device.");
+        }
+        return;
+      }
+
+      deferredInstallPrompt.prompt();
+      const choice = await deferredInstallPrompt.userChoice.catch(function () {
+        return null;
+      });
+      deferredInstallPrompt = null;
+      setInstallButtonVisible(false);
+
+      if (choice && choice.outcome === "accepted" && window.HYGToast) {
+        HYGToast.show("success", "Installing HYG Portal.");
+      }
+    });
+  }
 
   function setQuickActionsOpen(open) {
     if (!mobileBottomNav || !mobileQuickActionBtn) return;
@@ -507,7 +557,15 @@
         nextScript.setAttribute(attr.name, attr.value);
       });
       nextScript.dataset.pwaPageScript = "true";
-      nextScript.textContent = script.textContent;
+      const scriptType = (script.getAttribute("type") || "").trim().toLowerCase();
+      const isInlineClassicScript = !src && (!scriptType || scriptType === "text/javascript" || scriptType === "application/javascript");
+
+      if (isInlineClassicScript) {
+        // Keep inline page scripts scoped so re-navigation does not redeclare global bindings.
+        nextScript.textContent = `(function () {\n${script.textContent || ""}\n})();`;
+      } else {
+        nextScript.textContent = script.textContent;
+      }
       document.body.appendChild(nextScript);
     });
   }

@@ -136,6 +136,26 @@ def _sync_employee_columns():
     db.session.commit()
 
 
+def _sync_user_columns():
+    from .models import User
+
+    inspector = inspect(db.engine)
+    existing_columns = {
+        column["name"] for column in inspector.get_columns(User.__tablename__)
+    }
+
+    if "offset_credits" not in existing_columns:
+        db.session.execute(
+            text(f"ALTER TABLE {User.__tablename__} ADD COLUMN offset_credits FLOAT DEFAULT 0")
+        )
+        db.session.commit()
+
+    db.session.execute(
+        text(f"UPDATE {User.__tablename__} SET offset_credits = 0 WHERE offset_credits IS NULL")
+    )
+    db.session.commit()
+
+
 def _sync_esarf_columns():
     from .models import EsarfRequest
 
@@ -349,6 +369,7 @@ def create_app():
     with app.app_context():
         db.create_all()
         _sync_employee_columns()
+        _sync_user_columns()
         _sync_esarf_columns()
         _sync_perk_columns()
         _sync_departments()
@@ -368,19 +389,78 @@ def create_app():
         from flask_login import current_user
         unread_notification_count = 0
         is_esarf_approver = False
+        is_leave_approver = False
+        approver_request_count = 0
         if current_user.is_authenticated:
-            from .models import EsarfApprover, Notification, PerkApprover
+            from .models import Employee, EsarfApprover, EsarfRequest, LeaveApprover, LeaveRequest, Notification, PerkApprover, User
             is_perk_approver = PerkApprover.query.filter_by(user_id=current_user.id).first() is not None
             is_esarf_approver = EsarfApprover.query.filter_by(user_id=current_user.id).first() is not None
+            is_leave_approver = LeaveApprover.query.filter_by(user_id=current_user.id).first() is not None
             unread_notification_count = Notification.query.filter_by(
                 user_id=current_user.id,
                 is_read=False,
             ).count()
+
+            role = (current_user.role or "").strip().lower()
+            esarf_count = 0
+            leave_count = 0
+
+            if role in {"admin", "timekeeper"}:
+                esarf_count = EsarfRequest.query.filter(
+                    EsarfRequest.status.in_(["Pending", "Dept Mgr Approved", "Dept Mgr Ops Approved"])
+                ).count()
+                leave_count = LeaveRequest.query.filter(
+                    LeaveRequest.status.in_(["Pending", "Dept/HR Approved"])
+                ).count()
+            else:
+                esarf_assignment = EsarfApprover.query.filter_by(user_id=current_user.id).first()
+                if esarf_assignment:
+                    esarf_query = EsarfRequest.query
+                    if esarf_assignment.approver_role == "dept manager":
+                        dept = (esarf_assignment.department_name or "").strip().lower()
+                        if dept:
+                            esarf_query = (
+                                esarf_query.join(EsarfRequest.submitted_by_user)
+                                .join(User.employee)
+                                .filter(db.func.lower(db.func.trim(Employee.department)) == dept)
+                            )
+                        else:
+                            esarf_query = esarf_query.filter(EsarfRequest.id.is_(None))
+                        esarf_query = esarf_query.filter(EsarfRequest.status == "Pending")
+                    elif esarf_assignment.approver_role == "operation":
+                        esarf_query = esarf_query.filter(EsarfRequest.status == "Dept Mgr Approved")
+                    elif esarf_assignment.approver_role == "general manager":
+                        esarf_query = esarf_query.filter(EsarfRequest.status == "Dept Mgr Ops Approved")
+                    esarf_count = esarf_query.count()
+
+                leave_assignment = LeaveApprover.query.filter_by(user_id=current_user.id).first()
+                if leave_assignment:
+                    leave_query = LeaveRequest.query
+                    if leave_assignment.approver_role == "department":
+                        dept = (leave_assignment.department_name or "").strip().lower()
+                        if dept:
+                            leave_query = (
+                                leave_query.join(LeaveRequest.submitted_by_user)
+                                .join(User.employee)
+                                .filter(db.func.lower(db.func.trim(Employee.department)) == dept)
+                            )
+                        else:
+                            leave_query = leave_query.filter(LeaveRequest.id.is_(None))
+                        leave_query = leave_query.filter(LeaveRequest.status == "Pending")
+                    elif leave_assignment.approver_role == "hr":
+                        leave_query = leave_query.filter(LeaveRequest.status == "Pending")
+                    elif leave_assignment.approver_role == "operation":
+                        leave_query = leave_query.filter(LeaveRequest.status == "Dept/HR Approved")
+                    leave_count = leave_query.count()
+
+            approver_request_count = esarf_count + leave_count
         else:
             is_perk_approver = False
         return dict(
             is_perk_approver=is_perk_approver,
             is_esarf_approver=is_esarf_approver,
+            is_leave_approver=is_leave_approver,
+            approver_request_count=approver_request_count,
             unread_notification_count=unread_notification_count,
         )
 

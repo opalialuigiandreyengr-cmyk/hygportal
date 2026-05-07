@@ -1,21 +1,49 @@
 from datetime import datetime, timedelta
 from email.message import EmailMessage
+import json
+import os
 import random
+import re
 import smtplib
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
-from flask import Blueprint, flash, redirect, render_template, request, session, url_for
+from flask import Blueprint, flash, jsonify, redirect, render_template, request, session, url_for
 from flask_login import current_user, login_required
+from sqlalchemy import or_
 from werkzeug.security import generate_password_hash
 
 from . import db
 from .helpers import _save_employee_photo, create_notification, philippine_now, sync_department_name
-from .models import Employee, EsarfRequest, LeaveRequest, DiscountRequest, ProductChargeRequest, Notification, User
+from .models import (
+    Company,
+    Department,
+    Employee,
+    EsarfRequest,
+    LeaveRequest,
+    DiscountRequest,
+    ProductChargeRequest,
+    Notification,
+    User,
+    EsarfApprover,
+    LeaveApprover,
+)
 
 employee = Blueprint('employee', __name__)
 
 PERK_APPROVAL_EMAIL = "icount.itsolution@gmail.com"
 PERK_APPROVAL_PASSWORD = "llpb llss ztrm ujtj"
 PERK_APPROVAL_SENDER = "HYG Employee Portal - No Reply"
+AI_PROVIDER = os.getenv("AI_PROVIDER", "openrouter").strip().lower()
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "openrouter/free").strip()
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1-mini").strip()
+AI_MODEL_OPTIONS = (OPENROUTER_MODEL if AI_PROVIDER == "openrouter" else OPENAI_MODEL,)
+AI_DEFAULT_MODEL = AI_MODEL_OPTIONS[0]
+AI_OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "").rstrip("/")
+OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
+
+ESARF_STATUS_DEPT_MGR_APPROVED = "Dept Mgr Approved"
+LEAVE_STATUS_DEPT_HR_APPROVED = "Dept/HR Approved"
 
 
 def _format_employee_no(hired_date, sequence):
@@ -58,12 +86,757 @@ def _require_employee_profile():
     return redirect(url_for('views.home'))
 
 
+def _normalize_text(value):
+    return " ".join((value or "").strip().lower().split())
+
+
+def _ai_model_choice(value):
+    selected = (value or AI_DEFAULT_MODEL or AI_MODEL_OPTIONS[0]).strip()
+    if selected not in AI_MODEL_OPTIONS:
+        return AI_MODEL_OPTIONS[0]
+    return selected
+
+
+def _ai_system_prompt():
+    return (
+        "You are HYG Assist, a concise employee portal assistant. "
+        "Help draft workplace messages, explain HR portal steps, and keep answers practical. "
+        "For HR/Admin users, answer HR database questions about employees, companies, departments, age, gender, status, company, and department counts from the portal data. "
+        "For employee perks, support Employee Discount (Cash) and Employee Charge (Credit). "
+        "When an employee asks to apply for either perk, ask for transaction date, product name, quantity, and unit price if missing. "
+        "Do not invent company policy; say when HR/Admin confirmation is needed. "
+        "When drafting a message and details are missing, write a usable draft with simple placeholders. "
+        "Keep the final answer direct and employee-friendly."
+    )
+
+
+def _call_openai_chat(message, model):
+    api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
+    if not api_key:
+        raise RuntimeError("missing_openai_key")
+
+    from openai import OpenAI
+
+    client = OpenAI(api_key=api_key)
+    response = client.responses.create(
+        model=model,
+        input=[
+            {"role": "system", "content": _ai_system_prompt()},
+            {"role": "user", "content": message},
+        ],
+    )
+    return (response.output_text or "").strip(), ""
+
+
+def _call_openrouter_chat(message, model):
+    api_key = (os.getenv("OPENROUTER_API_KEY") or "").strip()
+    if not api_key:
+        raise RuntimeError("missing_openrouter_key")
+
+    payload = {
+        "model": model or OPENROUTER_MODEL,
+        "messages": [
+            {"role": "system", "content": _ai_system_prompt()},
+            {"role": "user", "content": message},
+        ],
+        "temperature": 0.4,
+        "max_tokens": 350,
+    }
+    request_payload = json.dumps(payload).encode("utf-8")
+    openrouter_request = Request(
+        OPENROUTER_API_URL,
+        data=request_payload,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": os.getenv("APP_PUBLIC_URL", "https://www.pythonanywhere.com"),
+            "X-Title": "HYG Employee Portal",
+        },
+        method="POST",
+    )
+
+    with urlopen(openrouter_request, timeout=60) as response:
+        data = json.loads(response.read().decode("utf-8"))
+
+    choices = data.get("choices") or []
+    first_choice = choices[0] if choices else {}
+    message_data = first_choice.get("message") or {}
+    reply = (message_data.get("content") or "").strip()
+    return reply, ""
+
+
+def _call_ollama_chat(message, model):
+    if not AI_OLLAMA_URL:
+        raise RuntimeError("missing_ollama_url")
+
+    payload = {
+        "model": model,
+        "stream": False,
+        "think": False,
+        "messages": [
+            {
+                "role": "system",
+                "content": _ai_system_prompt(),
+            },
+            {"role": "user", "content": message},
+        ],
+        "options": {
+            "temperature": 0.4,
+            "num_ctx": 2048,
+            "num_predict": 350,
+        },
+    }
+    request_payload = json.dumps(payload).encode("utf-8")
+    ollama_request = Request(
+        f"{AI_OLLAMA_URL}/api/chat",
+        data=request_payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    with urlopen(ollama_request, timeout=300) as response:
+        data = json.loads(response.read().decode("utf-8"))
+
+    message_data = data.get("message") or {}
+    reply = (message_data.get("content") or "").strip()
+    thinking = (message_data.get("thinking") or "").strip()
+    return reply, thinking
+
+
+def _call_general_ai_chat(message, model):
+    provider = (os.getenv("AI_PROVIDER") or AI_PROVIDER or "openrouter").strip().lower()
+    
+    # Check if API keys are configured
+    api_key_configured = False
+    if provider == "ollama":
+        if AI_OLLAMA_URL:
+            api_key_configured = True
+    elif provider == "openai":
+        if (os.getenv("OPENAI_API_KEY") or "").strip():
+            api_key_configured = True
+    else:  # openrouter
+        if (os.getenv("OPENROUTER_API_KEY") or "").strip():
+            api_key_configured = True
+    
+    # If no API key is configured, return "Coming Soon" message
+    if not api_key_configured:
+        return (
+            "HYG Assist AI is coming soon! This feature will be available once the AI setup is complete. "
+            "In the meantime, I can still help you with:\n"
+            "• Draft leave requests (just mention dates)\n"
+            "• Draft ESARF requests (mention overtime, offset, etc.)\n"
+            "• Employee discount and charge requests\n"
+            "• HR questions about employee counts",
+            "AI features are being set up for PythonAnywhere deployment."
+        )
+    
+    # Call the appropriate AI provider
+    if provider == "ollama":
+        return _call_ollama_chat(message, model)
+    if provider == "openai":
+        return _call_openai_chat(message, model)
+    return _call_openrouter_chat(message, model)
+
+
+def _build_assist_thinking(prompt):
+    prompt_lower = (prompt or "").lower()
+    if "offset" in prompt_lower and any(word in prompt_lower for word in ("credit", "credits", "balance", "have", "left", "available")):
+        return "I checked the offset credit balance saved on your portal account."
+    if _detect_ai_perk_type(prompt_lower):
+        return "I understood this as an employee perk request and checked the required cash discount or credit charge details."
+    if "leave" in prompt_lower:
+        return "I understood this as a leave request, found the date range, chose a likely leave category, and prepared a draft for review."
+    if "esarf" in prompt_lower:
+        return "I focused on the ESARF reason, made the wording clear, and kept it ready for review before submitting."
+    if "summarize" in prompt_lower or "summary" in prompt_lower:
+        return "I read for the main point, separated the important details, and looked for the next action needed."
+    return "I read your request, chose a helpful employee-friendly format, and kept the answer practical."
+
+
+def _detect_ai_perk_type(prompt):
+    text = (prompt or "").lower()
+    mentions_discount = (
+        "employee discount" in text
+        or "cash discount" in text
+        or "discount cash" in text
+        or ("discount" in text and any(word in text for word in ("apply", "avail", "perk", "cash", "employee")))
+    )
+    mentions_charge = (
+        "employee charge" in text
+        or "credit charge" in text
+        or "charge credit" in text
+        or ("charge" in text and any(word in text for word in ("apply", "avail", "perk", "credit", "employee")))
+    )
+
+    if mentions_discount and not mentions_charge:
+        return "discount"
+    if mentions_charge and not mentions_discount:
+        return "charge"
+    if mentions_discount or mentions_charge or ("perk" in text and any(word in text for word in ("apply", "avail", "request"))):
+        return "perk"
+    return None
+
+
+def _extract_ai_money_amount(prompt):
+    text = (prompt or "").lower().replace(",", "")
+    match = re.search(r"(?:php|p)\s*(\d+(?:\.\d{1,2})?)|(\d+(?:\.\d{1,2})?)\s*(?:php|pesos?)", text)
+    if not match:
+        return None
+    try:
+        return float(match.group(1) or match.group(2))
+    except (TypeError, ValueError):
+        return None
+
+
+def _answer_ai_perk_request(prompt):
+    perk_type = _detect_ai_perk_type(prompt)
+    if not perk_type:
+        return None
+
+    text = (prompt or "").lower()
+    today = philippine_now().date().isoformat()
+    amount = _extract_ai_money_amount(prompt)
+    has_product = any(word in text for word in ("product", "item", "buy", "purchase", "order"))
+    has_quantity = bool(re.search(r"\b(?:qty|quantity|x)\s*\d+\b|\b\d+\s*(?:pc|pcs|piece|pieces)\b", text))
+    has_date = bool(re.search(r"\b(20\d{2}-\d{2}-\d{2}|today|tomorrow|yesterday)\b", text))
+
+    if perk_type == "discount":
+        missing = []
+        if not has_date:
+            missing.append("transaction date")
+        if not has_product:
+            missing.append("product name")
+        if not has_quantity:
+            missing.append("quantity")
+        if amount is None:
+            missing.append("unit price or total amount")
+
+        detail_line = (
+            f"I have the amount as PHP {amount:.2f}. "
+            if amount is not None
+            else ""
+        )
+        if missing:
+            reply = (
+                "Sure, I can help with Employee Discount (Cash). "
+                "Please send the " + ", ".join(missing) + ". "
+                f"{detail_line}This request uses the cash discount form: 15% off, with a PHP 3,000 yearly cap and up to 6 transactions per year."
+            )
+        else:
+            reply = (
+                "This looks ready for Employee Discount (Cash). "
+                f"{detail_line}Open the Perks page, choose Employee Discount (Cash), confirm the product, quantity, unit price, and transaction date, then submit for the approval code."
+            )
+        return {
+            "reply": reply,
+            "thinking": _build_assist_thinking(prompt),
+            "action_url": url_for("employee.perks"),
+            "action_label": "Open Perks",
+        }
+
+    if perk_type == "charge":
+        missing = []
+        if not has_date:
+            missing.append("transaction date")
+        if not has_product:
+            missing.append("product name")
+        if not has_quantity:
+            missing.append("quantity")
+        if amount is None:
+            missing.append("unit price or total amount")
+
+        limit_note = "Employee Charge (Credit) has a PHP 3,000 per-transaction limit."
+        if amount is not None and amount > 3000:
+            limit_note = f"The amount PHP {amount:.2f} is above the PHP 3,000 per-transaction credit limit."
+        first_note = " The first yearly credit transaction gets 15% off."
+
+        if missing:
+            reply = (
+                "Sure, I can help with Employee Charge (Credit). "
+                "Please send the " + ", ".join(missing) + ". "
+                f"{limit_note}{first_note}"
+            )
+        else:
+            reply = (
+                "This looks ready for Employee Charge (Credit). "
+                f"{limit_note}{first_note} Open the Perks page, choose Employee Charge (Credit), review the item details, then submit for the approval code."
+            )
+        return {
+            "reply": reply,
+            "thinking": _build_assist_thinking(prompt),
+            "action_url": url_for("employee.perks"),
+            "action_label": "Open Perks",
+        }
+
+    return {
+        "reply": (
+            "Which perk do you want to apply for: Employee Discount (Cash) or Employee Charge (Credit)? "
+            f"Send the transaction date, product name, quantity, and unit price. If the transaction date is today, you can use {today}."
+        ),
+        "thinking": _build_assist_thinking(prompt),
+        "action_url": url_for("employee.perks"),
+        "action_label": "Open Perks",
+    }
+
+
+def _is_hr_prompt(prompt):
+    text = (prompt or "").lower()
+    if any(term in text for term in ("employee discount", "employee charge", "cash discount", "credit charge")):
+        return False
+    hr_terms = (
+        "hr",
+        "employee",
+        "employees",
+        "company",
+        "companies",
+        "department",
+        "departments",
+        "age",
+        "agge",
+        "gender",
+        "male",
+        "female",
+        "active",
+        "pending",
+        "resigned",
+        "suspended",
+        "terminated",
+        "awol",
+        "on leave",
+    )
+    return any(term in text for term in hr_terms) and any(
+        term in text for term in ("how many", "count", "total", "list", "breakdown", "do we have", "status")
+    )
+
+
+def _user_can_view_hr_ai():
+    return (current_user.role or "").strip().lower() in {"admin", "hr"}
+
+
+def _count_employees_for_field(field_name, value):
+    field = getattr(Employee, field_name)
+    normalized_value = (value or "").strip().lower()
+    return Employee.query.filter(db.func.lower(db.func.trim(field)) == normalized_value).count()
+
+
+def _top_count_lines(rows, limit=8):
+    visible = [row for row in rows if row[0] and str(row[0]).strip()]
+    visible.sort(key=lambda row: row[1], reverse=True)
+    return "\n".join(f"- {name}: {count}" for name, count in visible[:limit]) or "- No data available."
+
+
+def _answer_ai_hr_question(prompt):
+    if not _is_hr_prompt(prompt):
+        return None
+
+    if not _user_can_view_hr_ai():
+        return {
+            "reply": "HR database questions are available only to HR and admin accounts.",
+            "thinking": "I recognized this as an HR data question and checked your portal role before showing totals.",
+        }
+
+    text = (prompt or "").lower()
+    total_employees = Employee.query.count()
+
+    age_match = re.search(r"\b(?:age|agge|aged)\s*(?:is|=|:)?\s*(\d{1,3})\b|\b(\d{1,3})\s*(?:years old|year old|yrs old)\b", text)
+    if age_match and "employee" in text:
+        age = int(age_match.group(1) or age_match.group(2))
+        count = Employee.query.filter(Employee.age == age).count()
+        return {
+            "reply": f"We have {count} employee{'s' if count != 1 else ''} age {age}.",
+            "thinking": "I filtered employee records by exact age.",
+            "action_url": url_for("admin.employees"),
+            "action_label": "Open Employees",
+        }
+
+    status_labels = ("Active", "Pending", "Resigned", "Suspended", "On Leave", "Terminated", "AWOL")
+    for status in status_labels:
+        if status.lower() in text:
+            count = Employee.query.filter(
+                or_(
+                    db.func.lower(db.func.trim(Employee.employment_status)) == status.lower(),
+                    db.func.lower(db.func.trim(Employee.status)) == status.lower(),
+                )
+            ).count()
+            return {
+                "reply": f"We have {count} {status.lower()} employee{'s' if count != 1 else ''}.",
+                "thinking": "I checked both employment_status and status fields for this HR count.",
+                "action_url": url_for("admin.employees", status=status),
+                "action_label": "Open Employees",
+            }
+
+    if "male" in text or "female" in text:
+        gender = "Female" if "female" in text else "Male"
+        count = _count_employees_for_field("gender", gender)
+        return {
+            "reply": f"We have {count} {gender.lower()} employee{'s' if count != 1 else ''}.",
+            "thinking": "I filtered employee records by gender.",
+            "action_url": url_for("admin.employees"),
+            "action_label": "Open Employees",
+        }
+
+    company_names = [company.company_name for company in Company.query.order_by(Company.company_name.asc()).all()]
+    for company_name in company_names:
+        if company_name and company_name.lower() in text:
+            count = _count_employees_for_field("company", company_name)
+            return {
+                "reply": f"{company_name} has {count} employee{'s' if count != 1 else ''}.",
+                "thinking": "I matched the company name and counted employees assigned to it.",
+                "action_url": url_for("admin.employees", company=company_name),
+                "action_label": "Open Employees",
+            }
+
+    department_names = [department.department_name for department in Department.query.order_by(Department.department_name.asc()).all()]
+    for department_name in department_names:
+        if department_name and department_name.lower() in text:
+            count = _count_employees_for_field("department", department_name)
+            return {
+                "reply": f"{department_name} has {count} employee{'s' if count != 1 else ''}.",
+                "thinking": "I matched the department name and counted employees assigned to it.",
+                "action_url": url_for("admin.employees", search=department_name),
+                "action_label": "Open Employees",
+            }
+
+    if "company" in text and any(term in text for term in ("breakdown", "by company", "per company", "list", "employee count")):
+        rows = db.session.query(Employee.company, db.func.count(Employee.id)).group_by(Employee.company).all()
+        return {
+            "reply": "Employee count by company:\n" + _top_count_lines(rows),
+            "thinking": "I grouped employees by company.",
+            "action_url": url_for("admin.dashboard"),
+            "action_label": "Open HR Dashboard",
+        }
+
+    if "department" in text and any(term in text for term in ("breakdown", "by department", "per department", "list", "employee count")):
+        rows = db.session.query(Employee.department, db.func.count(Employee.id)).group_by(Employee.department).all()
+        return {
+            "reply": "Employee count by department:\n" + _top_count_lines(rows),
+            "thinking": "I grouped employees by department.",
+            "action_url": url_for("admin.dashboard"),
+            "action_label": "Open HR Dashboard",
+        }
+
+    if "compan" in text and any(term in text for term in ("how many", "total", "count", "do we have")):
+        total_companies = Company.query.count()
+        return {
+            "reply": f"We have {total_companies} compan{'y' if total_companies == 1 else 'ies'} in the portal.",
+            "thinking": "I counted company records from the HR company table.",
+            "action_url": url_for("admin.companies"),
+            "action_label": "Open Companies",
+        }
+
+    if "department" in text and any(term in text for term in ("how many", "total", "count", "do we have")):
+        total_departments = Department.query.count()
+        return {
+            "reply": f"We have {total_departments} department{'s' if total_departments != 1 else ''} in the portal.",
+            "thinking": "I counted department records from the HR department table.",
+            "action_url": url_for("admin.departments"),
+            "action_label": "Open Departments",
+        }
+
+    if "status" in text or "breakdown" in text:
+        rows = db.session.query(Employee.employment_status, db.func.count(Employee.id)).group_by(Employee.employment_status).all()
+        return {
+            "reply": "Employee status breakdown:\n" + _top_count_lines(rows),
+            "thinking": "I grouped employees by employment status.",
+            "action_url": url_for("admin.dashboard"),
+            "action_label": "Open HR Dashboard",
+        }
+
+    if "employee" in text or "hr" in text:
+        pending_employees = Employee.query.filter(
+            or_(
+                Employee.status == "Pending",
+                Employee.employment_status == "Pending",
+            )
+        ).count()
+        total_companies = Company.query.count()
+        total_departments = Department.query.count()
+        return {
+            "reply": (
+                f"HR summary:\n"
+                f"- Employees: {total_employees}\n"
+                f"- Companies: {total_companies}\n"
+                f"- Departments: {total_departments}\n"
+                f"- Pending employees: {pending_employees}"
+            ),
+            "thinking": "I pulled the same core totals shown on the HR dashboard.",
+            "action_url": url_for("admin.dashboard"),
+            "action_label": "Open HR Dashboard",
+        }
+
+    return None
+
+
+def _answer_portal_account_question(prompt):
+    prompt_lower = (prompt or "").lower()
+    asks_offset = "offset" in prompt_lower and any(
+        word in prompt_lower
+        for word in ("credit", "credits", "balance", "have", "left", "available")
+    )
+    if not asks_offset:
+        return None
+
+    credits = max(0.0, float(current_user.offset_credits or 0))
+    unit = "hour" if credits == 1 else "hours"
+    return {
+        "reply": f"You currently have {credits:.2f} offset credit {unit} available.",
+        "thinking": _build_assist_thinking(prompt),
+    }
+
+
+def _parse_ai_time_range(prompt):
+    text = (prompt or "").lower()
+    match = re.search(
+        r"\b(?:from\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:-|to|until)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b",
+        text,
+    )
+    if not match:
+        return None
+
+    start_hour = int(match.group(1))
+    start_minute = int(match.group(2) or "0")
+    start_meridiem = match.group(3)
+    end_hour = int(match.group(4))
+    end_minute = int(match.group(5) or "0")
+    end_meridiem = match.group(6)
+
+    if not start_meridiem:
+        start_meridiem = end_meridiem
+
+    def to_24_hour(hour, meridiem):
+        if hour == 12:
+            hour = 0
+        if meridiem == "pm":
+            hour += 12
+        return hour
+
+    return (
+        f"{to_24_hour(start_hour, start_meridiem):02d}:{start_minute:02d}",
+        f"{to_24_hour(end_hour, end_meridiem):02d}:{end_minute:02d}",
+    )
+
+
+def _parse_ai_request_date(prompt):
+    text = (prompt or "").lower()
+    today = philippine_now().date()
+    if "yesterday" in text:
+        return today - timedelta(days=1)
+    if "today" in text:
+        return today
+    if "tomorrow" in text or "tommorow" in text:
+        return today + timedelta(days=1)
+
+    iso_match = re.search(r"\b(20\d{2}-\d{2}-\d{2})\b", text)
+    if iso_match:
+        try:
+            return datetime.strptime(iso_match.group(1), "%Y-%m-%d").date()
+        except ValueError:
+            return today
+
+    return today
+
+
+def _parse_ai_date_range(prompt):
+    text = (prompt or "").lower()
+    single_date = _parse_ai_request_date(prompt)
+    if any(word in text for word in ("yesterday", "today", "tomorrow", "tommorow")):
+        return single_date, single_date
+
+    months = {
+        "jan": 1, "january": 1,
+        "feb": 2, "february": 2,
+        "mar": 3, "march": 3,
+        "apr": 4, "april": 4,
+        "may": 5,
+        "jun": 6, "june": 6,
+        "jul": 7, "july": 7,
+        "aug": 8, "august": 8,
+        "sep": 9, "sept": 9, "september": 9,
+        "oct": 10, "october": 10,
+        "nov": 11, "november": 11,
+        "dec": 12, "december": 12,
+    }
+    month_names = "|".join(sorted(months.keys(), key=len, reverse=True))
+    match = re.search(
+        rf"\b({month_names})\.?\s+(\d{{1,2}})(?:\s*(?:to|-|until)\s*(?:(?:{month_names})\.?\s+)?(\d{{1,2}}))?(?:,\s*(20\d{{2}}))?",
+        text,
+    )
+    if not match:
+        return single_date, single_date
+
+    month = months[match.group(1)]
+    start_day = int(match.group(2))
+    end_day = int(match.group(3) or start_day)
+    today = philippine_now().date()
+    year = int(match.group(4) or today.year)
+
+    try:
+        start_date = datetime(year, month, start_day).date()
+        end_date = datetime(year, month, end_day).date()
+    except ValueError:
+        return single_date, single_date
+
+    if end_date < start_date:
+        end_date = start_date
+    return start_date, end_date
+
+
+def _calculate_time_hours(time_from, time_to):
+    start_time = datetime.strptime(time_from, "%H:%M").time()
+    end_time = datetime.strptime(time_to, "%H:%M").time()
+    start_dt = datetime.combine(philippine_now().date(), start_time)
+    end_dt = datetime.combine(philippine_now().date(), end_time)
+    if end_dt <= start_dt:
+        end_dt += timedelta(days=1)
+    return round((end_dt - start_dt).total_seconds() / 3600, 2)
+
+
+def _build_ai_esarf_draft(prompt):
+    text = (prompt or "").lower()
+    is_use_offset = "use offset" in text or "use my offset" in text
+    is_offset = (
+        is_use_offset
+        or "offset" in text
+        or any(word in text for word in ("overtime", " ot ", " ot.", "file ot", "rendered ot"))
+    )
+    if not is_offset:
+        return None
+
+    time_range = _parse_ai_time_range(prompt)
+    if not time_range:
+        return None
+
+    date_value = _parse_ai_request_date(prompt)
+    time_from, time_to = time_range
+    reason_source = ""
+    reason_match = re.search(r"\b(?:due to|because of|because|for)\s+(.+)$", prompt, flags=re.IGNORECASE)
+    if reason_match:
+        reason_source = reason_match.group(1).strip().rstrip(".")
+    transaction_type = "Use Offset" if is_use_offset else ("Offset" if "offset" in text and "overtime" not in text and " ot " not in text else "OT")
+    reason_labels = {
+        "OT": "overtime",
+        "Offset": "offset",
+        "Use Offset": "use offset",
+    }
+    reason = (
+        f"Rendered {reason_labels[transaction_type]} for {reason_source}."
+        if reason_source
+        else f"Rendered {reason_labels[transaction_type]} for urgent work requirements."
+    )
+
+    employee_profile = current_user.employee
+    payroll_class = "Managerial" if employee_profile and employee_profile.position and "manager" in employee_profile.position.lower() else "Rank and File"
+
+    return {
+        "time_schedule": "9AM - 6PM",
+        "day_off": "Sun",
+        "payroll_class": payroll_class,
+        "transaction_types": [transaction_type],
+        "date_from": date_value.strftime("%Y-%m-%d"),
+        "date_to": date_value.strftime("%Y-%m-%d"),
+        "time_from": time_from,
+        "time_to": time_to,
+        "total_hours": f"{_calculate_time_hours(time_from, time_to):.2f}",
+        "reason": reason,
+    }
+
+
+def _build_ai_leave_draft(prompt):
+    text = (prompt or "").lower()
+    if "leave" not in text:
+        return None
+
+    start_date, end_date = _parse_ai_date_range(prompt)
+    reason_source = ""
+    reason_match = re.search(r"\b(?:because of|because|due to|for)\s+(.+)$", prompt, flags=re.IGNORECASE)
+    if reason_match:
+        reason_source = reason_match.group(1).strip().rstrip(".")
+
+    category = "Vacation Leave"
+    other_leave = ""
+    if any(word in text for word in ("sick", "medical", "doctor", "hospital", "illness")):
+        category = "Sick Leave"
+    elif any(word in text for word in ("emergency", "urgent")):
+        category = "Emergency Leave"
+    elif any(word in text for word in ("maternity", "paternity")):
+        category = "Maternity Leave"
+    elif "birthday" in text:
+        category = "Vacation Leave"
+    elif reason_source:
+        category = "Others"
+        other_leave = "Personal Leave"
+
+    return {
+        "start_date": start_date.strftime("%Y-%m-%d"),
+        "end_date": end_date.strftime("%Y-%m-%d"),
+        "leave_type": "With Pay",
+        "leave_category": category,
+        "other_leave": other_leave,
+        "reason": reason_source.capitalize() if reason_source else "Personal leave request.",
+    }
+
+
+def _can_auto_dept_approve_esarf():
+    assignment = EsarfApprover.query.filter_by(user_id=current_user.id).first()
+    if not assignment or assignment.approver_role != "dept manager":
+        return False
+
+    requester_department = _normalize_text(current_user.employee.department if current_user.employee else "")
+    approver_department = _normalize_text(assignment.department_name)
+    if approver_department and requester_department:
+        return approver_department == requester_department
+    return True
+
+
+def _can_auto_first_approve_leave():
+    assignment = LeaveApprover.query.filter_by(user_id=current_user.id).first()
+    if not assignment:
+        return False
+    if assignment.approver_role == "hr":
+        return True
+    if assignment.approver_role != "department":
+        return False
+
+    requester_department = _normalize_text(current_user.employee.department if current_user.employee else "")
+    approver_department = _normalize_text(assignment.department_name)
+    if approver_department and requester_department:
+        return approver_department == requester_department
+    return True
+
+
 def _activity_sort_date(value):
     if not value:
         return datetime.min
     if isinstance(value, datetime):
         return value
     return datetime.combine(value, datetime.min.time())
+
+
+def _total_leave_days(start_date, end_date):
+    return ((end_date - start_date).days + 1) if start_date and end_date else 0
+
+
+def _build_leave_type_value(raw_leave_type, start_date, end_date):
+    leave_type = (raw_leave_type or "").strip()
+    if leave_type != "Both":
+        return leave_type, None
+
+    total_days = _total_leave_days(start_date, end_date)
+
+    try:
+        with_pay_days = int((request.form.get("with_pay_days") or "0").strip())
+        without_pay_days = int((request.form.get("without_pay_days") or "0").strip())
+    except ValueError:
+        return None, "Please enter valid numbers for With Pay and Without Pay days."
+
+    if with_pay_days < 0 or without_pay_days < 0:
+        return None, "Leave day split cannot be negative."
+    if with_pay_days == 0 and without_pay_days == 0:
+        return None, "Please provide your leave day split for Both pay type."
+    if with_pay_days + without_pay_days != total_days:
+        return None, f"Leave day split must equal total leave days ({total_days})."
+
+    return f"Both (With Pay: {with_pay_days}, Without Pay: {without_pay_days})", None
 
 
 @employee.route('/employee_dashboard')
@@ -117,12 +890,7 @@ def employee_dashboard():
             EsarfRequest.status.ilike('rejected'),
         ).count(),
     }
-    pending_esarf_hours = db.session.query(
-        db.func.coalesce(db.func.sum(EsarfRequest.total_hours), 0)
-    ).filter(
-        EsarfRequest.submitted_by_user_id == current_user.id,
-        EsarfRequest.status == 'Pending',
-    ).scalar()
+    offset_hours_this_year = float(current_user.offset_credits or 0)
 
     discount_transaction_count = DiscountRequest.query.filter(
         DiscountRequest.submitted_by_user_id == current_user.id,
@@ -228,7 +996,7 @@ def employee_dashboard():
         greeting_label=greeting_label,
         leave_counts=leave_counts,
         esarf_counts=esarf_counts,
-        pending_esarf_hours=float(pending_esarf_hours or 0),
+        pending_offset_hours=float(offset_hours_this_year or 0),
         annual_cash_limit=annual_cash_limit,
         annual_cash_transaction_limit=annual_cash_transaction_limit,
         per_charge_limit=per_charge_limit,
@@ -242,6 +1010,15 @@ def employee_dashboard():
         missing_profile_items=missing_profile_items[:4],
         recent_activity=recent_activity,
     )
+
+
+@employee.route('/employee/settings')
+@login_required
+def settings():
+    profile_redirect = _require_employee_profile()
+    if profile_redirect:
+        return profile_redirect
+    return render_template('employee/settings.html')
 
 
 @employee.route('/employee/profile/<int:employee_id>')
@@ -324,9 +1101,16 @@ def update_info(employee_id):
 def update_section(employee_id, section):
     employee_data = Employee.query.get_or_404(employee_id)
 
+    requested_anchor = (request.form.get('active_section') or '').strip().lower()
+
+    def _profile_redirect():
+        if requested_anchor:
+            return redirect(url_for('employee.view_employee', employee_id=employee_id, _anchor=requested_anchor))
+        return redirect(url_for('employee.view_employee', employee_id=employee_id))
+
     if current_user.role == 'user' and current_user.employee_id != employee_id:
         flash('You can only edit your own profile.', category='error')
-        return redirect(url_for('employee.view_employee', employee_id=employee_id))
+        return _profile_redirect()
 
     SECTION_FIELDS = {
         'personal': ['birth_date', 'age', 'gender', 'religion', 'birth_place',
@@ -356,7 +1140,7 @@ def update_section(employee_id, section):
     fields = SECTION_FIELDS.get(section, [])
     if not fields:
         flash('Unknown section.', category='error')
-        return redirect(url_for('employee.view_employee', employee_id=employee_id))
+        return _profile_redirect()
 
     try:
         for field in fields:
@@ -418,7 +1202,7 @@ def update_section(employee_id, section):
         db.session.rollback()
         flash('Failed to update ' + section.replace('_', ' ').title() + '. Please check your inputs.', category='error')
 
-    return redirect(url_for('employee.view_employee', employee_id=employee_id))
+    return _profile_redirect()
 
 
 @employee.route('/employee/esarf_requests')
@@ -454,6 +1238,22 @@ def esarf():
 
     esarf_form = {}
     esarf_transaction_types = []
+    if request.method == 'GET' and request.args.get('ai_draft') == '1':
+        draft = session.pop('ai_esarf_draft', None)
+        if isinstance(draft, dict):
+            esarf_form = {
+                'time_schedule': draft.get('time_schedule', ''),
+                'day_off': draft.get('day_off', ''),
+                'payroll_class': draft.get('payroll_class', ''),
+                'date_from': draft.get('date_from', ''),
+                'date_to': draft.get('date_to', ''),
+                'time_from': draft.get('time_from', ''),
+                'time_to': draft.get('time_to', ''),
+                'total_hours': draft.get('total_hours', ''),
+                'reason': draft.get('reason', ''),
+            }
+            esarf_transaction_types = draft.get('transaction_types', [])
+            flash('HYG Assist prepared your ESARF draft. Please review and submit when ready.', category='info')
 
     def calculate_esarf_hours(start_time, end_time):
         if not start_time or not end_time:
@@ -465,6 +1265,8 @@ def esarf():
             end_dt = end_dt + timedelta(days=1)
 
         return round((end_dt - start_dt).total_seconds() / 3600, 2)
+
+    available_offset_hours = max(0.0, float(current_user.offset_credits or 0))
 
     if request.method == 'POST':
         time_schedule = request.form.get('time_schedule')
@@ -504,6 +1306,7 @@ def esarf():
                     'employee/esarf.html',
                     esarf_form=esarf_form,
                     esarf_transaction_types=esarf_transaction_types,
+                    available_offset_hours=available_offset_hours,
                 )
 
             transaction_types_csv = ','.join(transaction_types)
@@ -513,6 +1316,8 @@ def esarf():
                 'FIO': 'Failure to Punch In/Out (FIO)',
                 'OB': 'Official Business (OB)',
                 'Adjustment': 'Adjustment',
+                'Offset': 'Offset',
+                'Use Offset': 'Use Offset',
             }
             transaction_types_display = ', '.join(
                 transaction_type_labels.get(transaction_type, transaction_type)
@@ -525,6 +1330,40 @@ def esarf():
                     'employee/esarf.html',
                     esarf_form=esarf_form,
                     esarf_transaction_types=esarf_transaction_types,
+                    available_offset_hours=available_offset_hours,
+                )
+
+            has_offset = 'Offset' in transaction_types
+            has_ot_or_ut = 'OT' in transaction_types or 'UT' in transaction_types
+            if has_offset and has_ot_or_ut:
+                flash('Offset cannot be combined with Overtime (OT) or Undertime (UT).', category='error')
+                return render_template(
+                    'employee/esarf.html',
+                    esarf_form=esarf_form,
+                    esarf_transaction_types=esarf_transaction_types,
+                    available_offset_hours=available_offset_hours,
+                )
+
+            has_use_offset = 'Use Offset' in transaction_types
+            if has_use_offset and (has_offset or has_ot_or_ut):
+                flash('Use Offset cannot be combined with Offset, Overtime (OT), or Undertime (UT).', category='error')
+                return render_template(
+                    'employee/esarf.html',
+                    esarf_form=esarf_form,
+                    esarf_transaction_types=esarf_transaction_types,
+                    available_offset_hours=available_offset_hours,
+                )
+
+            if has_use_offset and total_hours is not None and total_hours > available_offset_hours:
+                flash(
+                    f'Insufficient offset credits. Available: {available_offset_hours:.2f} hrs, Requested: {total_hours:.2f} hrs.',
+                    category='error',
+                )
+                return render_template(
+                    'employee/esarf.html',
+                    esarf_form=esarf_form,
+                    esarf_transaction_types=esarf_transaction_types,
+                    available_offset_hours=available_offset_hours,
                 )
 
             if not all([time_schedule, day_off, payroll_class, date_from, date_to, time_from, time_to, reason]) or total_hours is None:
@@ -533,10 +1372,17 @@ def esarf():
                     'employee/esarf.html',
                     esarf_form=esarf_form,
                     esarf_transaction_types=esarf_transaction_types,
+                    available_offset_hours=available_offset_hours,
                 )
+
+            if has_use_offset:
+                request_status = "Approved"
+            else:
+                request_status = ESARF_STATUS_DEPT_MGR_APPROVED if _can_auto_dept_approve_esarf() else "Pending"
 
             new_request = EsarfRequest(
                 submitted_by_user_id=current_user.id,
+                status=request_status,
                 time_schedule=time_schedule,
                 day_off=day_off,
                 payroll_class=payroll_class,
@@ -551,12 +1397,27 @@ def esarf():
             db.session.add(new_request)
             db.session.flush()
             new_request.esarf_number = f"ESARF-{datetime.utcnow().year}-{new_request.id:03d}"
+            if has_use_offset and request_status == "Approved":
+                current_user.offset_credits = max(0.0, float(current_user.offset_credits or 0) - float(total_hours or 0))
             db.session.commit()
 
-            flash(
-                f'ESARF request {new_request.esarf_number} submitted successfully. Transaction Type: {transaction_types_display}',
-                category='success',
-            )
+            if new_request.status == "Approved" and has_use_offset:
+                flash(
+                    f'ESARF request {new_request.esarf_number} submitted and auto-approved for Use Offset. '
+                    f'Transaction Type: {transaction_types_display}',
+                    category='success',
+                )
+            elif new_request.status == ESARF_STATUS_DEPT_MGR_APPROVED:
+                flash(
+                    f'ESARF request {new_request.esarf_number} submitted and auto-approved at Department Manager stage. '
+                    f'Transaction Type: {transaction_types_display}',
+                    category='success',
+                )
+            else:
+                flash(
+                    f'ESARF request {new_request.esarf_number} submitted successfully. Transaction Type: {transaction_types_display}',
+                    category='success',
+                )
             return redirect(url_for('employee.esarf_requests'))
         except Exception:
             db.session.rollback()
@@ -565,9 +1426,15 @@ def esarf():
                 'employee/esarf.html',
                 esarf_form=esarf_form,
                 esarf_transaction_types=esarf_transaction_types,
+                available_offset_hours=available_offset_hours,
             )
 
-    return render_template('employee/esarf.html', esarf_form=esarf_form, esarf_transaction_types=esarf_transaction_types)
+    return render_template(
+        'employee/esarf.html',
+        esarf_form=esarf_form,
+        esarf_transaction_types=esarf_transaction_types,
+        available_offset_hours=available_offset_hours,
+    )
 
 
 @employee.route('/submit_leave', methods=['POST'])
@@ -585,18 +1452,31 @@ def submit_leave():
         other_leave = request.form.get("other_leave")
         reason = request.form.get("reason")
 
+        if end_date < start_date:
+            flash("End date cannot be earlier than start date.", category="error")
+            return redirect(url_for("employee.leaves"))
+
+        if not leave_type:
+            flash("Please choose a leave pay type.", category="error")
+            return redirect(url_for("employee.leaves"))
+
         if leave_category == "Others" and not other_leave:
             flash("Please specify your 'Other' leave type.", category="error")
             return redirect(url_for("employee.leaves"))
 
         # Use the 'other_leave' value if "Others" selected
         final_category = other_leave if leave_category == "Others" else leave_category
+        final_leave_type, leave_type_error = _build_leave_type_value(leave_type, start_date, end_date)
+        if leave_type_error:
+            flash(leave_type_error, category="error")
+            return redirect(url_for("employee.leaves"))
 
         new_leave_request = LeaveRequest(
             submitted_by_user_id=current_user.id,
+            status=LEAVE_STATUS_DEPT_HR_APPROVED if _can_auto_first_approve_leave() else "Pending",
             start_date=start_date,
             end_date=end_date,
-            leave_type=leave_type,
+            leave_type=final_leave_type,
             leave_category=final_category,
             reason=reason,
         )
@@ -611,7 +1491,13 @@ def submit_leave():
             link_url=url_for("employee.leave_requests"),
         )
         db.session.commit()
-        flash("Leave request submitted successfully.", category="success")
+        if new_leave_request.status == LEAVE_STATUS_DEPT_HR_APPROVED:
+            flash(
+                "Leave request submitted and auto-approved at Department/HR stage.",
+                category="success",
+            )
+        else:
+            flash("Leave request submitted successfully.", category="success")
 
     except Exception as e:
         db.session.rollback()
@@ -649,7 +1535,16 @@ def update_leave_request(leave_id):
         flash("Please specify your 'Other' leave type.", category="error")
         return redirect(url_for("employee.leave_requests"))
 
-    leave_request.leave_type = leave_type
+    final_leave_type, leave_type_error = _build_leave_type_value(
+        leave_type,
+        leave_request.start_date,
+        leave_request.end_date,
+    )
+    if leave_type_error:
+        flash(leave_type_error, category="error")
+        return redirect(url_for("employee.leave_requests"))
+
+    leave_request.leave_type = final_leave_type
     leave_request.leave_category = other_leave if leave_category == "Others" else leave_category
     leave_request.reason = reason
 
@@ -688,6 +1583,20 @@ def leaves():
     if profile_redirect:
         return profile_redirect
 
+    leave_form = {}
+    if request.args.get('ai_draft') == '1':
+        draft = session.pop('ai_leave_draft', None)
+        if isinstance(draft, dict):
+            leave_form = {
+                'start_date': draft.get('start_date', ''),
+                'end_date': draft.get('end_date', ''),
+                'leave_type': draft.get('leave_type', ''),
+                'leave_category': draft.get('leave_category', ''),
+                'other_leave': draft.get('other_leave', ''),
+                'reason': draft.get('reason', ''),
+            }
+            flash('HYG Assist prepared your leave draft. Please review and submit when ready.', category='info')
+
     # Pagination parameters
     page = request.args.get('page', 1, type=int)  # Get the current page, default=1
     per_page = 5  # Number of leave requests per page, adjust as needed
@@ -717,7 +1626,8 @@ def leaves():
         pagination=leave_requests,    # Pass the pagination object for controls
         pending_count=pending_count,
         approved_count=approved_count,
-        rejected_count=rejected_count
+        rejected_count=rejected_count,
+        leave_form=leave_form,
     )
 
 
@@ -1193,6 +2103,150 @@ def perks():
         discounts=recent_discounts,
         charges=recent_charges,
     )
+
+
+@employee.route('/employee/ai-messages', methods=['GET'])
+@login_required
+def ai_messages():
+    return render_template(
+        'employee/ai_messages.html',
+        ai_models=AI_MODEL_OPTIONS,
+        default_ai_model=_ai_model_choice(None),
+        ollama_url=AI_OLLAMA_URL,
+    )
+
+
+@employee.route('/employee/ai-messages/chat', methods=['POST'])
+@login_required
+def ai_messages_chat():
+    data = request.get_json(silent=True) or {}
+    prompt = (data.get('message') or '').strip()
+    model = _ai_model_choice(data.get('model'))
+
+    if not prompt:
+        return jsonify({
+            'success': False,
+            'message': 'Tell HYG Assist what you need help with first.',
+        }), 400
+
+    account_answer = _answer_portal_account_question(prompt)
+    if account_answer:
+        return jsonify({
+            'success': True,
+            'reply': account_answer['reply'],
+            'thinking': account_answer['thinking'],
+            'model': 'portal account',
+        })
+
+    hr_answer = _answer_ai_hr_question(prompt)
+    if hr_answer:
+        response = {
+            'success': True,
+            'reply': hr_answer['reply'],
+            'thinking': hr_answer['thinking'],
+            'model': 'portal hr',
+        }
+        if hr_answer.get('action_url'):
+            response['action_url'] = hr_answer['action_url']
+            response['action_label'] = hr_answer.get('action_label') or 'Open HR'
+        return jsonify(response)
+
+    perk_answer = _answer_ai_perk_request(prompt)
+    if perk_answer:
+        return jsonify({
+            'success': True,
+            'reply': perk_answer['reply'],
+            'thinking': perk_answer['thinking'],
+            'action_url': perk_answer['action_url'],
+            'action_label': perk_answer['action_label'],
+            'model': 'portal perks',
+        })
+
+    leave_draft = _build_ai_leave_draft(prompt)
+    if leave_draft:
+        session['ai_leave_draft'] = leave_draft
+        return jsonify({
+            'success': True,
+            'reply': (
+                f"I prepared a leave request draft for {leave_draft['start_date']} "
+                f"to {leave_draft['end_date']}. Please review it before submitting."
+            ),
+            'thinking': _build_assist_thinking(prompt),
+            'action_url': url_for('employee.leaves', ai_draft=1),
+            'action_label': 'Review Leave Draft',
+            'model': 'portal draft',
+        })
+
+    esarf_draft = _build_ai_esarf_draft(prompt)
+    if esarf_draft:
+        session['ai_esarf_draft'] = esarf_draft
+        draft_type = esarf_draft['transaction_types'][0]
+        draft_type_label = {
+            'OT': 'overtime',
+            'Offset': 'offset',
+            'Use Offset': 'use-offset',
+        }.get(draft_type, draft_type)
+        article = 'an' if draft_type_label[0].lower() in {'a', 'e', 'i', 'o', 'u'} else 'a'
+        return jsonify({
+            'success': True,
+            'reply': (
+                f"I prepared {article} {draft_type_label} ESARF draft for {esarf_draft['date_from']} "
+                f"from {esarf_draft['time_from']} to {esarf_draft['time_to']} "
+                f"({esarf_draft['total_hours']} hours). Please review it before submitting."
+            ),
+            'thinking': 'I understood this as an ESARF request, filled the date and time, calculated the hours, and generated a clear reason.',
+            'action_url': url_for('employee.esarf', ai_draft=1),
+            'action_label': 'Review ESARF Draft',
+            'model': 'portal draft',
+        })
+
+    try:
+        reply, thinking = _call_general_ai_chat(prompt, model)
+    except HTTPError as exc:
+        if exc.code == 404:
+            return jsonify({
+                'success': False,
+                'message': 'HYG Assist is almost ready. Please ask IT to finish the AI setup on this device.',
+            }), 503
+        return jsonify({
+            'success': False,
+            'message': 'HYG Assist had trouble answering. Please try again in a moment.',
+        }), 503
+    except RuntimeError as exc:
+        if str(exc) == "missing_openrouter_key":
+            return jsonify({
+                'success': False,
+                'message': 'HYG Assist AI is coming soon! The AI feature will be available once setup is complete on PythonAnywhere.',
+            }), 503
+        if str(exc) == "missing_openai_key":
+            return jsonify({
+                'success': False,
+                'message': 'HYG Assist AI is coming soon! The AI feature will be available once setup is complete.',
+            }), 503
+        if str(exc) == "missing_ollama_url":
+            return jsonify({
+                'success': False,
+                'message': 'HYG Assist AI is coming soon! The AI feature will be available once setup is complete.',
+            }), 503
+        return jsonify({
+            'success': False,
+            'message': 'HYG Assist is not configured yet.',
+        }), 503
+    except (URLError, TimeoutError, OSError):
+        return jsonify({
+            'success': False,
+            'message': 'HYG Assist is unavailable right now. Please try again when this device is ready.',
+        }), 503
+
+    if not reply:
+        reply = 'The model replied with an empty response. Please try a shorter prompt.'
+
+    return jsonify({
+        'success': True,
+        'reply': reply,
+        'thinking': thinking or _build_assist_thinking(prompt),
+        'model': model,
+    })
 
 
 @employee.route('/notifications', methods=['GET'])

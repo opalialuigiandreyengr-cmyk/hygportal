@@ -48,9 +48,10 @@
       {% set can_manage_users = role == 'admin' %}
       {% set can_manage_settings = role == 'admin' %}
       {% set can_view_esarf_requests = role in ['admin', 'timekeeper'] or is_esarf_approver %}
+      {% set can_view_leave_requests = role in ['admin', 'timekeeper'] or is_leave_approver %}
+      {% set is_mobile_approver = can_view_esarf_requests or can_view_leave_requests %}
       {% set can_view_attendance = role in ['admin', 'user'] %}
       {% set can_view_leaves = role == 'admin' or has_employee_profile %}
-      {% set can_view_info_pages = role in ['admin', 'user'] %}
       <ul class="nav-list">
         {% if current_user.is_authenticated %}
         <li>
@@ -102,7 +103,7 @@
           </li>
         {% endif %}
 
-        {% if can_view_attendance %}
+        {% if can_view_attendance and not has_employee_profile %}
           <li>
             <a href="{{ url_for('views.attendance') }}" class="nav-link {% if request.path == '/attendance' %}active{% endif %}">
               <i class="fa-solid fa-clock"></i>
@@ -113,9 +114,15 @@
 
         {% if has_employee_profile %}
         <li>
-          <a href="{{ url_for('employee.esarf') }}" class="nav-link {% if request.path in ['/employee/esarf', '/esarf', '/employee/esarf_requests'] %}active{% endif %}">
+          <a href="{% if is_mobile_approver and can_view_esarf_requests %}{{ url_for('admin.esarf_requests', type='esarf') }}{% else %}{{ url_for('employee.esarf_requests') }}{% endif %}" class="nav-link {% if request.path == '/esarf_requests' or request.path == '/employee/esarf_requests' %}active{% endif %}">
             <i class="fa-solid fa-file-signature"></i>
-            <span>ESARF</span>
+            <span>Requests</span>
+          </a>
+        </li>
+        <li>
+          <a href="{{ url_for('employee.settings') }}" class="nav-link {% if request.path == '/employee/settings' %}active{% endif %}">
+            <i class="fa-solid fa-gear"></i>
+            <span>Settings</span>
           </a>
         </li>
         {% endif %}
@@ -125,20 +132,6 @@
             <a href="{{ url_for('admin.settings') }}" class="nav-link {% if request.path == '/settings' %}active{% endif %}">
               <i class="fa-solid fa-gear"></i>
               <span>Settings</span>
-            </a>
-          </li>
-        {% endif %}
-        {% if can_view_info_pages %}
-          <li>
-            <a href="{{ url_for('views.about') }}" class="nav-link {% if request.path == '/about' %}active{% endif %}">
-              <i class="fa-solid fa-circle-info"></i>
-              <span>About</span>
-            </a>
-          </li>
-          <li>
-            <a href="{{ url_for('views.founder') }}" class="nav-link {% if request.path == '/founder' %}active{% endif %}">
-              <i class="fa-solid fa-crown"></i>
-              <span>Founder</span>
             </a>
           </li>
         {% endif %}
@@ -185,11 +178,14 @@
             <i class="fa-solid fa-magnifying-glass"></i>
             <input type="text" placeholder="Search">
           </label>
-          <div class="mobile-topbar-brand" aria-label="HYG Portal System">
+          <div class="mobile-topbar-brand" aria-label="HYG Portal System Beta">
             <span class="mobile-topbar-logo">
               <img src="{{ url_for('static', filename='images/logos/HYG LOGO.png') }}" alt="BOC Logo">
             </span>
-            <strong>HYG Portal System</strong>
+            <span class="mobile-topbar-text">
+              <strong>HYG Portal System</strong>
+              <small class="mobile-beta-pill">Beta</small>
+            </span>
           </div>
         </div>
         <div class="topbar-right">
@@ -199,7 +195,10 @@
             <span class="topbar-notification-badge">{{ unread_notification_count if unread_notification_count < 10 else '9+' }}</span>
             {% endif %}
           </a>
-          <a href="{{ url_for('employee.notifications') if current_user.is_authenticated else url_for('auth.login') }}" class="icon-btn" title="Messages" aria-label="Messages"><i class="fa-regular fa-comment-dots"></i></a>
+          <a href="{{ url_for('employee.ai_messages') if current_user.is_authenticated else url_for('auth.login') }}" class="icon-btn {% if request.path == '/employee/ai-messages' %}active{% endif %}" title="AI Messages" aria-label="AI Messages"><i class="fa-regular fa-comment-dots"></i></a>
+          <button type="button" class="icon-btn pwa-install-btn hidden" id="pwaInstallBtn" title="Install app" aria-label="Install HYG Portal">
+            <i class="fa-solid fa-download"></i>
+          </button>
           {% if current_user.is_authenticated %}
           <a href="{% if has_employee_profile %}{{ url_for('employee.view_employee', employee_id=current_user.employee.id) }}{% else %}{{ url_for('views.home') }}{% endif %}" class="topbar-avatar" title="{{ profile_name|trim }}" aria-label="Open profile">
             {% if profile_employee and profile_employee.photopath %}
@@ -229,10 +228,10 @@
 
   {% if has_employee_profile %}
 
-    <a href="{{ url_for('views.attendance') }}"
-       class="mobile-nav-link {% if request.path == '/attendance' %}active{% endif %}">
-      <i class="fa-regular fa-calendar"></i>
-      <span>Attendance</span>
+    <a href="{% if is_mobile_approver and can_view_esarf_requests %}{{ url_for('admin.esarf_requests', type='esarf') }}{% else %}{{ url_for('employee.esarf_requests') }}{% endif %}"
+       class="mobile-nav-link {% if request.path == '/esarf_requests' or request.path == '/employee/esarf_requests' %}active{% endif %}">
+      <i class="fa-solid fa-file-signature"></i>
+      <span>Requests</span>
     </a>
 
     <button type="button"
@@ -242,7 +241,7 @@
             aria-expanded="false"
             aria-controls="mobileQuickActions">
       <i class="fa-solid fa-plus"></i>
-      <span>Create</span>
+      <span>Plus</span>
     </button>
 
     <div class="mobile-quick-actions" id="mobileQuickActions" aria-label="Request quick actions">
@@ -260,21 +259,16 @@
       </a>
     </div>
 
-    <a href="{{ url_for('employee.notifications') }}"
-       class="mobile-nav-link {% if request.path == '/notifications' %}active{% endif %}">
-      <span class="mobile-nav-icon-wrap">
-        <i class="fa-regular fa-comment-dots"></i>
-        {% if unread_notification_count %}
-        <span class="mobile-nav-badge" aria-hidden="true">{{ unread_notification_count if unread_notification_count < 10 else '9+' }}</span>
-        {% endif %}
-      </span>
-      <span>Messages</span>
-    </a>
-
     <a href="{{ url_for('employee.view_employee', employee_id=current_user.employee.id) }}"
        class="mobile-nav-link {% if request.path.startswith('/employee/profile/' ~ current_user.employee.id) %}active{% endif %}">
       <i class="fa-regular fa-user"></i>
       <span>Profile</span>
+    </a>
+
+    <a href="{% if can_manage_employees %}{{ url_for('admin.settings') }}{% else %}{{ url_for('employee.settings') }}{% endif %}"
+       class="mobile-nav-link {% if request.path == '/settings' or request.path == '/employee/settings' %}active{% endif %}">
+      <i class="fa-solid fa-gear"></i>
+      <span>Setting</span>
     </a>
 
   {% elif can_manage_employees %}
@@ -297,25 +291,28 @@
       <span>Departments</span>
     </a>
 
-  {% elif can_view_esarf_requests %}
+  {% elif can_view_esarf_requests or can_view_leave_requests %}
 
-    <a href="{{ url_for('admin.esarf_requests') }}"
-       class="mobile-nav-link {% if request.path == '/esarf_requests' %}active{% endif %}">
+    {% if can_view_esarf_requests %}
+    <a href="{{ url_for('admin.esarf_requests', type='esarf') }}"
+       class="mobile-nav-link {% if request.path == '/esarf_requests' and request.args.get('type', 'all') != 'leave' %}active{% endif %}">
       <i class="fa-solid fa-file-signature"></i>
-      <span>ESARF</span>
+      <span class="mobile-nav-label-with-count">
+        Requests
+        {% if approver_request_count %}
+        <span class="mobile-nav-count-inline" aria-hidden="true">{{ approver_request_count if approver_request_count < 100 else '99+' }}</span>
+        {% endif %}
+      </span>
     </a>
+    {% endif %}
 
-    <a href="{{ url_for('admin.leave_requests') }}"
-       class="mobile-nav-link {% if request.path == '/leave_requests' %}active{% endif %}">
+    {% if can_view_leave_requests %}
+    <a href="{{ url_for('admin.esarf_requests', type='leave') }}"
+       class="mobile-nav-link {% if request.path == '/esarf_requests' and request.args.get('type') == 'leave' %}active{% endif %}">
       <i class="fa-solid fa-calendar-day"></i>
       <span>Leaves</span>
     </a>
-
-    <a href="{{ url_for('views.about') }}"
-       class="mobile-nav-link {% if request.path == '/about' %}active{% endif %}">
-      <i class="fa-solid fa-circle-info"></i>
-      <span>About</span>
-    </a>
+    {% endif %}
 
   {% endif %}
 </nav>

@@ -17,6 +17,7 @@
 {% set selected_time_to = esarf_form.get('time_to', '') %}
 {% set selected_total_hours = esarf_form.get('total_hours', '') %}
 {% set selected_reason = esarf_form.get('reason', '') %}
+{% set available_offset_hours = available_offset_hours or 0 %}
 
 <header class="page-header esarf-page-header employee-esarf-form-header esarf-hero-card">
   <div class="employee-esarf-history-title">
@@ -134,6 +135,16 @@
             <span class="transaction-icon"><i class="fa-solid fa-briefcase"></i></span>
             <span>Official Business (OB)</span>
           </label>
+          <label class="transaction-option transaction-offset">
+            <input type="checkbox" name="transaction_type" value="Offset" {% if 'Offset' in esarf_transaction_types %}checked{% endif %}>
+            <span class="transaction-icon"><i class="fa-solid fa-arrows-rotate"></i></span>
+            <span>Offset</span>
+          </label>
+          <label class="transaction-option transaction-use-offset">
+            <input type="checkbox" name="transaction_type" value="Use Offset" {% if 'Use Offset' in esarf_transaction_types %}checked{% endif %}>
+            <span class="transaction-icon"><i class="fa-solid fa-arrow-right-arrow-left"></i></span>
+            <span>Use Offset</span>
+          </label>
         </div>
         <small class="field-hint hidden" id="otAutoHint"></small>
       </div>
@@ -165,6 +176,27 @@
       <div class="field full-width esarf-total-hours-field">
         <label>Total OT / UT / no. of hours</label>
         <input type="text" name="total_hours" id="totalHoursInput" required readonly value="{{ selected_total_hours }}" placeholder="Auto-calculated">
+      </div>
+      <div
+        class="field full-width offset-credit-summary {% if 'Use Offset' not in esarf_transaction_types %}hidden{% endif %}"
+        id="offsetCreditSummary"
+        data-available-offset-hours="{{ '%.2f'|format(available_offset_hours) }}"
+      >
+        <label>Offset Credit Summary</label>
+        <div class="offset-credit-grid">
+          <div class="offset-credit-item">
+            <small>Available Offset Credits</small>
+            <strong id="offsetAvailableHours">{{ '%.2f'|format(available_offset_hours) }} hrs</strong>
+          </div>
+          <div class="offset-credit-item">
+            <small>Offset To Deduct</small>
+            <strong id="offsetDeductHours">0.00 hrs</strong>
+          </div>
+          <div class="offset-credit-item">
+            <small>Offset Remaining</small>
+            <strong id="offsetRemainingHours">{{ '%.2f'|format(available_offset_hours) }} hrs</strong>
+          </div>
+        </div>
       </div>
 
       <div class="field full-width">

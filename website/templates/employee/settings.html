@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Settings | HYG Employee Portal{% endblock %}
+
+{% block extra_head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/settings.css') }}?v={{ static_version }}">
+{% endblock %}
+
+{% block page_content %}
+<section class="settings-page">
+  <header class="settings-header">
+    <div>
+      <span class="settings-kicker">Employee Settings</span>
+      <h1>Settings</h1>
+      <p>Manage your account and quick actions.</p>
+    </div>
+  </header>
+
+  <div class="settings-grid">
+    <section class="settings-panel settings-panel-perks" aria-labelledby="employeeSettingsTitle">
+      <div class="settings-panel-head">
+        <div class="settings-panel-icon"><i class="fa-solid fa-user-gear"></i></div>
+        <div>
+          <h2 id="employeeSettingsTitle">Account Settings</h2>
+          <p>Open profile to update personal and employment information.</p>
+        </div>
+      </div>
+      <div class="settings-form-box">
+        <a href="{{ url_for('employee.view_employee', employee_id=current_user.employee.id) }}" class="primary-btn settings-primary-btn" style="text-decoration:none;">
+          <i class="fa-solid fa-user"></i>
+          <span>Go to My Profile</span>
+        </a>
+      </div>
+      <div class="settings-form-box">
+        <a href="{{ url_for('auth.logout') }}" class="primary-btn settings-primary-btn" style="text-decoration:none; background:#dc2626; border-color:#dc2626;">
+          <i class="fa-solid fa-right-from-bracket"></i>
+          <span>Logout</span>
+        </a>
+      </div>
+    </section>
+  </div>
+</section>
+{% endblock %}

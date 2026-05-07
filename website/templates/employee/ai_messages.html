@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+
+{% block title %}HYG Assist | HYG Employee Portal{% endblock %}
+
+{% block page_content %}
+{% set employee = current_user.employee if current_user.is_authenticated and current_user.employee else None %}
+{% set first_name = employee.first_name if employee and employee.first_name else current_user.username %}
+
+<section class="ai-messages-page ai-assist-desktop">
+  <div class="ai-assist-main">
+    <section class="ai-welcome-card">
+      <div class="ai-welcome-copy">
+        <span class="ai-bot-avatar" aria-hidden="true">
+          <img
+            src="https://static.vecteezy.com/system/resources/previews/067/604/590/non_2x/ai-icon-ai-personal-assistant-chatbot-avatar-chat-bubble-with-smiling-robot-face-ui-education-isometric-design-style-vector.jpg"
+            alt=""
+          >
+        </span>
+        <div>
+          <h1>Hello {{ first_name|trim }}!</h1>
+          <p>I can help draft requests, fill forms, and answer employee portal questions.</p>
+        </div>
+      </div>
+
+      <div class="ai-feature-strip" aria-label="Quick AI actions">
+        <button type="button" class="ai-feature-card is-ready" data-template="Answer this employee portal question in a simple way: ">
+          <i class="fa-regular fa-circle-question"></i>
+          <strong>Ask Question</strong>
+          <small>Get quick answers</small>
+        </button>
+        <button type="button" class="ai-feature-card is-ready" data-template="How many employees do we have?">
+          <i class="fa-solid fa-chart-simple"></i>
+          <strong>HR Counts</strong>
+          <small>Check HR totals</small>
+        </button>
+        <button type="button" class="ai-feature-card is-ready" data-template="File ESARF for ">
+          <i class="fa-solid fa-file-signature"></i>
+          <strong>ESARF Draft</strong>
+          <small>Prepare form details</small>
+        </button>
+        <button type="button" class="ai-feature-card is-ready" data-template="File leave for ">
+          <i class="fa-regular fa-calendar-check"></i>
+          <strong>Leave Draft</strong>
+          <small>Fill leave request</small>
+        </button>
+        <button type="button" class="ai-feature-card is-ready" data-template="Apply Employee Discount (Cash) for ">
+          <i class="fa-solid fa-percent"></i>
+          <strong>Cash Discount</strong>
+          <small>Ask item details</small>
+        </button>
+        <button type="button" class="ai-feature-card is-ready" data-template="Apply Employee Charge (Credit) for ">
+          <i class="fa-solid fa-cart-shopping"></i>
+          <strong>Credit Charge</strong>
+          <small>Ask item details</small>
+        </button>
+      </div>
+    </section>
+
+    <section class="ai-suggestions-card">
+      <div class="ai-suggestions-head">
+        <h2>Suggested for you</h2>
+        <button type="button">View all</button>
+      </div>
+      <div class="ai-question-list">
+        <button type="button" data-template="file leave for may 10 to 11 because its my birthday">
+          <i class="fa-solid fa-wand-magic-sparkles"></i>
+          <span>File leave for May 10 to 11 because it is my birthday</span>
+          <i class="fa-solid fa-chevron-right"></i>
+        </button>
+        <button type="button" data-template="file overtime yesterday from 6 to 9 PM due to POS maintenance">
+          <i class="fa-solid fa-wand-magic-sparkles"></i>
+          <span>File overtime yesterday from 6 to 9 PM due to POS maintenance</span>
+          <i class="fa-solid fa-chevron-right"></i>
+        </button>
+        <button type="button" data-template="file offset tomorrow from 6 to 9 PM due to POS maintenance">
+          <i class="fa-solid fa-wand-magic-sparkles"></i>
+          <span>File offset tomorrow from 6 to 9 PM due to POS maintenance</span>
+          <i class="fa-solid fa-chevron-right"></i>
+        </button>
+        <button type="button" data-template="can you check how many offset credits i have?">
+          <i class="fa-solid fa-wand-magic-sparkles"></i>
+          <span>Check how many offset credits I have</span>
+          <i class="fa-solid fa-chevron-right"></i>
+        </button>
+        <button type="button" data-template="how many employees do we have?">
+          <i class="fa-solid fa-wand-magic-sparkles"></i>
+          <span>How many employees do we have?</span>
+          <i class="fa-solid fa-chevron-right"></i>
+        </button>
+        <button type="button" data-template="how many companies do we have?">
+          <i class="fa-solid fa-wand-magic-sparkles"></i>
+          <span>How many companies do we have?</span>
+          <i class="fa-solid fa-chevron-right"></i>
+        </button>
+        <button type="button" data-template="how many employees age 31?">
+          <i class="fa-solid fa-wand-magic-sparkles"></i>
+          <span>How many employees age 31?</span>
+          <i class="fa-solid fa-chevron-right"></i>
+        </button>
+        <button type="button" data-template="apply employee discount cash for today">
+          <i class="fa-solid fa-wand-magic-sparkles"></i>
+          <span>Apply Employee Discount (Cash)</span>
+          <i class="fa-solid fa-chevron-right"></i>
+        </button>
+        <button type="button" data-template="apply employee charge credit for today">
+          <i class="fa-solid fa-wand-magic-sparkles"></i>
+          <span>Apply Employee Charge (Credit)</span>
+          <i class="fa-solid fa-chevron-right"></i>
+        </button>
+        <button type="button" data-template="Help me write an ESARF reason for missed punch because I forgot to time in">
+          <i class="fa-solid fa-wand-magic-sparkles"></i>
+          <span>Help me write an ESARF reason for a missed punch</span>
+          <i class="fa-solid fa-chevron-right"></i>
+        </button>
+      </div>
+    </section>
+
+    <p class="ai-assist-note">HYG Assist can make mistakes. Please review before submitting forms.</p>
+  </div>
+
+  <aside class="ai-chat-panel" aria-label="HYG Assist chat">
+    <div class="ai-chat-head">
+      <div>
+        <span class="ai-mini-mark"><i class="fa-solid fa-wand-magic-sparkles"></i></span>
+        <strong>HYG Assist AI</strong>
+      </div>
+      <button type="button" aria-label="More options"><i class="fa-solid fa-ellipsis"></i></button>
+    </div>
+
+    <div class="ai-chat-log" id="aiChatLog">
+      <article class="ai-chat-message is-assistant">
+        <strong>HYG Assist</strong>
+        <p>Hello! Ask me to draft leave, ESARF, overtime, offset, discount, charge, or request messages.</p>
+      </article>
+    </div>
+
+    <form class="ai-chat-form" id="aiChatForm" data-chat-url="{{ url_for('employee.ai_messages_chat') }}">
+      <label class="visually-hidden" for="aiMessageInput">Message</label>
+      <textarea id="aiMessageInput" rows="2" placeholder="Ask me anything..."></textarea>
+      <div class="ai-chat-actions">
+        <small id="aiChatStatus">Ready</small>
+        <button type="submit" class="ai-send-btn" aria-label="Send">
+          <i class="fa-solid fa-arrow-right"></i>
+        </button>
+      </div>
+    </form>
+  </aside>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  (function () {
+    const form = document.getElementById("aiChatForm");
+    const input = document.getElementById("aiMessageInput");
+    const log = document.getElementById("aiChatLog");
+    const status = document.getElementById("aiChatStatus");
+    let thinkingItem = null;
+    const promptButtons = document.querySelectorAll(".ai-feature-card, .ai-question-list button");
+
+    if (!form || !input || !log) return;
+
+    function appendMessage(role, text, actionUrl, actionLabel) {
+      const item = document.createElement("article");
+      item.className = `ai-chat-message is-${role}`;
+      const title = document.createElement("strong");
+      title.textContent = role === "user" ? "You" : "HYG Assist";
+      const body = document.createElement("p");
+      body.textContent = text;
+      item.append(title, body);
+      if (actionUrl) {
+        const action = document.createElement("a");
+        action.className = "ai-chat-action-link";
+        action.href = actionUrl;
+        action.textContent = actionLabel || "Open Draft";
+        item.appendChild(action);
+      }
+      log.appendChild(item);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function setThinking(text, isActive) {
+      if (!log) return;
+      if (!thinkingItem) {
+        thinkingItem = document.createElement("article");
+        thinkingItem.className = "ai-chat-thinking";
+        thinkingItem.innerHTML = '<span></span><p></p>';
+      }
+      const body = thinkingItem.querySelector("p");
+      if (body) body.textContent = text;
+      thinkingItem.classList.toggle("is-active", Boolean(isActive));
+      if (isActive && !thinkingItem.parentElement) {
+        log.appendChild(thinkingItem);
+      }
+      if (!isActive && thinkingItem.parentElement) {
+        thinkingItem.remove();
+      }
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function setPrompt(value, submitNow) {
+      input.value = value || "";
+      input.focus();
+      if (submitNow && input.value.trim()) {
+        form.requestSubmit();
+      }
+    }
+
+    promptButtons.forEach(function (button) {
+      button.addEventListener("click", function () {
+        setPrompt(button.getAttribute("data-template") || "", true);
+      });
+    });
+
+    form.addEventListener("submit", async function (event) {
+      event.preventDefault();
+      const message = input.value.trim();
+      if (!message) {
+        input.focus();
+        return;
+      }
+
+      const sendButton = form.querySelector("button[type='submit']");
+      appendMessage("user", message);
+      input.value = "";
+      if (status) status.textContent = "Thinking";
+      setThinking("Reading your request and preparing a helpful answer...", true);
+      if (sendButton) sendButton.disabled = true;
+
+      try {
+        const response = await fetch(form.dataset.chatUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Requested-With": "XMLHttpRequest"
+          },
+          body: JSON.stringify({ message: message })
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+          throw new Error(data.message || "I could not answer just now.");
+        }
+        appendMessage("assistant", data.reply, data.action_url, data.action_label);
+        setThinking("", false);
+        if (status) status.textContent = "Ready";
+      } catch (error) {
+        appendMessage("assistant", error.message || "I could not answer just now.");
+        setThinking("", false);
+        if (status) status.textContent = "Try again";
+      } finally {
+        if (sendButton) sendButton.disabled = false;
+      }
+    });
+  })();
+</script>
+{% endblock %}

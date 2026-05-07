@@ -536,9 +536,11 @@ function calcTotal() {
 
 let productTemplate = { discount: null, charge: null };
 
-document.addEventListener('DOMContentLoaded', function () {
+function initPerksPage() {
   const selectCards = document.querySelectorAll('[data-perk-select]');
   const formCards = document.querySelectorAll('[data-perk-card]');
+  if (!selectCards.length && !formCards.length) return;
+
   productTemplate = {
     discount: document.querySelector('#discountProductList .perks-product-row')?.cloneNode(true),
     charge: document.querySelector('#chargeProductList .perks-product-row')?.cloneNode(true),
@@ -618,6 +620,21 @@ document.addEventListener('DOMContentLoaded', function () {
   calcDiscount();
   calcTotal();
   fetchInventoryData();
-});
+}
+
+window.fetchInventoryData = fetchInventoryData;
+window.enableManualProductEntry = enableManualProductEntry;
+window.populateProductSelect = populateProductSelect;
+window.populateAllProductSelects = populateAllProductSelects;
+window.onProductSelect = onProductSelect;
+window.calcDiscount = calcDiscount;
+window.calcTotal = calcTotal;
+window.initPerksPage = initPerksPage;
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initPerksPage, { once: true });
+} else {
+  initPerksPage();
+}
 </script>
 {% endblock %}

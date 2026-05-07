@@ -203,11 +203,29 @@
 }
 
 .leave-pill-group {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .leave-category-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.leave-split-wrap {
+  display: none;
+  margin-top: 8px;
+}
+
+.leave-split-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.leave-split-note {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 700;
 }
 
 .leave-pill-group input,
@@ -297,6 +315,55 @@
   margin-top: 4px;
   font-size: 1rem;
   font-weight: 900;
+}
+
+.leave-credits-card {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #dbe4f0;
+  border-radius: 8px;
+  background: #f8fbff;
+  padding: 12px;
+}
+
+.leave-credits-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.leave-credits-top span {
+  color: #334155;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.leave-credits-top strong {
+  color: #0f172a;
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.leave-credits-bar {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #dbeafe;
+}
+
+.leave-credits-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2f80ed, #22c55e);
+}
+
+.leave-credits-note {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.7rem;
+  font-weight: 700;
 }
 
 .leave-footer {
@@ -796,7 +863,37 @@
   }
 
   .leave-stat-row {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .leave-stat {
+    min-height: 68px;
+    padding: 8px 6px;
+    gap: 4px;
+    border-radius: 7px;
+    min-width: 0;
+    text-align: center;
+  }
+
+  .leave-stat i {
+    font-size: 0.82rem;
+  }
+
+  .leave-stat strong {
+    font-size: clamp(0.82rem, 2.8vw, 1rem);
+    line-height: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .leave-stat span {
+    font-size: clamp(0.56rem, 1.9vw, 0.66rem);
+    line-height: 1.05;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .leave-footer {
@@ -815,8 +912,13 @@
 {% endblock %}
 
 {% block page_content %}
+{% set leave_form = leave_form or {} %}
 {% set employee = current_user.employee %}
 {% set full_name = (employee.first_name ~ ' ' ~ employee.last_name)|trim if employee else current_user.username %}
+{% set max_leave_credits = 7 %}
+{% set leave_credits = current_user.leave_credits if current_user.leave_credits is not none else 0 %}
+{% set leave_credits_clamped = 0 if leave_credits < 0 else (max_leave_credits if leave_credits > max_leave_credits else leave_credits) %}
+{% set leave_credit_percent = (leave_credits_clamped * 100 / max_leave_credits) if max_leave_credits > 0 else 0 %}
 
 <section class="leave-page">  
   <header class="leave-page-header">
@@ -836,6 +938,15 @@
       </a>
     </div>
   </header>
+
+  <section class="leave-credits-card" aria-label="Leave credits progress">
+    <div class="leave-credits-top">
+      <span>Leave Credits</span>
+      <strong>{{ leave_credits_clamped }} / {{ max_leave_credits }} days</strong>
+    </div>
+    <div class="leave-credits-bar"><span style="width: {{ '%.2f'|format(leave_credit_percent) }}%;"></span></div>
+    <p class="leave-credits-note">Based on your current available credits.</p>
+  </section>
 
   <div class="leave-shell">
     <article class="leave-form-card">
@@ -867,14 +978,14 @@
               <label for="leaveStart">Start Date</label>
               <div class="leave-input-wrap">
                 <i class="fa-regular fa-calendar"></i>
-                <input type="date" name="start_date" id="leaveStart" required>
+                <input type="date" name="start_date" id="leaveStart" required value="{{ leave_form.get('start_date', '') }}">
               </div>
             </div>
             <div class="leave-field">
               <label for="leaveEnd">End Date</label>
               <div class="leave-input-wrap">
                 <i class="fa-regular fa-calendar"></i>
-                <input type="date" name="end_date" id="leaveEnd" required>
+                <input type="date" name="end_date" id="leaveEnd" required value="{{ leave_form.get('end_date', '') }}">
               </div>
             </div>
           </div>
@@ -890,31 +1001,52 @@
             <span class="leave-choice-label">Leave Pay Type <span class="leave-required">*</span></span>
             <div class="leave-choice-row">
               <div class="leave-pill-group">
-                <input type="radio" name="leave_type" value="With Pay" id="payWith" required>
+                <input type="radio" name="leave_type" value="With Pay" id="payWith" required {% if leave_form.get('leave_type') == 'With Pay' %}checked{% endif %}>
                 <label class="leave-option" for="payWith"><i class="fa-regular fa-credit-card"></i> With Pay</label>
-                <input type="radio" name="leave_type" value="Without Pay" id="payWithout">
+                <input type="radio" name="leave_type" value="Without Pay" id="payWithout" {% if leave_form.get('leave_type') == 'Without Pay' %}checked{% endif %}>
                 <label class="leave-option" for="payWithout"><i class="fa-regular fa-credit-card"></i> Without Pay</label>
+                <input type="radio" name="leave_type" value="Both" id="payBoth" {% if leave_form.get('leave_type') == 'Both' %}checked{% endif %}>
+                <label class="leave-option" for="payBoth"><i class="fa-solid fa-code-branch"></i> Both</label>
               </div>
+            </div>
+            <div class="leave-split-wrap" id="leaveSplitWrap">
+              <div class="leave-split-grid">
+                <div class="leave-field">
+                  <label for="withPayDays">With Pay Days</label>
+                  <div class="leave-input-wrap">
+                    <i class="fa-regular fa-calendar-check"></i>
+                    <input type="number" min="0" step="1" id="withPayDays" name="with_pay_days" placeholder="0">
+                  </div>
+                </div>
+                <div class="leave-field">
+                  <label for="withoutPayDays">Without Pay Days</label>
+                  <div class="leave-input-wrap">
+                    <i class="fa-regular fa-calendar-xmark"></i>
+                    <input type="number" min="0" step="1" id="withoutPayDays" name="without_pay_days" placeholder="0">
+                  </div>
+                </div>
+              </div>
+              <p class="leave-split-note">Both values must match your total leave duration.</p>
             </div>
           </div>
 
           <div class="leave-field">
             <span class="leave-choice-label">Leave Category <span class="leave-required">*</span></span>
             <div class="leave-category-grid">
-              <input type="radio" name="leave_category" value="Sick Leave" id="catSick" required>
+              <input type="radio" name="leave_category" value="Sick Leave" id="catSick" required {% if leave_form.get('leave_category') == 'Sick Leave' %}checked{% endif %}>
               <label class="leave-option is-sick" for="catSick"><i class="fa-solid fa-shield-heart"></i> Sick Leave</label>
-              <input type="radio" name="leave_category" value="Vacation Leave" id="catVacation">
+              <input type="radio" name="leave_category" value="Vacation Leave" id="catVacation" {% if leave_form.get('leave_category') == 'Vacation Leave' %}checked{% endif %}>
               <label class="leave-option is-vacation" for="catVacation"><i class="fa-solid fa-umbrella-beach"></i> Vacation Leave</label>
-              <input type="radio" name="leave_category" value="Emergency Leave" id="catEmergency">
+              <input type="radio" name="leave_category" value="Emergency Leave" id="catEmergency" {% if leave_form.get('leave_category') == 'Emergency Leave' %}checked{% endif %}>
               <label class="leave-option is-emergency" for="catEmergency"><i class="fa-solid fa-bell"></i> Emergency Leave</label>
-              <input type="radio" name="leave_category" value="Maternity Leave" id="catMaternity">
+              <input type="radio" name="leave_category" value="Maternity Leave" id="catMaternity" {% if leave_form.get('leave_category') == 'Maternity Leave' %}checked{% endif %}>
               <label class="leave-option is-family" for="catMaternity"><i class="fa-solid fa-baby"></i> Maternity / Paternity</label>
-              <input type="radio" name="leave_category" value="Others" id="otherLeaveRadio">
+              <input type="radio" name="leave_category" value="Others" id="otherLeaveRadio" {% if leave_form.get('leave_category') == 'Others' %}checked{% endif %}>
               <label class="leave-option is-other" for="otherLeaveRadio"><i class="fa-regular fa-circle"></i> Others</label>
             </div>
             <div class="leave-input-wrap" id="otherLeaveWrap" style="display:none;">
               <i class="fa-solid fa-pen"></i>
-              <input type="text" name="other_leave" id="otherLeaveInput" placeholder="Please specify...">
+              <input type="text" name="other_leave" id="otherLeaveInput" placeholder="Please specify..." value="{{ leave_form.get('other_leave', '') }}">
             </div>
           </div>
         </section>
@@ -923,7 +1055,7 @@
           <h2 class="leave-section-title"><span class="leave-step">3</span> Reason</h2>
           <div class="leave-field">
             <label for="leaveReason">Reason for Leave <span class="leave-required">*</span></label>
-            <textarea name="reason" id="leaveReason" rows="3" maxlength="500" placeholder="Enter reason for your leave..." required></textarea>
+            <textarea name="reason" id="leaveReason" rows="3" maxlength="500" placeholder="Enter reason for your leave..." required>{{ leave_form.get('reason', '') }}</textarea>
             <span class="leave-character-count"><span id="leaveReasonCount">0</span>/500</span>
           </div>
         </section>
@@ -986,67 +1118,6 @@
         </div>
       </section>
 
-      <section class="leave-side-card" id="leaveHistory">
-        <div class="leave-card-title-row">
-          <h2>Recent Leaves</h2>
-          <a href="{{ url_for('employee.leaves') }}">View All</a>
-        </div>
-        <div class="leave-list">
-          {% for leave in leaves %}
-          {% set status_key = (leave.status or 'Pending')|lower %}
-          {% set category_key = 'vacation' if 'Vacation' in leave.leave_category else ('sick' if 'Sick' in leave.leave_category else ('emergency' if 'Emergency' in leave.leave_category else 'other')) %}
-          {% set leave_days = ((leave.end_date - leave.start_date).days + 1) if leave.start_date and leave.end_date else 0 %}
-          <div class="leave-item">
-            <span class="leave-item-icon is-{{ category_key }}">
-              {% if category_key == 'vacation' %}
-              <i class="fa-solid fa-umbrella-beach"></i>
-              {% elif category_key == 'sick' %}
-              <i class="fa-solid fa-shield-heart"></i>
-              {% elif category_key == 'emergency' %}
-              <i class="fa-solid fa-bell"></i>
-              {% else %}
-              <i class="fa-regular fa-circle"></i>
-              {% endif %}
-            </span>
-            <span class="leave-item-info">
-              <span class="leave-status-chip is-{{ status_key }}">{{ leave.status }}</span>
-              <strong>{{ leave.leave_category }}</strong>
-              <small>{{ leave.start_date.strftime('%b %d') }} - {{ leave.end_date.strftime('%b %d, %Y') }}</small>
-            </span>
-            <span class="leave-item-days">
-              {{ leave_days }}
-              <small>{{ 'day' if leave_days == 1 else 'days' }}</small>
-            </span>
-          </div>
-          {% else %}
-          <p class="leave-empty">No leave requests yet.</p>
-          {% endfor %}
-        </div>
-
-        {% if pagination.pages > 1 %}
-        <div class="leave-pagination">
-          {% if pagination.has_prev %}
-            <a href="{{ url_for('employee.leaves', page=pagination.prev_num) }}" aria-label="Previous page"><i class="fa-solid fa-chevron-left"></i></a>
-          {% else %}
-            <span class="disabled-page"><i class="fa-solid fa-chevron-left"></i></span>
-          {% endif %}
-
-          {% for p in range(1, pagination.pages + 1) %}
-            {% if p == pagination.page %}
-              <span class="active-page">{{ p }}</span>
-            {% else %}
-              <a href="{{ url_for('employee.leaves', page=p) }}">{{ p }}</a>
-            {% endif %}
-          {% endfor %}
-
-          {% if pagination.has_next %}
-            <a href="{{ url_for('employee.leaves', page=pagination.next_num) }}" aria-label="Next page"><i class="fa-solid fa-chevron-right"></i></a>
-          {% else %}
-            <span class="disabled-page"><i class="fa-solid fa-chevron-right"></i></span>
-          {% endif %}
-        </div>
-        {% endif %}
-      </section>
     </aside>
   </div>
 </section>
@@ -1059,17 +1130,29 @@ const otherInput = document.getElementById("otherLeaveInput");
 const otherWrap = document.getElementById("otherLeaveWrap");
 const reasonInput = document.getElementById("leaveReason");
 const reasonCount = document.getElementById("leaveReasonCount");
+const leaveForm = document.getElementById("leaveRequestForm");
+const payBoth = document.getElementById("payBoth");
+const leaveSplitWrap = document.getElementById("leaveSplitWrap");
+const withPayDays = document.getElementById("withPayDays");
+const withoutPayDays = document.getElementById("withoutPayDays");
+
+function getTotalDays() {
+  if (!startDate.value || !endDate.value) return 0;
+  const start = new Date(startDate.value);
+  const end = new Date(endDate.value);
+  const diff = Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1;
+  return diff > 0 ? diff : 0;
+}
 
 function calculateDays() {
-  if (startDate.value && endDate.value) {
-    const start = new Date(startDate.value);
-    const end = new Date(endDate.value);
-    let diff = (end - start) / (1000 * 60 * 60 * 24) + 1;
-    if (diff < 0) diff = 0;
+  const diff = getTotalDays();
+  if (diff > 0) {
     leaveDays.textContent = `${diff} day${diff !== 1 ? "/s" : ""}`;
   } else {
     leaveDays.textContent = "0 day/s";
   }
+  withPayDays.max = diff;
+  withoutPayDays.max = diff;
 }
 
 function syncOtherLeave() {
@@ -1084,8 +1167,42 @@ function updateReasonCount() {
   reasonCount.textContent = reasonInput.value.length;
 }
 
+function syncLeaveTypeSplit() {
+  const isBoth = payBoth && payBoth.checked;
+  leaveSplitWrap.style.display = isBoth ? "block" : "none";
+  withPayDays.required = isBoth;
+  withoutPayDays.required = isBoth;
+  if (!isBoth) {
+    withPayDays.value = "";
+    withoutPayDays.value = "";
+  }
+}
+
+function clampToRange(value, min, max) {
+  if (Number.isNaN(value)) return min;
+  return Math.max(min, Math.min(max, value));
+}
+
+function syncSplitFromWithPay() {
+  if (!(payBoth && payBoth.checked)) return;
+  const totalDays = getTotalDays();
+  const withPay = clampToRange(parseInt(withPayDays.value || "0", 10), 0, totalDays);
+  withPayDays.value = String(withPay);
+  withoutPayDays.value = String(Math.max(0, totalDays - withPay));
+}
+
+function syncSplitFromWithoutPay() {
+  if (!(payBoth && payBoth.checked)) return;
+  const totalDays = getTotalDays();
+  const withoutPay = clampToRange(parseInt(withoutPayDays.value || "0", 10), 0, totalDays);
+  withoutPayDays.value = String(withoutPay);
+  withPayDays.value = String(Math.max(0, totalDays - withoutPay));
+}
+
 const today = new Date().toISOString().split("T")[0];
-startDate.value = today;
+if (!startDate.value) {
+  startDate.value = today;
+}
 startDate.min = today;
 endDate.min = today;
 
@@ -1095,17 +1212,44 @@ startDate.addEventListener("change", () => {
     endDate.value = startDate.value;
   }
   calculateDays();
+  if (payBoth && payBoth.checked) {
+    syncSplitFromWithPay();
+  }
 });
 
-endDate.addEventListener("change", calculateDays);
+endDate.addEventListener("change", () => {
+  calculateDays();
+  if (payBoth && payBoth.checked) {
+    syncSplitFromWithPay();
+  }
+});
 reasonInput.addEventListener("input", updateReasonCount);
 document.querySelectorAll('input[name="leave_category"]').forEach((radio) => {
   radio.addEventListener("change", syncOtherLeave);
+});
+document.querySelectorAll('input[name="leave_type"]').forEach((radio) => {
+  radio.addEventListener("change", syncLeaveTypeSplit);
+});
+withPayDays.addEventListener("input", syncSplitFromWithPay);
+withoutPayDays.addEventListener("input", syncSplitFromWithoutPay);
+
+leaveForm.addEventListener("submit", (event) => {
+  if (!(payBoth && payBoth.checked)) return;
+
+  const totalDays = getTotalDays();
+  const withPay = parseInt(withPayDays.value || "0", 10);
+  const withoutPay = parseInt(withoutPayDays.value || "0", 10);
+
+  if ((withPay + withoutPay) !== totalDays) {
+    event.preventDefault();
+    alert(`With Pay + Without Pay must equal total leave days (${totalDays}).`);
+  }
 });
 
 calculateDays();
 updateReasonCount();
 syncOtherLeave();
+syncLeaveTypeSplit();
 </script>
 
 {% endblock %}

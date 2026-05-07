@@ -43,6 +43,7 @@
   const mobileQuickActionBtn = document.getElementById("mobileQuickActionBtn");
   const mobileQuickActions = document.getElementById("mobileQuickActions");
   const pwaInstallBtn = document.getElementById("pwaInstallBtn");
+  const pwaFloatingInstallBtn = document.getElementById("pwaFloatingInstallBtn");
   let deferredInstallPrompt = null;
 
   function isStandalonePwa() {
@@ -54,23 +55,34 @@
     pwaInstallBtn.classList.toggle("hidden", !visible);
   }
 
+  function setFloatingInstallButtonVisible(visible) {
+    if (!pwaFloatingInstallBtn) return;
+    pwaFloatingInstallBtn.classList.toggle("hidden", !visible);
+  }
+
+  // Hide both buttons initially
   setInstallButtonVisible(false);
+  setFloatingInstallButtonVisible(false);
 
   window.addEventListener("beforeinstallprompt", function (event) {
     if (isStandalonePwa()) return;
     event.preventDefault();
     deferredInstallPrompt = event;
+    // Show both topbar and floating install buttons
     setInstallButtonVisible(true);
+    setFloatingInstallButtonVisible(true);
   });
 
   window.addEventListener("appinstalled", function () {
     deferredInstallPrompt = null;
     setInstallButtonVisible(false);
+    setFloatingInstallButtonVisible(false);
     if (window.HYGToast) {
-      HYGToast.show("success", "HYG Portal installed.");
+      HYGToast.show("success", "HYG Portal installed successfully!");
     }
   });
 
+  // Handle topbar install button click
   if (pwaInstallBtn) {
     pwaInstallBtn.addEventListener("click", async function () {
       if (!deferredInstallPrompt) {
@@ -86,6 +98,31 @@
       });
       deferredInstallPrompt = null;
       setInstallButtonVisible(false);
+      setFloatingInstallButtonVisible(false);
+
+      if (choice && choice.outcome === "accepted" && window.HYGToast) {
+        HYGToast.show("success", "Installing HYG Portal.");
+      }
+    });
+  }
+
+  // Handle floating install button click
+  if (pwaFloatingInstallBtn) {
+    pwaFloatingInstallBtn.addEventListener("click", async function () {
+      if (!deferredInstallPrompt) {
+        if (window.HYGToast) {
+          HYGToast.show("info", "Use your browser menu to install HYG Portal on this device.");
+        }
+        return;
+      }
+
+      deferredInstallPrompt.prompt();
+      const choice = await deferredInstallPrompt.userChoice.catch(function () {
+        return null;
+      });
+      deferredInstallPrompt = null;
+      setInstallButtonVisible(false);
+      setFloatingInstallButtonVisible(false);
 
       if (choice && choice.outcome === "accepted" && window.HYGToast) {
         HYGToast.show("success", "Installing HYG Portal.");

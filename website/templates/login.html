@@ -87,6 +87,12 @@
 
   </div>
 
+  <!-- Floating PWA Install Button -->
+  <button type="button" class="pwa-floating-install-btn hidden" id="pwaFloatingInstallBtn" title="Install HYG Portal" aria-label="Install HYG Portal app">
+    <i class="fa-solid fa-download"></i>
+    <span>Install App</span>
+  </button>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="{{ url_for('static', filename='js/toast.js') }}?v={{ static_version }}"></script>
   <script src="{{ url_for('static', filename='js/app.js') }}?v={{ static_version }}"></script>

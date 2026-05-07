@@ -2832,11 +2832,11 @@ th {
   }
 
   .ai-messages-head h1 {
-    font-size: 1.65rem;
+    font-size: 1.2rem;
   }
 
   .ai-messages-head p {
-    font-size: 1rem;
+    font-size: 0.9rem;
     line-height: 1.5;
   }
 
@@ -2844,30 +2844,9 @@ th {
     font-size: 0.85rem;
   }
 
+  /* Hide feature cards on mobile */
   .ai-feature-strip {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.65rem;
-  }
-
-  .ai-feature-card {
-    min-height: 52px;
-    padding: 0.65rem 0.75rem;
-  }
-
-  .ai-feature-card strong {
-    font-size: 1rem;
-  }
-
-  .ai-feature-card small {
-    font-size: 0.88rem;
-  }
-
-  .ai-feature-card i {
-    font-size: 1.15rem;
-  }
-
-  .ai-feature-phase {
-    font-size: 0.72rem;
+    display: none;
   }
 
   .ai-messages-grid {
@@ -2910,7 +2889,7 @@ th {
   }
 
   .ai-chat-message p {
-    font-size: 1.05rem;
+    font-size: 0.9rem;
     line-height: 1.65;
   }
 
@@ -2955,7 +2934,7 @@ th {
   }
 
   .ai-chat-form textarea {
-    font-size: 1.05rem;
+    font-size: 0.9rem;
     padding: 0.85rem;
     line-height: 1.5;
   }
@@ -2971,11 +2950,11 @@ th {
   }
 
   .ai-welcome-copy h1 {
-    font-size: 1.65rem;
+    font-size: 1.2rem;
   }
 
   .ai-welcome-copy p {
-    font-size: 1rem;
+    font-size: 0.9rem;
     line-height: 1.5;
   }
 
@@ -3005,6 +2984,10 @@ th {
   .ai-model-panel select {
     font-size: 0.95rem;
     padding: 0.6rem 0.7rem;
+  }
+
+  .ai-question-list button span {
+    font-size: 0.9rem;
   }
 }
 
@@ -3041,32 +3024,6 @@ th {
 
   .modal-footer .primary-btn {
     width: 100%;
-  }
-
-  /* Extra AI improvements for small mobile screens */
-  .ai-chat-message p {
-    font-size: 1.08rem;
-    line-height: 1.7;
-  }
-
-  .ai-chat-message strong {
-    font-size: 0.98rem;
-  }
-
-  .ai-messages-head h1 {
-    font-size: 1.7rem;
-  }
-
-  .ai-feature-card strong {
-    font-size: 1.05rem;
-  }
-
-  .ai-template-btn {
-    font-size: 1rem;
-  }
-
-  .ai-chat-form textarea {
-    font-size: 1.08rem;
   }
 }
 
@@ -3297,11 +3254,13 @@ th {
 }
 
 .ai-question-list button span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
   font-size: 0.78rem;
   font-weight: 700;
+  line-height: 1.3;
+  word-wrap: break-word;
 }
 
 .ai-question-list button i:last-child {
@@ -3476,7 +3435,7 @@ th {
   }
 
   .ai-welcome-copy p {
-    font-size: 0.76rem;
+    font-size: 0.8rem;
     line-height: 1.3;
   }
 
@@ -3529,7 +3488,9 @@ th {
   }
 
   .ai-question-list button span {
-    font-size: 0.72rem;
+    font-size: 0.8rem;
+    white-space: normal;
+    line-height: 1.3;
   }
 
   .ai-assist-desktop .ai-chat-panel {
@@ -3594,14 +3555,14 @@ th {
   }
 
   .ai-welcome-copy h1 {
-    font-size: 0.9rem;
+    font-size: 1.4rem;
     line-height: 1.15;
   }
 
   .ai-welcome-copy p {
     max-width: 230px;
     margin-top: 0.18rem;
-    font-size: 0.62rem;
+    font-size: 0.8rem;
     line-height: 1.28;
   }
 
@@ -3720,8 +3681,9 @@ th {
 
   .ai-question-list button span {
     min-width: 0;
-    font-size: 0.61rem;
-    line-height: 1.15;
+    font-size: 0.8rem;
+    line-height: 1.25;
+    white-space: normal;
   }
 
   .ai-question-list button i:last-child {
@@ -3793,7 +3755,7 @@ th {
     border-radius: 7px;
     padding: 0.55rem 0.52rem;
     background: #ffffff;
-    font-size: 0.68rem;
+    font-size: 0.9rem;
   }
 
   .ai-assist-desktop .ai-chat-actions {

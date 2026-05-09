@@ -37,11 +37,16 @@ PERK_APPROVAL_SENDER = "HYG Employee Portal - No Reply"
 AI_PROVIDER = os.getenv("AI_PROVIDER", "openrouter").strip().lower()
 OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "openrouter/free").strip()
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1-mini").strip()
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant").strip()
 LOCAL_AI_MODEL = os.getenv("OLLAMA_MODEL", "qwen3.5:0.8b").strip()
 AI_OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
-AI_MODEL_OPTIONS = (LOCAL_AI_MODEL, OPENROUTER_MODEL if AI_PROVIDER == "openrouter" else OPENAI_MODEL)
+AI_MODEL_OPTIONS = (
+    LOCAL_AI_MODEL,
+    GROQ_MODEL if AI_PROVIDER == "groq" else OPENROUTER_MODEL if AI_PROVIDER == "openrouter" else OPENAI_MODEL,
+)
 AI_DEFAULT_MODEL = AI_MODEL_OPTIONS[0]
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 ESARF_STATUS_DEPT_MGR_APPROVED = "Dept Mgr Approved"
 LEAVE_STATUS_DEPT_HR_APPROVED = "Dept/HR Approved"
@@ -121,6 +126,8 @@ def _configured_ai_provider_model(model):
     provider = (os.getenv("AI_PROVIDER") or AI_PROVIDER or "openrouter").strip().lower()
     if provider == "ollama":
         return provider, LOCAL_AI_MODEL
+    if provider == "groq":
+        return provider, model if model == GROQ_MODEL else GROQ_MODEL
     if provider == "openai":
         return provider, model if model == OPENAI_MODEL else OPENAI_MODEL
     return "openrouter", model if model == OPENROUTER_MODEL else OPENROUTER_MODEL
@@ -141,7 +148,7 @@ def _ai_system_prompt():
         "When an employee asks to apply for either perk, ask for transaction date, product name, quantity, and unit price if missing. "
         "Do not invent company policy; say when HR/Admin confirmation is needed. "
         "When drafting a message and details are missing, write a usable draft with simple placeholders. "
-        "Use clean plain text for drafts; avoid Markdown symbols such as asterisks, bold markers, and heading hashes. "
+        "Use simple formatting only when helpful: bold labels with double asterisks and keep bullets short. "
         "Keep the final answer direct and employee-friendly."
     )
 
@@ -201,6 +208,41 @@ def _call_openrouter_chat(message, model):
     return reply, ""
 
 
+def _call_groq_chat(message, model):
+    api_key = (os.getenv("GROQ_API_KEY") or "").strip()
+    if not api_key:
+        raise RuntimeError("missing_groq_key")
+
+    payload = {
+        "model": model or GROQ_MODEL,
+        "messages": [
+            {"role": "system", "content": _ai_system_prompt()},
+            {"role": "user", "content": message},
+        ],
+        "temperature": 0.35,
+        "max_tokens": 350,
+    }
+    request_payload = json.dumps(payload).encode("utf-8")
+    groq_request = Request(
+        GROQ_API_URL,
+        data=request_payload,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
+    with urlopen(groq_request, timeout=45) as response:
+        data = json.loads(response.read().decode("utf-8"))
+
+    choices = data.get("choices") or []
+    first_choice = choices[0] if choices else {}
+    message_data = first_choice.get("message") or {}
+    reply = (message_data.get("content") or "").strip()
+    return reply, ""
+
+
 def _call_ollama_chat(message, model):
     if not AI_OLLAMA_URL:
         raise RuntimeError("missing_ollama_url")
@@ -247,6 +289,9 @@ def _call_general_ai_chat(message, model):
     if provider == "ollama":
         if AI_OLLAMA_URL:
             api_key_configured = True
+    elif provider == "groq":
+        if (os.getenv("GROQ_API_KEY") or "").strip():
+            api_key_configured = True
     elif provider == "openai":
         if (os.getenv("OPENAI_API_KEY") or "").strip():
             api_key_configured = True
@@ -269,6 +314,8 @@ def _call_general_ai_chat(message, model):
     # Call the appropriate AI provider
     if provider == "ollama":
         return _call_ollama_chat(message, resolved_model)
+    if provider == "groq":
+        return _call_groq_chat(message, resolved_model)
     if provider == "openai":
         return _call_openai_chat(message, resolved_model)
     return _call_openrouter_chat(message, resolved_model)
@@ -2258,6 +2305,11 @@ def ai_messages_chat():
             return jsonify({
                 'success': False,
                 'message': 'HYG Assist AI is coming soon! The AI feature will be available once setup is complete.',
+            }), 503
+        if str(exc) == "missing_groq_key":
+            return jsonify({
+                'success': False,
+                'message': 'HYG Assist AI is almost ready. Please add the Groq API key to finish setup.',
             }), 503
         if str(exc) == "missing_ollama_url":
             return jsonify({

@@ -127,13 +127,78 @@
 
     if (!form || !input || !log) return;
 
+    function formatAssistantMessage(text) {
+      const fragment = document.createDocumentFragment();
+      const lines = String(text || "").replace(/\r\n/g, "\n").split("\n");
+      let list = null;
+
+      function appendFormattedInline(parent, value) {
+        const cleanedValue = String(value || "")
+          .replace(/^#{1,6}\s+/, "")
+          .replace(/^\s*[-*]\s+/, "");
+        const boldPattern = /(\*\*|__)(.*?)\1/g;
+        let lastIndex = 0;
+        let match;
+
+        while ((match = boldPattern.exec(cleanedValue)) !== null) {
+          if (match.index > lastIndex) {
+            parent.appendChild(document.createTextNode(cleanedValue.slice(lastIndex, match.index)));
+          }
+          const boldText = document.createElement("b");
+          boldText.textContent = match[2];
+          parent.appendChild(boldText);
+          lastIndex = boldPattern.lastIndex;
+        }
+
+        if (lastIndex < cleanedValue.length) {
+          parent.appendChild(document.createTextNode(cleanedValue.slice(lastIndex)));
+        }
+      }
+
+      function closeList() {
+        if (list) {
+          fragment.appendChild(list);
+          list = null;
+        }
+      }
+
+      function addParagraph(value) {
+        closeList();
+        if (!value.trim()) return;
+        const paragraph = document.createElement("p");
+        appendFormattedInline(paragraph, value);
+        fragment.appendChild(paragraph);
+      }
+
+      lines.forEach(function (line) {
+        const bulletMatch = line.match(/^\s*(?:[-*]|\d+[.)])\s+(.*)$/);
+        if (bulletMatch) {
+          if (!list) list = document.createElement("ul");
+          const item = document.createElement("li");
+          appendFormattedInline(item, bulletMatch[1]);
+          list.appendChild(item);
+          return;
+        }
+        addParagraph(line);
+      });
+      closeList();
+      return fragment;
+    }
+
     function appendMessage(role, text, actionUrl, actionLabel) {
       const item = document.createElement("article");
       item.className = `ai-chat-message is-${role}`;
       const title = document.createElement("strong");
       title.textContent = role === "user" ? "You" : "HYG Assist";
-      const body = document.createElement("p");
-      body.textContent = text;
+      const body = document.createElement("div");
+      body.className = "ai-chat-body";
+      if (role === "assistant") {
+        body.appendChild(formatAssistantMessage(text));
+      } else {
+        const paragraph = document.createElement("p");
+        paragraph.textContent = text;
+        body.appendChild(paragraph);
+      }
       item.append(title, body);
       if (actionUrl) {
         const action = document.createElement("a");

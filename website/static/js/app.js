@@ -482,6 +482,7 @@
 
   const appContent = document.getElementById("appContent");
   const pageCache = new Map();
+  const MAX_CACHE_SIZE = 20; // Limit cache to prevent memory issues
   let currentController = null;
 
   function isSameOriginPageLink(link) {
@@ -542,7 +543,7 @@
         appContent.innerHTML = buildSkeleton();
         appContent.classList.remove("is-leaving");
       }
-    }, 90);
+    }, 60); // Reduced from 90ms to 60ms for faster response
   }
 
   function loadDynamicStyles(doc) {
@@ -635,7 +636,7 @@
     setContentBusy(false);
     window.setTimeout(function () {
       appContent.classList.remove("is-entering");
-    }, 220);
+    }, 150); // Reduced from 220ms to 150ms for faster transitions
 
     updateActiveNavigation(url.pathname);
     runDynamicScripts(doc);
@@ -650,7 +651,8 @@
       setQuickActionsOpen(false);
     }
 
-    window.scrollTo({ top: 0, behavior: "instant" in document.documentElement.style ? "instant" : "auto" });
+    // Use instant scroll for faster navigation
+    window.scrollTo({ top: 0, behavior: "instant" });
   }
 
   async function fetchPage(url) {
@@ -664,12 +666,14 @@
     }
     currentController = new AbortController();
 
+    // Optimize fetch with higher priority
     const response = await fetch(url.href, {
       headers: {
         "X-Requested-With": "fetch",
         "Accept": "text/html"
       },
-      signal: currentController.signal
+      signal: currentController.signal,
+      priority: "high" // Request high priority
     });
 
     if (!response.ok) {
@@ -679,6 +683,13 @@
     const html = await response.text();
     const doc = new DOMParser().parseFromString(html, "text/html");
     doc.documentElement.setAttribute("data-pwa-url", response.url);
+    
+    // Manage cache size
+    if (pageCache.size >= MAX_CACHE_SIZE) {
+      const firstKey = pageCache.keys().next().value;
+      pageCache.delete(firstKey);
+    }
+    
     pageCache.set(cacheKey, doc);
     return doc.cloneNode(true);
   }
@@ -707,11 +718,13 @@
     const cacheKey = url.pathname + url.search;
     if (pageCache.has(cacheKey)) return;
 
+    // Use lower priority for prefetch to not interfere with current navigation
     fetch(url.href, {
       headers: {
         "X-Requested-With": "prefetch",
         "Accept": "text/html"
-      }
+      },
+      priority: "low" // Low priority for prefetch
     })
       .then(function (response) {
         if (!response.ok) return null;
@@ -719,6 +732,11 @@
       })
       .then(function (html) {
         if (!html) return;
+        // Manage cache size
+        if (pageCache.size >= MAX_CACHE_SIZE) {
+          const firstKey = pageCache.keys().next().value;
+          pageCache.delete(firstKey);
+        }
         pageCache.set(cacheKey, new DOMParser().parseFromString(html, "text/html"));
       })
       .catch(function () {});

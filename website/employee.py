@@ -699,6 +699,73 @@ def _parse_ai_time_range(prompt):
     )
 
 
+def _ai_month_map():
+    return {
+        "jan": 1, "january": 1,
+        "feb": 2, "february": 2,
+        "mar": 3, "march": 3,
+        "apr": 4, "april": 4,
+        "may": 5,
+        "jun": 6, "june": 6,
+        "jul": 7, "july": 7,
+        "aug": 8, "august": 8,
+        "sep": 9, "sept": 9, "september": 9,
+        "oct": 10, "october": 10,
+        "nov": 11, "november": 11,
+        "dec": 12, "december": 12,
+    }
+
+
+def _parse_ai_datetime_range(prompt):
+    text = (prompt or "").lower()
+    months = _ai_month_map()
+    month_names = "|".join(sorted(months.keys(), key=len, reverse=True))
+    match = re.search(
+        rf"\b({month_names})\.?\s+(\d{{1,2}})(?:,\s*(20\d{{2}}))?\s+"
+        rf"(\d{{1,2}})(?::(\d{{2}}))?\s*(am|pm)?\s*"
+        rf"(?:-|to|until)\s*"
+        rf"(?:(?:({month_names})\.?\s+)?(\d{{1,2}})(?:,\s*(20\d{{2}}))?\s+)?"
+        rf"(\d{{1,2}})(?::(\d{{2}}))?\s*(am|pm)\b",
+        text,
+    )
+    if not match:
+        return None
+
+    today = philippine_now().date()
+    start_month = months[match.group(1)]
+    start_day = int(match.group(2))
+    start_year = int(match.group(3) or today.year)
+    start_hour = int(match.group(4))
+    start_minute = int(match.group(5) or "0")
+    start_meridiem = match.group(6) or match.group(12)
+    end_month = months[match.group(7)] if match.group(7) else start_month
+    end_day = int(match.group(8) or start_day)
+    end_year = int(match.group(9) or start_year)
+    end_hour = int(match.group(10))
+    end_minute = int(match.group(11) or "0")
+    end_meridiem = match.group(12)
+
+    def to_24_hour(hour, meridiem):
+        if hour == 12:
+            hour = 0
+        if meridiem == "pm":
+            hour += 12
+        return hour
+
+    try:
+        start_date = datetime(start_year, start_month, start_day).date()
+        end_date = datetime(end_year, end_month, end_day).date()
+    except ValueError:
+        return None
+
+    start_time = f"{to_24_hour(start_hour, start_meridiem):02d}:{start_minute:02d}"
+    end_time = f"{to_24_hour(end_hour, end_meridiem):02d}:{end_minute:02d}"
+
+    if end_date < start_date:
+        end_date = start_date
+    return start_date, end_date, start_time, end_time
+
+
 def _parse_ai_request_date(prompt):
     text = (prompt or "").lower()
     today = philippine_now().date()
@@ -716,6 +783,21 @@ def _parse_ai_request_date(prompt):
         except ValueError:
             return today
 
+    months = _ai_month_map()
+    month_names = "|".join(sorted(months.keys(), key=len, reverse=True))
+    month_match = re.search(
+        rf"\b({month_names})\.?\s+(\d{{1,2}})(?:,\s*(20\d{{2}}))?",
+        text,
+    )
+    if month_match:
+        month = months[month_match.group(1)]
+        day = int(month_match.group(2))
+        year = int(month_match.group(3) or today.year)
+        try:
+            return datetime(year, month, day).date()
+        except ValueError:
+            return today
+
     return today
 
 
@@ -725,20 +807,7 @@ def _parse_ai_date_range(prompt):
     if any(word in text for word in ("yesterday", "today", "tomorrow", "tommorow")):
         return single_date, single_date
 
-    months = {
-        "jan": 1, "january": 1,
-        "feb": 2, "february": 2,
-        "mar": 3, "march": 3,
-        "apr": 4, "april": 4,
-        "may": 5,
-        "jun": 6, "june": 6,
-        "jul": 7, "july": 7,
-        "aug": 8, "august": 8,
-        "sep": 9, "sept": 9, "september": 9,
-        "oct": 10, "october": 10,
-        "nov": 11, "november": 11,
-        "dec": 12, "december": 12,
-    }
+    months = _ai_month_map()
     month_names = "|".join(sorted(months.keys(), key=len, reverse=True))
     match = re.search(
         rf"\b({month_names})\.?\s+(\d{{1,2}})(?:\s*(?:to|-|until)\s*(?:(?:{month_names})\.?\s+)?(\d{{1,2}}))?(?:,\s*(20\d{{2}}))?",
@@ -764,11 +833,58 @@ def _parse_ai_date_range(prompt):
     return start_date, end_date
 
 
+def _clean_ai_reason(value):
+    reason = re.sub(r"\s+", " ", (value or "").strip())
+    reason = reason.strip(" ,.;")
+    reason = re.sub(r"^(?:it\s+im|it\s+is|it's|its|i\s+am|i'm|im)\s+", "", reason, flags=re.IGNORECASE)
+    return reason.strip(" ,.;")
+
+
+def _extract_ai_reason(prompt):
+    text = (prompt or "").strip()
+    reason_marker = re.search(r"\breason\s*[:,-]?\s+(.+)$", text, flags=re.IGNORECASE)
+    if reason_marker:
+        return _clean_ai_reason(reason_marker.group(1))
+
+    matches = list(re.finditer(r"\b(?:because of|because|due to)\s+(.+)$", text, flags=re.IGNORECASE))
+    if matches:
+        return _clean_ai_reason(matches[-1].group(1))
+
+    for_match = re.search(
+        r"\bfor\s+(.+?)\s+(?:from\s+\d{1,2}|on\s+\w+|today|tomorrow|yesterday|$)",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if for_match:
+        candidate = for_match.group(1)
+        if not re.search(r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\w*\.?\s+\d{1,2}", candidate, flags=re.IGNORECASE):
+            return _clean_ai_reason(candidate)
+
+    return ""
+
+
+def _sentence_case(value):
+    text = _clean_ai_reason(value)
+    if not text:
+        return ""
+    return text[:1].upper() + text[1:]
+
+
 def _calculate_time_hours(time_from, time_to):
     start_time = datetime.strptime(time_from, "%H:%M").time()
     end_time = datetime.strptime(time_to, "%H:%M").time()
     start_dt = datetime.combine(philippine_now().date(), start_time)
     end_dt = datetime.combine(philippine_now().date(), end_time)
+    if end_dt <= start_dt:
+        end_dt += timedelta(days=1)
+    return round((end_dt - start_dt).total_seconds() / 3600, 2)
+
+
+def _calculate_datetime_hours(date_from, date_to, time_from, time_to):
+    start_time = datetime.strptime(time_from, "%H:%M").time()
+    end_time = datetime.strptime(time_to, "%H:%M").time()
+    start_dt = datetime.combine(date_from, start_time)
+    end_dt = datetime.combine(date_to, end_time)
     if end_dt <= start_dt:
         end_dt += timedelta(days=1)
     return round((end_dt - start_dt).total_seconds() / 3600, 2)
@@ -785,16 +901,18 @@ def _build_ai_esarf_draft(prompt):
     if not is_offset:
         return None
 
-    time_range = _parse_ai_time_range(prompt)
-    if not time_range:
+    datetime_range = _parse_ai_datetime_range(prompt)
+    time_range = None if datetime_range else _parse_ai_time_range(prompt)
+    if not datetime_range and not time_range:
         return None
 
-    date_value = _parse_ai_request_date(prompt)
-    time_from, time_to = time_range
-    reason_source = ""
-    reason_match = re.search(r"\b(?:due to|because of|because|for)\s+(.+)$", prompt, flags=re.IGNORECASE)
-    if reason_match:
-        reason_source = reason_match.group(1).strip().rstrip(".")
+    if datetime_range:
+        date_from, date_to, time_from, time_to = datetime_range
+    else:
+        date_from = _parse_ai_request_date(prompt)
+        date_to = date_from
+        time_from, time_to = time_range
+    reason_source = _extract_ai_reason(prompt)
     transaction_type = "Use Offset" if is_use_offset else ("Offset" if "offset" in text and "overtime" not in text and " ot " not in text else "OT")
     reason_labels = {
         "OT": "overtime",
@@ -802,7 +920,7 @@ def _build_ai_esarf_draft(prompt):
         "Use Offset": "use offset",
     }
     reason = (
-        f"Rendered {reason_labels[transaction_type]} for {reason_source}."
+        f"Rendered {reason_labels[transaction_type]} for {_sentence_case(reason_source)}."
         if reason_source
         else f"Rendered {reason_labels[transaction_type]} for urgent work requirements."
     )
@@ -815,11 +933,11 @@ def _build_ai_esarf_draft(prompt):
         "day_off": "Sun",
         "payroll_class": payroll_class,
         "transaction_types": [transaction_type],
-        "date_from": date_value.strftime("%Y-%m-%d"),
-        "date_to": date_value.strftime("%Y-%m-%d"),
+        "date_from": date_from.strftime("%Y-%m-%d"),
+        "date_to": date_to.strftime("%Y-%m-%d"),
         "time_from": time_from,
         "time_to": time_to,
-        "total_hours": f"{_calculate_time_hours(time_from, time_to):.2f}",
+        "total_hours": f"{_calculate_datetime_hours(date_from, date_to, time_from, time_to):.2f}",
         "reason": reason,
     }
 
@@ -830,10 +948,7 @@ def _build_ai_leave_draft(prompt):
         return None
 
     start_date, end_date = _parse_ai_date_range(prompt)
-    reason_source = ""
-    reason_match = re.search(r"\b(?:because of|because|due to|for)\s+(.+)$", prompt, flags=re.IGNORECASE)
-    if reason_match:
-        reason_source = reason_match.group(1).strip().rstrip(".")
+    reason_source = _extract_ai_reason(prompt)
 
     category = "Vacation Leave"
     other_leave = ""
@@ -855,7 +970,7 @@ def _build_ai_leave_draft(prompt):
         "leave_type": "With Pay",
         "leave_category": category,
         "other_leave": other_leave,
-        "reason": reason_source.capitalize() if reason_source else "Personal leave request.",
+        "reason": _sentence_case(reason_source) if reason_source else "Personal leave request.",
     }
 
 
@@ -2211,6 +2326,12 @@ def ai_messages_chat():
             'success': False,
             'message': 'Tell HYG Assist what you need help with first.',
         }), 400
+
+    prompt_lower = prompt.lower()
+    if "leave" in prompt_lower:
+        session.pop('ai_leave_draft', None)
+    if any(term in prompt_lower for term in ("esarf", "overtime", "offset", "file ot", "rendered ot", "missed punch", "time in", "time out")):
+        session.pop('ai_esarf_draft', None)
 
     account_answer = _answer_portal_account_question(prompt)
     if account_answer:

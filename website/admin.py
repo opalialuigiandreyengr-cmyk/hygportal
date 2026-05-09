@@ -244,6 +244,91 @@ def _scope_leave_query_for_current_user(leave_query):
     return leave_query
 
 
+def _display_name_for_user(user):
+    employee_profile = user.employee if user and user.employee else None
+    if employee_profile:
+        name = " ".join(
+            part for part in (
+                employee_profile.first_name,
+                employee_profile.middle_name,
+                employee_profile.last_name,
+            )
+            if part
+        ).strip()
+        if name:
+            return name
+    return (user.username if user else "An employee") or "An employee"
+
+
+def _notify_users_once(user_ids, title, message, category="info", link_url=None):
+    seen = set()
+    for user_id in user_ids:
+        if not user_id or user_id in seen:
+            continue
+        seen.add(user_id)
+        create_notification(user_id, title, message, category=category, link_url=link_url)
+
+
+def _notify_esarf_next_approvers(esarf_request):
+    status = (esarf_request.status or "").strip()
+    request_label = esarf_request.esarf_number or f"ESARF #{esarf_request.id}"
+    approver_ids = []
+    message = ""
+
+    if status == ESARF_STATUS_DEPT_MGR_APPROVED:
+        approver_ids = [
+            user_id for user_id, in db.session.query(EsarfApprover.user_id)
+            .filter(EsarfApprover.approver_role == "operation")
+            .all()
+        ]
+        message = f"{request_label} is waiting for Operations approval."
+    elif status == ESARF_STATUS_DEPT_MGR_OPS_APPROVED:
+        approver_ids = [
+            user_id for user_id, in db.session.query(EsarfApprover.user_id)
+            .filter(EsarfApprover.approver_role == "general manager")
+            .all()
+        ]
+        message = f"{request_label} is waiting for General Manager approval."
+
+    _notify_users_once(
+        approver_ids,
+        "ESARF waiting for approval",
+        message,
+        category="info",
+        link_url=url_for("admin.esarf_requests", type="esarf"),
+    )
+
+
+def _notify_leave_next_approvers(leave_request):
+    status = (leave_request.status or "").strip()
+    submitter_name = _display_name_for_user(leave_request.submitted_by_user)
+    approver_ids = []
+    message = ""
+
+    if status == LEAVE_STATUS_DEPT_HR_APPROVED:
+        approver_ids = [
+            user_id for user_id, in db.session.query(LeaveApprover.user_id)
+            .filter(LeaveApprover.approver_role == "operation")
+            .all()
+        ]
+        message = f"{submitter_name}'s leave request is waiting for Operations approval."
+    elif status == LEAVE_STATUS_DEPT_HR_OPS_APPROVED:
+        approver_ids = [
+            user_id for user_id, in db.session.query(LeaveApprover.user_id)
+            .filter(LeaveApprover.approver_role == "general manager")
+            .all()
+        ]
+        message = f"{submitter_name}'s leave request is waiting for General Manager approval."
+
+    _notify_users_once(
+        approver_ids,
+        "Leave waiting for approval",
+        message,
+        category="info",
+        link_url=url_for("admin.esarf_requests", type="leave"),
+    )
+
+
 def _format_employee_no(hired_date, sequence):
     date_part = hired_date.strftime("%m%d%Y") if hired_date else "00000000"
     return f"{date_part}-{sequence:02d}"
@@ -1409,6 +1494,7 @@ def update_esarf_status(esarf_id):
             category=notification_category,
             link_url=url_for("employee.esarf_requests"),
         )
+        _notify_esarf_next_approvers(esarf_request)
         db.session.commit()
         flash(success_message, category="success")
     except Exception:
@@ -1529,6 +1615,7 @@ def update_leave_status(leave_id):
             category=notification_category,
             link_url=url_for("employee.leaves"),
         )
+        _notify_leave_next_approvers(leave_request)
         db.session.commit()
         if leave_request.status == LEAVE_STATUS_APPROVED:
             flash(

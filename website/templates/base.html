@@ -49,7 +49,8 @@
       {% set can_manage_settings = role == 'admin' %}
       {% set can_view_esarf_requests = role in ['admin', 'timekeeper'] or is_esarf_approver %}
       {% set can_view_leave_requests = role in ['admin', 'timekeeper'] or is_leave_approver %}
-      {% set is_mobile_approver = can_view_esarf_requests or can_view_leave_requests %}
+      {% set can_view_perk_requests = role in ['admin', 'hr'] or is_perk_approver %}
+      {% set is_mobile_approver = can_view_esarf_requests or can_view_leave_requests or can_view_perk_requests %}
       {% set can_view_attendance = role in ['admin', 'user'] %}
       {% set can_view_leaves = role == 'admin' or has_employee_profile %}
       <ul class="nav-list">
@@ -114,7 +115,7 @@
 
         {% if has_employee_profile %}
         <li>
-          <a href="{% if is_mobile_approver and can_view_esarf_requests %}{{ url_for('admin.esarf_requests', type='esarf') }}{% else %}{{ url_for('employee.esarf_requests') }}{% endif %}" class="nav-link {% if request.path == '/esarf_requests' or request.path == '/employee/esarf_requests' %}active{% endif %}">
+            <a href="{% if is_mobile_approver and can_view_esarf_requests %}{{ url_for('admin.esarf_requests', type='esarf') }}{% elif is_mobile_approver and can_view_leave_requests %}{{ url_for('admin.esarf_requests', type='leave') }}{% elif is_mobile_approver and can_view_perk_requests %}{{ url_for('admin.perk_requests') }}{% else %}{{ url_for('employee.esarf_requests') }}{% endif %}" class="nav-link {% if request.path == '/esarf_requests' or request.path == '/employee/esarf_requests' or request.path == '/perk_requests' %}active{% endif %}">
             <i class="fa-solid fa-file-signature"></i>
             <span>Requests</span>
           </a>
@@ -228,10 +229,15 @@
 
   {% if has_employee_profile %}
 
-    <a href="{% if is_mobile_approver and can_view_esarf_requests %}{{ url_for('admin.esarf_requests', type='esarf') }}{% else %}{{ url_for('employee.esarf_requests') }}{% endif %}"
-       class="mobile-nav-link {% if request.path == '/esarf_requests' or request.path == '/employee/esarf_requests' %}active{% endif %}">
+    <a href="{% if is_mobile_approver and can_view_esarf_requests %}{{ url_for('admin.esarf_requests', type='esarf') }}{% elif is_mobile_approver and can_view_leave_requests %}{{ url_for('admin.esarf_requests', type='leave') }}{% elif is_mobile_approver and can_view_perk_requests %}{{ url_for('admin.perk_requests') }}{% else %}{{ url_for('employee.esarf_requests') }}{% endif %}"
+       class="mobile-nav-link {% if request.path == '/esarf_requests' or request.path == '/employee/esarf_requests' or request.path == '/perk_requests' %}active{% endif %}">
       <i class="fa-solid fa-file-signature"></i>
-      <span>Requests</span>
+      <span class="mobile-nav-label-with-count">
+        Requests
+        {% if approver_request_count %}
+        <span class="mobile-nav-count-inline" aria-hidden="true">{{ approver_request_count if approver_request_count < 100 else '99+' }}</span>
+        {% endif %}
+      </span>
     </a>
 
     <button type="button"
@@ -291,7 +297,7 @@
       <span>Departments</span>
     </a>
 
-  {% elif can_view_esarf_requests or can_view_leave_requests %}
+  {% elif can_view_esarf_requests or can_view_leave_requests or can_view_perk_requests %}
 
     {% if can_view_esarf_requests %}
     <a href="{{ url_for('admin.esarf_requests', type='esarf') }}"
@@ -311,6 +317,19 @@
        class="mobile-nav-link {% if request.path == '/esarf_requests' and request.args.get('type') == 'leave' %}active{% endif %}">
       <i class="fa-solid fa-calendar-day"></i>
       <span>Leaves</span>
+    </a>
+    {% endif %}
+
+    {% if can_view_perk_requests and not can_view_esarf_requests and not can_view_leave_requests %}
+    <a href="{{ url_for('admin.perk_requests') }}"
+       class="mobile-nav-link {% if request.path == '/perk_requests' %}active{% endif %}">
+      <i class="fa-solid fa-gift"></i>
+      <span class="mobile-nav-label-with-count">
+        Perks
+        {% if approver_request_count %}
+        <span class="mobile-nav-count-inline" aria-hidden="true">{{ approver_request_count if approver_request_count < 100 else '99+' }}</span>
+        {% endif %}
+      </span>
     </a>
     {% endif %}
 

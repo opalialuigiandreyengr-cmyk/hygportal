@@ -5,6 +5,7 @@ import os
 import random
 import re
 import smtplib
+import uuid
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -27,6 +28,7 @@ from .models import (
     User,
     EsarfApprover,
     LeaveApprover,
+    PerkApprover,
 )
 
 employee = Blueprint('employee', __name__)
@@ -50,6 +52,8 @@ GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 ESARF_STATUS_DEPT_MGR_APPROVED = "Dept Mgr Approved"
 LEAVE_STATUS_DEPT_HR_APPROVED = "Dept/HR Approved"
+ESARF_STATUS_DEPT_MGR_OPS_APPROVED = "Dept Mgr Ops Approved"
+LEAVE_STATUS_DEPT_HR_OPS_APPROVED = "Dept/HR Ops Approved"
 
 
 def _format_employee_no(hired_date, sequence):
@@ -279,6 +283,140 @@ def _call_ollama_chat(message, model):
     reply = (message_data.get("content") or "").strip()
     thinking = (message_data.get("thinking") or "").strip()
     return reply, thinking
+
+
+def _extract_json_object(text):
+    raw = (text or "").strip()
+    if not raw:
+        return None
+    raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.IGNORECASE | re.DOTALL).strip()
+    start = raw.find("{")
+    end = raw.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        return None
+    try:
+        return json.loads(raw[start:end + 1])
+    except ValueError:
+        return None
+
+
+def _call_structured_ai_json(prompt):
+    provider, model = _resolve_ai_provider_model(_ai_model_choice(None))
+    system_prompt = (
+        "You extract employee portal request drafts from natural language. "
+        "Return only compact JSON. Do not include markdown, explanations, or extra text. "
+        "Use null for missing fields. Dates must be YYYY-MM-DD."
+    )
+    today = philippine_now().date()
+    extraction_prompt = (
+        f"Today is {today.isoformat()} in Asia/Manila. "
+        "Extract this request into exactly this JSON shape: "
+        '{"intent":"leave|esarf|none",'
+        '"leave":{"start_date":null,"end_date":null,"leave_type":null,'
+        '"leave_category":null,"other_leave":null,"reason":null},'
+        '"esarf":{"date_from":null,"date_to":null,"time_from":null,"time_to":null,'
+        '"transaction_type":null,"reason":null}}. '
+        "Allowed leave_type values: With Pay, Without Pay, Both. "
+        "Allowed leave_category values: Sick Leave, Vacation Leave, Emergency Leave, Maternity Leave, Others. "
+        "Allowed esarf transaction_type values: OT, Offset, Use Offset, FIO, OB, Adjustment. "
+        "Infer leave_category from the reason when clear. Fiesta, birthday, vacation, travel, or holiday are Vacation Leave. "
+        "Tired, rest, family, personal, or unspecified personal reasons are Others with other_leave Personal Leave. "
+        "Sick, fever, doctor, hospital, medical, or illness are Sick Leave. "
+        "For ESARF, overtime or OT means transaction_type OT. "
+        f"Request: {prompt}"
+    )
+
+    try:
+        if provider == "ollama":
+            if not AI_OLLAMA_URL:
+                return None
+            payload = {
+                "model": model,
+                "stream": False,
+                "think": False,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": extraction_prompt},
+                ],
+                "options": {"temperature": 0, "num_ctx": 2048, "num_predict": 260},
+            }
+            ai_request = Request(
+                f"{AI_OLLAMA_URL}/api/chat",
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urlopen(ai_request, timeout=45) as response:
+                data = json.loads(response.read().decode("utf-8"))
+            content = ((data.get("message") or {}).get("content") or "").strip()
+        elif provider == "groq":
+            api_key = (os.getenv("GROQ_API_KEY") or "").strip()
+            if not api_key:
+                return None
+            payload = {
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": extraction_prompt},
+                ],
+                "temperature": 0,
+                "max_tokens": 260,
+            }
+            ai_request = Request(
+                GROQ_API_URL,
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                method="POST",
+            )
+            with urlopen(ai_request, timeout=30) as response:
+                data = json.loads(response.read().decode("utf-8"))
+            content = (((data.get("choices") or [{}])[0].get("message") or {}).get("content") or "").strip()
+        elif provider == "openai":
+            api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
+            if not api_key:
+                return None
+            from openai import OpenAI
+            client = OpenAI(api_key=api_key)
+            response = client.responses.create(
+                model=model,
+                input=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": extraction_prompt},
+                ],
+            )
+            content = (response.output_text or "").strip()
+        else:
+            api_key = (os.getenv("OPENROUTER_API_KEY") or "").strip()
+            if not api_key:
+                return None
+            payload = {
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": extraction_prompt},
+                ],
+                "temperature": 0,
+                "max_tokens": 260,
+            }
+            ai_request = Request(
+                OPENROUTER_API_URL,
+                data=json.dumps(payload).encode("utf-8"),
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": os.getenv("APP_PUBLIC_URL", "https://www.pythonanywhere.com"),
+                    "X-Title": "HYG Employee Portal",
+                },
+                method="POST",
+            )
+            with urlopen(ai_request, timeout=30) as response:
+                data = json.loads(response.read().decode("utf-8"))
+            content = (((data.get("choices") or [{}])[0].get("message") or {}).get("content") or "").strip()
+    except Exception:
+        return None
+
+    parsed = _extract_json_object(content)
+    return parsed if isinstance(parsed, dict) else None
 
 
 def _call_general_ai_chat(message, model):
@@ -656,6 +794,19 @@ def _answer_portal_account_question(prompt):
         word in prompt_lower
         for word in ("credit", "credits", "balance", "have", "left", "available")
     )
+    asks_leave_credits = (
+        "leave" in prompt_lower
+        and any(word in prompt_lower for word in ("credit", "credits", "balance", "have", "left", "available", "remaining"))
+        and any(word in prompt_lower for word in ("how many", "how much", "check", "show", "what", "available", "remaining", "left"))
+    )
+    if asks_leave_credits:
+        credits = int(current_user.leave_credits or 0)
+        unit = "day" if credits == 1 else "days"
+        return {
+            "reply": f"You currently have {credits} leave credit {unit} available.",
+            "thinking": "I checked the leave credit balance saved on your portal account.",
+        }
+
     if not asks_offset:
         return None
 
@@ -665,6 +816,30 @@ def _answer_portal_account_question(prompt):
         "reply": f"You currently have {credits:.2f} offset credit {unit} available.",
         "thinking": _build_assist_thinking(prompt),
     }
+
+
+def _is_leave_draft_request(prompt):
+    text = (prompt or "").lower()
+    if "leave" not in text:
+        return False
+    if any(word in text for word in ("credit", "credits", "balance", "available", "remaining", "left")):
+        if any(word in text for word in ("how many", "how much", "check", "show", "what")):
+            return False
+    return any(
+        phrase in text
+        for phrase in (
+            "file leave",
+            "file a leave",
+            "apply leave",
+            "apply for leave",
+            "request leave",
+            "request a leave",
+            "submit leave",
+            "take leave",
+            "leave today",
+            "leave tomorrow",
+        )
+    )
 
 
 def _parse_ai_time_range(prompt):
@@ -804,6 +979,11 @@ def _parse_ai_request_date(prompt):
 def _parse_ai_date_range(prompt):
     text = (prompt or "").lower()
     single_date = _parse_ai_request_date(prompt)
+    today = philippine_now().date()
+    if re.search(r"\btoday\s*(?:and|to|-|until)\s*tom+or+ow\b", text):
+        return today, today + timedelta(days=1)
+    if re.search(r"\btom+or+ow\s*(?:and|to|-|until)\s*(?:the\s+)?next\s+day\b", text):
+        return today + timedelta(days=1), today + timedelta(days=2)
     if any(word in text for word in ("yesterday", "today", "tomorrow", "tommorow")):
         return single_date, single_date
 
@@ -868,6 +1048,135 @@ def _sentence_case(value):
     if not text:
         return ""
     return text[:1].upper() + text[1:]
+
+
+def _parse_ai_iso_date(value):
+    if not value:
+        return None
+    try:
+        return datetime.strptime(str(value), "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def _normalize_ai_leave_type(value):
+    text = _normalize_text(value)
+    if text in {"without pay", "unpaid", "lwop", "no pay", "not paid"}:
+        return "Without Pay"
+    if text == "both":
+        return "Both"
+    if text in {"with pay", "paid", "with salary"}:
+        return "With Pay"
+    return ""
+
+
+def _normalize_ai_leave_category(value, reason):
+    text = _normalize_text(value)
+    reason_text = _normalize_text(reason)
+    combined = f"{text} {reason_text}".strip()
+    if any(word in combined for word in ("sick", "medical", "doctor", "hospital", "illness", "fever")):
+        return "Sick Leave", ""
+    if any(word in combined for word in ("emergency", "urgent")):
+        return "Emergency Leave", ""
+    if "maternity" in combined or "paternity" in combined:
+        return "Maternity Leave", ""
+    if any(word in combined for word in ("birthday", "fiesta", "holiday", "vacation", "travel")):
+        return "Vacation Leave", ""
+    canonical = {
+        "sick leave": "Sick Leave",
+        "vacation leave": "Vacation Leave",
+        "emergency leave": "Emergency Leave",
+        "maternity leave": "Maternity Leave",
+    }
+    if text in canonical:
+        return canonical[text], ""
+    return "Others", "Personal Leave"
+
+
+def _build_ai_structured_leave_draft(prompt):
+    data = _call_structured_ai_json(prompt)
+    if not data or data.get("intent") != "leave":
+        return None
+
+    leave_data = data.get("leave") or {}
+    start_date = _parse_ai_iso_date(leave_data.get("start_date")) or _parse_ai_date_range(prompt)[0]
+    end_date = _parse_ai_iso_date(leave_data.get("end_date")) or start_date
+    if end_date < start_date:
+        end_date = start_date
+
+    reason = _sentence_case(leave_data.get("reason")) or _sentence_case(_extract_ai_reason(prompt)) or "Personal leave request."
+    leave_type = _normalize_ai_leave_type(leave_data.get("leave_type")) or _build_ai_leave_draft(prompt)["leave_type"]
+    category, inferred_other = _normalize_ai_leave_category(leave_data.get("leave_category"), reason)
+    other_leave = ""
+    if category == "Others":
+        other_leave = _sentence_case(leave_data.get("other_leave")) or inferred_other or "Personal Leave"
+
+    return {
+        "start_date": start_date.strftime("%Y-%m-%d"),
+        "end_date": end_date.strftime("%Y-%m-%d"),
+        "leave_type": leave_type,
+        "leave_category": category,
+        "other_leave": other_leave,
+        "reason": reason,
+    }
+
+
+def _normalize_ai_esarf_type(value, prompt):
+    text = _normalize_text(value)
+    prompt_text = _normalize_text(prompt)
+    if text in {"ot", "overtime"} or "overtime" in prompt_text or "file ot" in prompt_text:
+        return "OT"
+    if text in {"use offset", "use-offset"} or "use offset" in prompt_text:
+        return "Use Offset"
+    if text == "offset" or "offset" in prompt_text:
+        return "Offset"
+    if text in {"fio", "failure to punch", "failure to punch in/out"}:
+        return "FIO"
+    if text in {"ob", "official business"}:
+        return "OB"
+    if text == "adjustment":
+        return "Adjustment"
+    return ""
+
+
+def _build_ai_structured_esarf_draft(prompt):
+    data = _call_structured_ai_json(prompt)
+    if not data or data.get("intent") != "esarf":
+        return None
+
+    esarf_data = data.get("esarf") or {}
+    date_from = _parse_ai_iso_date(esarf_data.get("date_from"))
+    date_to = _parse_ai_iso_date(esarf_data.get("date_to")) or date_from
+    time_from = (esarf_data.get("time_from") or "").strip()
+    time_to = (esarf_data.get("time_to") or "").strip()
+    transaction_type = _normalize_ai_esarf_type(esarf_data.get("transaction_type"), prompt)
+
+    if not all([date_from, date_to, time_from, time_to, transaction_type]):
+        return None
+    if not re.match(r"^\d{2}:\d{2}$", time_from) or not re.match(r"^\d{2}:\d{2}$", time_to):
+        return None
+
+    reason_source = _sentence_case(esarf_data.get("reason")) or _sentence_case(_extract_ai_reason(prompt))
+    reason_labels = {"OT": "overtime", "Offset": "offset", "Use Offset": "use offset", "FIO": "FIO", "OB": "official business", "Adjustment": "time adjustment"}
+    reason = (
+        f"Rendered {reason_labels.get(transaction_type, transaction_type)} for {reason_source}."
+        if reason_source else f"Rendered {reason_labels.get(transaction_type, transaction_type)} for urgent work requirements."
+    )
+    employee_profile = current_user.employee
+    payroll_class = "Managerial" if employee_profile and employee_profile.position and "manager" in employee_profile.position.lower() else "Rank and File"
+
+    return {
+        "time_schedule": "9AM - 6PM",
+        "day_off": "Sun",
+        "payroll_class": payroll_class,
+        "transaction_types": [transaction_type],
+        "date_from": date_from.strftime("%Y-%m-%d"),
+        "date_to": date_to.strftime("%Y-%m-%d"),
+        "time_from": time_from,
+        "time_to": time_to,
+        "total_hours": f"{_calculate_datetime_hours(date_from, date_to, time_from, time_to):.2f}",
+        "reason": reason,
+    }
 
 
 def _calculate_time_hours(time_from, time_to):
@@ -949,6 +1258,24 @@ def _build_ai_leave_draft(prompt):
 
     start_date, end_date = _parse_ai_date_range(prompt)
     reason_source = _extract_ai_reason(prompt)
+    without_pay_terms = (
+        r"\bwithout\s+pay\b",
+        r"\bno\s+pay\b",
+        r"\bunpaid\b",
+        r"\blwop\b",
+        r"\bno\s+salary\b",
+        r"\bnot\s+paid\b",
+    )
+    with_pay_terms = (
+        r"\bwith\s+pay\b",
+        r"\bpaid\b",
+        r"\bwith\s+salary\b",
+    )
+    leave_type = "With Pay"
+    if any(re.search(pattern, text) for pattern in without_pay_terms):
+        leave_type = "Without Pay"
+    elif any(re.search(pattern, text) for pattern in with_pay_terms):
+        leave_type = "With Pay"
 
     category = "Vacation Leave"
     other_leave = ""
@@ -958,8 +1285,11 @@ def _build_ai_leave_draft(prompt):
         category = "Emergency Leave"
     elif any(word in text for word in ("maternity", "paternity")):
         category = "Maternity Leave"
-    elif "birthday" in text:
+    elif any(word in text for word in ("birthday", "fiesta", "holiday", "vacation")):
         category = "Vacation Leave"
+    elif any(word in text for word in ("tired", "fatigue", "rest", "personal", "family")):
+        category = "Others"
+        other_leave = "Personal Leave"
     elif reason_source:
         category = "Others"
         other_leave = "Personal Leave"
@@ -967,7 +1297,7 @@ def _build_ai_leave_draft(prompt):
     return {
         "start_date": start_date.strftime("%Y-%m-%d"),
         "end_date": end_date.strftime("%Y-%m-%d"),
-        "leave_type": "With Pay",
+        "leave_type": leave_type,
         "leave_category": category,
         "other_leave": other_leave,
         "reason": _sentence_case(reason_source) if reason_source else "Personal leave request.",
@@ -1000,6 +1330,115 @@ def _can_auto_first_approve_leave():
     if approver_department and requester_department:
         return approver_department == requester_department
     return True
+
+
+def _employee_display_name(user):
+    employee_profile = user.employee if user and user.employee else None
+    if employee_profile:
+        name = " ".join(
+            part for part in (
+                employee_profile.first_name,
+                employee_profile.middle_name,
+                employee_profile.last_name,
+            )
+            if part
+        ).strip()
+        if name:
+            return name
+    return (user.username if user else "An employee") or "An employee"
+
+
+def _employee_department(user):
+    if not user or not user.employee:
+        return ""
+    return _normalize_text(user.employee.department)
+
+
+def _notify_users_once(user_ids, title, message, category="info", link_url=None):
+    seen = set()
+    for user_id in user_ids:
+        if not user_id or user_id in seen:
+            continue
+        seen.add(user_id)
+        create_notification(user_id, title, message, category=category, link_url=link_url)
+
+
+def _notify_esarf_waiting_approvers(esarf_request):
+    status = (esarf_request.status or "Pending").strip()
+    submitter = esarf_request.submitted_by_user
+    submitter_name = _employee_display_name(submitter)
+    request_label = esarf_request.esarf_number or f"ESARF #{esarf_request.id}"
+    message = f"{submitter_name} submitted {request_label}."
+    approver_ids = []
+
+    if status == "Pending":
+        submitter_department = _employee_department(submitter)
+        for approver in EsarfApprover.query.filter_by(approver_role="dept manager").all():
+            if submitter_department and _normalize_text(approver.department_name) == submitter_department:
+                approver_ids.append(approver.user_id)
+    elif status == ESARF_STATUS_DEPT_MGR_APPROVED:
+        approver_ids = [
+            user_id for user_id, in db.session.query(EsarfApprover.user_id)
+            .filter(EsarfApprover.approver_role == "operation")
+            .all()
+        ]
+        message = f"{request_label} is waiting for Operations approval."
+    elif status == ESARF_STATUS_DEPT_MGR_OPS_APPROVED:
+        approver_ids = [
+            user_id for user_id, in db.session.query(EsarfApprover.user_id)
+            .filter(EsarfApprover.approver_role == "general manager")
+            .all()
+        ]
+        message = f"{request_label} is waiting for General Manager approval."
+
+    _notify_users_once(
+        approver_ids,
+        "ESARF waiting for approval",
+        message,
+        category="info",
+        link_url=url_for("admin.esarf_requests", type="esarf"),
+    )
+
+
+def _notify_leave_waiting_approvers(leave_request):
+    status = (leave_request.status or "Pending").strip()
+    submitter = leave_request.submitted_by_user
+    submitter_name = _employee_display_name(submitter)
+    message = f"{submitter_name} submitted a {leave_request.leave_category} leave request."
+    approver_ids = []
+
+    if status == "Pending":
+        submitter_department = _employee_department(submitter)
+        for approver in LeaveApprover.query.filter_by(approver_role="department").all():
+            if submitter_department and _normalize_text(approver.department_name) == submitter_department:
+                approver_ids.append(approver.user_id)
+        approver_ids.extend(
+            user_id for user_id, in db.session.query(LeaveApprover.user_id)
+            .filter(LeaveApprover.approver_role == "hr")
+            .all()
+        )
+    elif status == LEAVE_STATUS_DEPT_HR_APPROVED:
+        approver_ids = [
+            user_id for user_id, in db.session.query(LeaveApprover.user_id)
+            .filter(LeaveApprover.approver_role == "operation")
+            .all()
+        ]
+        message = f"{submitter_name}'s leave request is waiting for Operations approval."
+    elif status == LEAVE_STATUS_DEPT_HR_OPS_APPROVED:
+        approver_ids = [
+            user_id for user_id, in db.session.query(LeaveApprover.user_id)
+            .filter(LeaveApprover.approver_role == "general manager")
+            .all()
+        ]
+        message = f"{submitter_name}'s leave request is waiting for General Manager approval."
+
+    _notify_users_once(
+        approver_ids,
+        "Leave waiting for approval",
+        message,
+        category="info",
+        link_url=url_for("admin.esarf_requests", type="leave"),
+    )
 
 
 def _activity_sort_date(value):
@@ -1437,7 +1876,11 @@ def esarf():
     esarf_form = {}
     esarf_transaction_types = []
     if request.method == 'GET' and request.args.get('ai_draft') == '1':
+        requested_draft_id = request.args.get('draft_id')
         draft = session.pop('ai_esarf_draft', None)
+        draft_id = session.pop('ai_esarf_draft_id', None)
+        if requested_draft_id and draft_id and requested_draft_id != draft_id:
+            draft = None
         if isinstance(draft, dict):
             esarf_form = {
                 'time_schedule': draft.get('time_schedule', ''),
@@ -1597,6 +2040,7 @@ def esarf():
             new_request.esarf_number = f"ESARF-{datetime.utcnow().year}-{new_request.id:03d}"
             if has_use_offset and request_status == "Approved":
                 current_user.offset_credits = max(0.0, float(current_user.offset_credits or 0) - float(total_hours or 0))
+            _notify_esarf_waiting_approvers(new_request)
             db.session.commit()
 
             if new_request.status == "Approved" and has_use_offset:
@@ -1688,6 +2132,7 @@ def submit_leave():
             category="success",
             link_url=url_for("employee.leave_requests"),
         )
+        _notify_leave_waiting_approvers(new_leave_request)
         db.session.commit()
         if new_leave_request.status == LEAVE_STATUS_DEPT_HR_APPROVED:
             flash(
@@ -1783,7 +2228,11 @@ def leaves():
 
     leave_form = {}
     if request.args.get('ai_draft') == '1':
+        requested_draft_id = request.args.get('draft_id')
         draft = session.pop('ai_leave_draft', None)
+        draft_id = session.pop('ai_leave_draft_id', None)
+        if requested_draft_id and draft_id and requested_draft_id != draft_id:
+            draft = None
         if isinstance(draft, dict):
             leave_form = {
                 'start_date': draft.get('start_date', ''),
@@ -2328,10 +2777,9 @@ def ai_messages_chat():
         }), 400
 
     prompt_lower = prompt.lower()
-    if "leave" in prompt_lower:
-        session.pop('ai_leave_draft', None)
-    if any(term in prompt_lower for term in ("esarf", "overtime", "offset", "file ot", "rendered ot", "missed punch", "time in", "time out")):
-        session.pop('ai_esarf_draft', None)
+    session.pop('ai_leave_draft', None)
+    session.pop('ai_esarf_draft', None)
+    session.modified = True
 
     account_answer = _answer_portal_account_question(prompt)
     if account_answer:
@@ -2366,24 +2814,36 @@ def ai_messages_chat():
             'model': 'portal perks',
         })
 
-    leave_draft = _build_ai_leave_draft(prompt)
+    leave_draft = None
+    if _is_leave_draft_request(prompt):
+        leave_draft = _build_ai_structured_leave_draft(prompt) or _build_ai_leave_draft(prompt)
     if leave_draft:
+        draft_id = uuid.uuid4().hex
         session['ai_leave_draft'] = leave_draft
+        session['ai_leave_draft_id'] = draft_id
+        session.modified = True
+        category_label = leave_draft['other_leave'] if leave_draft['leave_category'] == "Others" and leave_draft['other_leave'] else leave_draft['leave_category']
         return jsonify({
             'success': True,
             'reply': (
-                f"I prepared a leave request draft for {leave_draft['start_date']} "
-                f"to {leave_draft['end_date']}. Please review it before submitting."
+                f"I prepared a {leave_draft['leave_type']} {category_label} draft for "
+                f"{leave_draft['start_date']} to {leave_draft['end_date']} "
+                f"with reason: {leave_draft['reason']}. Please review it before submitting."
             ),
             'thinking': _build_assist_thinking(prompt),
-            'action_url': url_for('employee.leaves', ai_draft=1),
+            'action_url': url_for('employee.leaves', ai_draft=1, draft_id=draft_id),
             'action_label': 'Review Leave Draft',
             'model': 'portal draft',
         })
 
-    esarf_draft = _build_ai_esarf_draft(prompt)
+    esarf_draft = None
+    if any(term in prompt_lower for term in ("esarf", "overtime", "offset", "file ot", "rendered ot", "missed punch", "time in", "time out")):
+        esarf_draft = _build_ai_structured_esarf_draft(prompt) or _build_ai_esarf_draft(prompt)
     if esarf_draft:
+        draft_id = uuid.uuid4().hex
         session['ai_esarf_draft'] = esarf_draft
+        session['ai_esarf_draft_id'] = draft_id
+        session.modified = True
         draft_type = esarf_draft['transaction_types'][0]
         draft_type_label = {
             'OT': 'overtime',
@@ -2399,8 +2859,19 @@ def ai_messages_chat():
                 f"({esarf_draft['total_hours']} hours). Please review it before submitting."
             ),
             'thinking': 'I understood this as an ESARF request, filled the date and time, calculated the hours, and generated a clear reason.',
-            'action_url': url_for('employee.esarf', ai_draft=1),
+            'action_url': url_for('employee.esarf', ai_draft=1, draft_id=draft_id),
             'action_label': 'Review ESARF Draft',
+            'model': 'portal draft',
+        })
+
+    if any(term in prompt_lower for term in ("esarf", "overtime", "offset", "file ot", "rendered ot", "missed punch", "time in", "time out")):
+        return jsonify({
+            'success': True,
+            'reply': (
+                "I can prepare the ESARF draft, but I still need the start and end time. "
+                "Try: file overtime today from 6pm to 9pm because our fiesta."
+            ),
+            'thinking': "I recognized this as an ESARF/overtime request, but the time range is missing.",
             'model': 'portal draft',
         })
 

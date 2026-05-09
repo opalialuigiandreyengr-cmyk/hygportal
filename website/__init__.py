@@ -392,8 +392,9 @@ def create_app():
         is_leave_approver = False
         approver_request_count = 0
         if current_user.is_authenticated:
-            from .models import Employee, EsarfApprover, EsarfRequest, LeaveApprover, LeaveRequest, Notification, PerkApprover, User
-            is_perk_approver = PerkApprover.query.filter_by(user_id=current_user.id).first() is not None
+            from .models import DiscountRequest, Employee, EsarfApprover, EsarfRequest, LeaveApprover, LeaveRequest, Notification, PerkApprover, ProductChargeRequest, User
+            perk_approver = PerkApprover.query.filter_by(user_id=current_user.id).first()
+            is_perk_approver = perk_approver is not None
             is_esarf_approver = EsarfApprover.query.filter_by(user_id=current_user.id).first() is not None
             is_leave_approver = LeaveApprover.query.filter_by(user_id=current_user.id).first() is not None
             unread_notification_count = Notification.query.filter_by(
@@ -404,6 +405,7 @@ def create_app():
             role = (current_user.role or "").strip().lower()
             esarf_count = 0
             leave_count = 0
+            perk_count = 0
 
             if role in {"admin", "timekeeper"}:
                 esarf_count = EsarfRequest.query.filter(
@@ -412,6 +414,10 @@ def create_app():
                 leave_count = LeaveRequest.query.filter(
                     LeaveRequest.status.in_(["Pending", "Dept/HR Approved"])
                 ).count()
+                perk_count = (
+                    DiscountRequest.query.filter_by(status="Pending").count()
+                    + ProductChargeRequest.query.filter_by(status="Pending").count()
+                )
             else:
                 esarf_assignment = EsarfApprover.query.filter_by(user_id=current_user.id).first()
                 if esarf_assignment:
@@ -453,7 +459,13 @@ def create_app():
                         leave_query = leave_query.filter(LeaveRequest.status == "Dept/HR Approved")
                     leave_count = leave_query.count()
 
-            approver_request_count = esarf_count + leave_count
+                if perk_approver:
+                    if perk_approver.can_approve_discount:
+                        perk_count += DiscountRequest.query.filter_by(status="Pending").count()
+                    if perk_approver.can_approve_charge:
+                        perk_count += ProductChargeRequest.query.filter_by(status="Pending").count()
+
+            approver_request_count = esarf_count + leave_count + perk_count
         else:
             is_perk_approver = False
         return dict(

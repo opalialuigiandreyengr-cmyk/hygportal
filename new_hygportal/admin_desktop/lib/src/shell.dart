@@ -12,6 +12,7 @@ class AdminShell extends StatefulWidget {
 
 class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
   static const Duration _directoryAutoRefreshInterval = Duration(seconds: 10);
+  static const Duration _networkRequestTimeout = Duration(seconds: 15);
   late HrSection _activeSection;
   var _allRequests = <AdminRequestItem>[];
   String? _requestsError;
@@ -49,6 +50,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
   bool _isLoadingPositions = false;
   bool _isLoadingUsers = false;
   Timer? _directoryRefreshTimer;
+  StreamSubscription<void>? _connectionRestoredSubscription;
 
   @override
   void initState() {
@@ -64,6 +66,8 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
     } else {
       _loadEmployees();
     }
+    _connectionRestoredSubscription = LocalSyncService.onConnectionRestored
+        .listen((_) => _refreshActiveSection());
     _directoryRefreshTimer = Timer.periodic(_directoryAutoRefreshInterval, (_) {
       if (!mounted) {
         return;
@@ -80,7 +84,44 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _directoryRefreshTimer?.cancel();
+    unawaited(_connectionRestoredSubscription?.cancel());
     super.dispose();
+  }
+
+  Future<T> _withNetworkTimeout<T>(Future<T> operation) {
+    return operation.timeout(
+      _networkRequestTimeout,
+      onTimeout: () => throw TimeoutException(
+        'The server did not respond. Check your internet connection; this page will refresh automatically when it returns.',
+      ),
+    );
+  }
+
+  void _refreshActiveSection() {
+    if (!mounted) return;
+    switch (_activeSection) {
+      case HrSection.requests:
+        unawaited(_loadAllRequests());
+      case HrSection.employees:
+        unawaited(_loadEmployees(silent: true));
+      case HrSection.companies:
+        unawaited(_loadCompanies());
+      case HrSection.departments:
+        unawaited(_loadDepartments());
+      case HrSection.positions:
+        unawaited(_loadPositions());
+      case HrSection.users:
+        unawaited(_loadUsers(silent: true));
+      case HrSection.stores:
+        unawaited(_loadStores());
+      case HrSection.clusters:
+        unawaited(_loadClusters());
+        unawaited(_loadAreas());
+      case HrSection.approvalRoutes:
+      case HrSection.authorityLevels:
+      case HrSection.approverAssignments:
+        unawaited(_loadAdminWorkflow());
+    }
   }
 
   @override
@@ -103,7 +144,9 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
       _requestsError = null;
     });
     try {
-      final items = await AdminRequestsService.loadAllRequests();
+      final items = await _withNetworkTimeout(
+        AdminRequestsService.loadAllRequests(),
+      );
       if (!mounted) return;
       setState(() {
         _allRequests = items;
@@ -127,7 +170,9 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
     });
 
     try {
-      final employees = await EmployeeDirectoryService.loadEmployees();
+      final employees = await _withNetworkTimeout(
+        EmployeeDirectoryService.loadEmployees(),
+      );
       if (!mounted) return;
       setState(() {
         _employees = employees;
@@ -153,7 +198,9 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
     });
 
     try {
-      final companies = await CompanyDirectoryService.loadCompanies();
+      final companies = await _withNetworkTimeout(
+        CompanyDirectoryService.loadCompanies(),
+      );
       if (!mounted) return;
       setState(() {
         _companies = companies;
@@ -175,11 +222,11 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
     });
 
     try {
-      final results = await Future.wait([
+      final results = await _withNetworkTimeout(Future.wait([
         DepartmentDirectoryService.loadDepartments(),
         DepartmentPositionCatalogService.loadDepartmentPositionCatalog(),
         DepartmentPositionCatalogService.loadPositionCatalog(),
-      ]);
+      ]));
       if (!mounted) return;
       setState(() {
         _departments = results[0] as List<DepartmentPreview>;
@@ -204,7 +251,9 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
     });
 
     try {
-      final positions = await PositionDirectoryService.loadPositions();
+      final positions = await _withNetworkTimeout(
+        PositionDirectoryService.loadPositions(),
+      );
       if (!mounted) return;
       setState(() {
         _positions = positions;
@@ -228,7 +277,9 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
     });
 
     try {
-      final users = await RegisteredUsersService.loadUsers();
+      final users = await _withNetworkTimeout(
+        RegisteredUsersService.loadUsers(),
+      );
       if (!mounted) return;
       setState(() {
         _registeredUsers = users;
@@ -422,7 +473,9 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
       _storeError = null;
     });
     try {
-      final stores = await StoreDirectoryService.loadStores();
+      final stores = await _withNetworkTimeout(
+        StoreDirectoryService.loadStores(),
+      );
       if (!mounted) return;
       setState(() {
         _stores = stores;
@@ -443,7 +496,9 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
       _clusterError = null;
     });
     try {
-      final clusters = await ClusterDirectoryService.loadClusters();
+      final clusters = await _withNetworkTimeout(
+        ClusterDirectoryService.loadClusters(),
+      );
       if (!mounted) return;
       setState(() {
         _clusters = clusters;
@@ -464,7 +519,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
       _areaError = null;
     });
     try {
-      final areas = await AreaDirectoryService.loadAreas();
+      final areas = await _withNetworkTimeout(AreaDirectoryService.loadAreas());
       if (!mounted) return;
       setState(() {
         _areas = areas;
@@ -488,17 +543,24 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
       _adminWorkflowError = null;
     });
     try {
-      final candidates = await AdminWorkflowService.loadAuthorityCandidates();
+      final results = await _withNetworkTimeout(Future.wait([
+        AdminWorkflowService.loadAuthorityCandidates(),
+        AdminWorkflowService.loadStoreRouteScopes(),
+        AdminWorkflowService.loadPositionAuthorityLevels(),
+        AdminWorkflowService.loadDepartmentApprovalLadders(),
+        DepartmentPositionCatalogService.loadDepartmentPositionCatalog(),
+        ClusterDirectoryService.loadClusters(),
+        AreaDirectoryService.loadAreas(),
+      ]));
+      final candidates = results[0] as List<AuthorityCandidatePreview>;
       final storeRouteScopes =
-          await AdminWorkflowService.loadStoreRouteScopes();
-      final positions =
-          await AdminWorkflowService.loadPositionAuthorityLevels();
-      final ladders =
-          await AdminWorkflowService.loadDepartmentApprovalLadders();
+          results[1] as List<StoreRouteScopePreview>;
+      final positions = results[2] as List<AdminPositionAuthorityPreview>;
+      final ladders = results[3] as List<DepartmentLadderPreview>;
       final departmentPositions =
-          await DepartmentPositionCatalogService.loadDepartmentPositionCatalog();
-      final clusters = await ClusterDirectoryService.loadClusters();
-      final areas = await AreaDirectoryService.loadAreas();
+          results[4] as List<DepartmentPositionCatalogPreview>;
+      final clusters = results[5] as List<ClusterPreview>;
+      final areas = results[6] as List<AreaPreview>;
       if (!mounted) return;
       setState(() {
         _authorityCandidates = candidates;

@@ -105,6 +105,242 @@ class _AdminWorkflowPanelState extends State<AdminWorkflowPanel> {
     super.dispose();
   }
 
+  int _authorityLevelFor(AuthorityCandidatePreview candidate) {
+    var level = candidate.currentAuthorityLevel ?? candidate.positionLevel;
+
+    if (level == null) {
+      for (final position in widget.positions) {
+        if (position.positionId == candidate.positionId) {
+          level = position.authorityLevel;
+          break;
+        }
+      }
+    }
+
+    return level ?? 1;
+  }
+
+  String _scopeLabelFor(AuthorityCandidatePreview candidate) {
+    final level = _authorityLevelFor(candidate);
+    if (level == 4) {
+      return candidate.clusterName.trim().toUpperCase() == 'N/A'
+          ? 'Choose cluster'
+          : candidate.clusterName;
+    }
+    if (level == 5) {
+      return candidate.areaName.trim().toUpperCase() == 'N/A'
+          ? 'Choose area'
+          : candidate.areaName;
+    }
+    return candidate.storeName;
+  }
+
+  String _dateTag(DateTime value) {
+    return '${value.year}${value.month.toString().padLeft(2, '0')}${value.day.toString().padLeft(2, '0')}';
+  }
+
+  List<int> _postProcessExcelBytes(List<int> encodedBytes) {
+    try {
+      final archive = ZipDecoder().decodeBytes(encodedBytes);
+      final outArchive = Archive();
+
+      for (final file in archive.files) {
+        if (file.name == '[Content_Types].xml') {
+          final contentBytes = file.content as List<int>;
+          final xmlContent = utf8.decode(contentBytes);
+          final fixedXml = xmlContent.replaceAll(
+            RegExp(r'<Override[^>]*drawing1\.xml[^>]*/>'),
+            '',
+          );
+          final fixedBytes = utf8.encode(fixedXml);
+          outArchive.addFile(
+            ArchiveFile(file.name, fixedBytes.length, fixedBytes),
+          );
+        } else if (file.name.startsWith('xl/worksheets/_rels/') ||
+            file.name.startsWith('xl/drawings/')) {
+          continue;
+        } else {
+          outArchive.addFile(file);
+        }
+      }
+
+      final fixed = ZipEncoder().encode(outArchive);
+      return fixed ?? encodedBytes;
+    } catch (_) {
+      return encodedBytes;
+    }
+  }
+
+  Future<void> _downloadApproverAssignmentsExcel(
+    List<AuthorityCandidatePreview> candidates,
+  ) async {
+    if (candidates.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No approver assignments to export.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    final excel = Excel.createExcel();
+    final defaultSheet = excel.getDefaultSheet()!;
+    const sheetName = 'Approver Assignments';
+    excel.rename(defaultSheet, sheetName);
+    final sheet = excel.sheets[sheetName]!;
+
+    final headerStyle = CellStyle(
+      bold: true,
+      fontColorHex: ExcelColor.white,
+      backgroundColorHex: ExcelColor.fromHexString('#071426'),
+      fontFamily: 'Segoe UI',
+      fontSize: 11,
+      horizontalAlign: HorizontalAlign.Center,
+      verticalAlign: VerticalAlign.Center,
+    );
+    final dataStyle = CellStyle(
+      fontFamily: 'Segoe UI',
+      fontSize: 10,
+      fontColorHex: ExcelColor.fromHexString('#1E293B'),
+      horizontalAlign: HorizontalAlign.Left,
+      verticalAlign: VerticalAlign.Center,
+    );
+    final dataStyleStripe = CellStyle(
+      fontFamily: 'Segoe UI',
+      fontSize: 10,
+      fontColorHex: ExcelColor.fromHexString('#1E293B'),
+      backgroundColorHex: ExcelColor.fromHexString('#F8FAFC'),
+      horizontalAlign: HorizontalAlign.Left,
+      verticalAlign: VerticalAlign.Center,
+    );
+    final centerStyle = CellStyle(
+      fontFamily: 'Segoe UI',
+      fontSize: 10,
+      fontColorHex: ExcelColor.fromHexString('#1E293B'),
+      horizontalAlign: HorizontalAlign.Center,
+      verticalAlign: VerticalAlign.Center,
+    );
+    final centerStyleStripe = CellStyle(
+      fontFamily: 'Segoe UI',
+      fontSize: 10,
+      fontColorHex: ExcelColor.fromHexString('#1E293B'),
+      backgroundColorHex: ExcelColor.fromHexString('#F8FAFC'),
+      horizontalAlign: HorizontalAlign.Center,
+      verticalAlign: VerticalAlign.Center,
+    );
+
+    const headers = [
+      'Employee No',
+      'Employee',
+      'Position',
+      'Company',
+      'Store',
+      'Scope',
+      'Department',
+      'Function',
+      'Position Level',
+      'Assigned Level',
+    ];
+    final widths = <int>[15, 28, 26, 24, 22, 22, 24, 22, 16, 16];
+
+    for (var c = 0; c < headers.length; c++) {
+      excel.updateCell(
+        sheetName,
+        CellIndex.indexByColumnRow(columnIndex: c, rowIndex: 0),
+        TextCellValue(headers[c]),
+        cellStyle: headerStyle,
+      );
+      sheet.setColumnWidth(c, widths[c].toDouble());
+    }
+    sheet.setRowHeight(0, 24);
+
+    for (var r = 0; r < candidates.length; r++) {
+      final candidate = candidates[r];
+      final positionLevel = candidate.positionLevel;
+      final assignedLevel = candidate.currentAuthorityLevel;
+      final values = [
+        candidate.employeeNo,
+        candidate.fullName,
+        candidate.positionName,
+        candidate.companyName,
+        candidate.storeName,
+        _scopeLabelFor(candidate),
+        candidate.departmentName,
+        candidate.functionName,
+        positionLevel == null ? 'Not set' : 'Level $positionLevel',
+        assignedLevel == null ? 'Not assigned' : 'Level $assignedLevel',
+      ];
+      final isStripe = r.isOdd;
+
+      for (var c = 0; c < values.length; c++) {
+        final isCentered = c == 0 || c >= 8;
+        excel.updateCell(
+          sheetName,
+          CellIndex.indexByColumnRow(columnIndex: c, rowIndex: r + 1),
+          TextCellValue(values[c]),
+          cellStyle: isCentered
+              ? (isStripe ? centerStyleStripe : centerStyle)
+              : (isStripe ? dataStyleStripe : dataStyle),
+        );
+      }
+      sheet.setRowHeight(r + 1, 21);
+    }
+
+    final encodedBytes = excel.encode();
+    if (encodedBytes == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to generate Excel file.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    final fileBytes = Uint8List.fromList(_postProcessExcelBytes(encodedBytes));
+    final savePath = await FilePicker.saveFile(
+      dialogTitle: 'Save approver assignments Excel file',
+      fileName: 'Approver_Assignments_${_dateTag(DateTime.now())}.xlsx',
+      type: FileType.custom,
+      allowedExtensions: ['xlsx'],
+      bytes: fileBytes,
+    );
+
+    if (!mounted || savePath == null) return;
+
+    try {
+      if (!await File(savePath).exists()) {
+        await File(savePath).writeAsBytes(fileBytes);
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Saved to: $savePath'),
+          backgroundColor: const Color(0xFF166534),
+          duration: const Duration(seconds: 8),
+          action: SnackBarAction(
+            label: 'Open folder',
+            textColor: Colors.white,
+            onPressed: () {
+              Process.run('explorer', ['/select,', savePath]);
+            },
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Save failed: $error'),
+          backgroundColor: const Color(0xFFB91C1C),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
   List<AuthorityCandidatePreview> get _filteredCandidates {
     final query = _query.trim().toLowerCase();
     final departmentFilter = _departmentFilter.trim().toLowerCase();
@@ -200,6 +436,44 @@ class _AdminWorkflowPanelState extends State<AdminWorkflowPanel> {
       ),
       child: Column(
         children: [
+          if (widget.view == AdminWorkflowView.approverAssignments) ...[
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${_filteredCandidates.length} visible approver assignment${_filteredCandidates.length == 1 ? '' : 's'}',
+                    style: HygTypography.body.copyWith(
+                      color: const Color(0xFF64748B),
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                FilledButton.icon(
+                  onPressed: _filteredCandidates.isEmpty
+                      ? null
+                      : () => _downloadApproverAssignmentsExcel(
+                          _filteredCandidates,
+                        ),
+                  icon: const Icon(Icons.download, size: 16),
+                  label: const Text('Download Excel'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF806600),
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: const Color(0xFFE5E7EB),
+                    disabledForegroundColor: const Color(0xFF94A3B8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+          ],
           Row(
             children: [
               Expanded(

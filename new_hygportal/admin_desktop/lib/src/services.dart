@@ -144,8 +144,7 @@ class EmployeeDirectoryService {
     try {
       final row = await _client
           .from('employee_profile_details')
-          .select(
-            '''
+          .select('''
             zip_code,
             social_media_type,
             social_media_detail,
@@ -174,8 +173,7 @@ class EmployeeDirectoryService {
             children_names,
             children_count,
             emergency_contact_no
-            ''',
-          )
+            ''')
           .eq('employee_id', employeeId)
           .maybeSingle();
       if (row == null) {
@@ -1904,7 +1902,14 @@ class LocalSyncService {
   static bool _syncInProgress = false;
   static StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
   static Timer? _periodicSyncTimer;
+  static Timer? _connectivityPollTimer;
+  static final StreamController<void> _connectionRestoredController =
+      StreamController<void>.broadcast();
+  static bool? _lastOnline;
   static bool _connectivityStreamSupported = true;
+
+  static Stream<void> get onConnectionRestored =>
+      _connectionRestoredController.stream;
 
   static Future<void> initialize() async {
     await _database;
@@ -1916,7 +1921,9 @@ class LocalSyncService {
         _connectivitySub = Connectivity().onConnectivityChanged.listen(
           (results) {
             if (results.any((r) => r != ConnectivityResult.none)) {
-              unawaited(syncNow());
+              unawaited(_checkForRestoredConnection());
+            } else {
+              _lastOnline = false;
             }
           },
           onError: (_) async {
@@ -1933,6 +1940,22 @@ class LocalSyncService {
     _periodicSyncTimer ??= Timer.periodic(const Duration(seconds: 25), (_) {
       unawaited(syncNow());
     });
+    // connectivity_plus does not provide a reliable change stream on every
+    // Windows setup. A lightweight reachability poll closes that gap.
+    _connectivityPollTimer ??= Timer.periodic(const Duration(seconds: 5), (_) {
+      unawaited(_checkForRestoredConnection());
+    });
+    unawaited(_checkForRestoredConnection());
+  }
+
+  static Future<void> _checkForRestoredConnection() async {
+    final online = await isOnline();
+    final wasOnline = _lastOnline;
+    _lastOnline = online;
+    if (online && wasOnline == false) {
+      _connectionRestoredController.add(null);
+      unawaited(syncNow());
+    }
   }
 
   static Future<void> syncNow() async {
@@ -2258,7 +2281,11 @@ class LocalSyncService {
     if (_db != null) {
       return _db!;
     }
-    final baseDir = Directory.current.path;
+    final localAppData = Platform.environment['LOCALAPPDATA'];
+    final baseDir = localAppData == null || localAppData.trim().isEmpty
+        ? Directory.current.path
+        : p.join(localAppData, 'HYG Admin Desktop');
+    await Directory(baseDir).create(recursive: true);
     final dbPath = p.join(baseDir, 'hyg_admin_local.db');
     _db = await openDatabase(
       dbPath,
@@ -2521,10 +2548,7 @@ class AdminRequestsService {
     try {
       final response = await _client.rpc(
         'admin_delete_request',
-        params: {
-          'p_request_id': requestId,
-          'p_is_perk': isPerk,
-        },
+        params: {'p_request_id': requestId, 'p_is_perk': isPerk},
       );
       return response?.toString() ?? 'Request deleted.';
     } catch (e) {

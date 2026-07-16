@@ -1,0 +1,126 @@
+-- Increase the Phase 1 launch appreciation gift from 25 to 100 HYG Points.
+
+create or replace function public.ensure_launch_hyg_points_gift(p_user_profile_id uuid)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_profile public.user_profiles;
+  v_account_id uuid;
+  v_transaction_id uuid;
+  v_notification_id uuid;
+begin
+  select *
+  into v_profile
+  from public.user_profiles up
+  where up.id = p_user_profile_id
+    and up.auth_user_id is not null
+    and up.employee_id is not null
+    and up.is_active = true;
+
+  if v_profile.id is null then
+    return null;
+  end if;
+
+  insert into public.user_hyg_point_accounts (
+    user_profile_id,
+    auth_user_id,
+    employee_id
+  )
+  values (
+    v_profile.id,
+    v_profile.auth_user_id,
+    v_profile.employee_id
+  )
+  on conflict (user_profile_id) do update
+  set auth_user_id = excluded.auth_user_id,
+      employee_id = excluded.employee_id,
+      updated_at = now()
+  returning id into v_account_id;
+
+  insert into public.user_hyg_point_transactions (
+    account_id,
+    user_profile_id,
+    auth_user_id,
+    employee_id,
+    source,
+    points,
+    status,
+    release_at,
+    note
+  )
+  values (
+    v_account_id,
+    v_profile.id,
+    v_profile.auth_user_id,
+    v_profile.employee_id,
+    'launch_phase_1_profile_creation',
+    100,
+    'released',
+    now(),
+    'Phase 1 launch appreciation gift for employee profile creation.'
+  )
+  on conflict (user_profile_id, source) do update
+  set account_id = excluded.account_id,
+      auth_user_id = excluded.auth_user_id,
+      employee_id = excluded.employee_id
+  returning id, notification_id into v_transaction_id, v_notification_id;
+
+  if v_notification_id is null then
+    insert into public.notifications (
+      employee_id,
+      user_profile_id,
+      title,
+      message,
+      link_type,
+      link_id
+    )
+    values (
+      v_profile.employee_id,
+      v_profile.id,
+      '100 HYG Points Gift',
+      'You received 100 HYG Points as a token of appreciation for your active participation in the Phase 1 launch: Employee Profile Creation. Claim your gift to add it to your HYG Points balance.',
+      'hyg_points_claim',
+      v_transaction_id
+    )
+    returning id into v_notification_id;
+
+    update public.user_hyg_point_transactions
+    set notification_id = v_notification_id
+    where id = v_transaction_id;
+  end if;
+
+  return v_transaction_id;
+end;
+$$;
+
+with claimed_delta as (
+  select
+    t.id,
+    t.account_id,
+    100 - t.points as additional_points
+  from public.user_hyg_point_transactions t
+  where t.source = 'launch_phase_1_profile_creation'
+    and t.status = 'claimed'
+    and t.points < 100
+)
+update public.user_hyg_point_accounts a
+set balance = a.balance + cd.additional_points,
+    updated_at = now()
+from claimed_delta cd
+where a.id = cd.account_id;
+
+update public.user_hyg_point_transactions
+set points = 100,
+    note = 'Phase 1 launch appreciation gift for employee profile creation.'
+where source = 'launch_phase_1_profile_creation'
+  and points <> 100;
+
+update public.notifications n
+set title = '100 HYG Points Gift',
+    message = 'You received 100 HYG Points as a token of appreciation for your active participation in the Phase 1 launch: Employee Profile Creation. Claim your gift to add it to your HYG Points balance.'
+from public.user_hyg_point_transactions t
+where n.id = t.notification_id
+  and t.source = 'launch_phase_1_profile_creation';

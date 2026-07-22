@@ -685,6 +685,35 @@ class AdminRequestItem {
     return AdminRequestCategory.esarf;
   }
 
+  /// Comma-separated list of approver names extracted from [approvalSummary].
+  String get approverNames {
+    if (approvalSummary.isEmpty) return '—';
+    final names = approvalSummary
+        .map(
+          (entry) =>
+              (entry['approver_name'] ?? entry['name'] ?? '').toString().trim(),
+        )
+        .where((name) => name.isNotEmpty)
+        .toList(growable: false);
+    if (names.isEmpty) return '—';
+    return names.join(', ');
+  }
+
+  /// Formatted approval summary: Level → Name → Status.
+  String get approverDetail {
+    if (approvalSummary.isEmpty) return 'No approvals recorded.';
+    return approvalSummary
+        .map((entry) {
+          final level = entry['level']?.toString() ?? '?';
+          final name = (entry['approver_name'] ?? entry['name'] ?? 'Unknown')
+              .toString()
+              .trim();
+          final status = (entry['status'] ?? 'pending').toString().trim();
+          return 'L$level: $name ($status)';
+        })
+        .join('\n');
+  }
+
   String get statusLabel {
     final s = status.toLowerCase();
     if (s == 'pending') return 'Pending';
@@ -699,9 +728,9 @@ class AdminRequestItem {
     final approvalRaw = row['approval_summary'];
     List<Map<String, dynamic>> approvalList = const [];
     if (approvalRaw is List) {
-      approvalList = approvalRaw
-          .whereType<Map<String, dynamic>>()
-          .toList(growable: false);
+      approvalList = approvalRaw.whereType<Map<String, dynamic>>().toList(
+        growable: false,
+      );
     }
 
     return AdminRequestItem(

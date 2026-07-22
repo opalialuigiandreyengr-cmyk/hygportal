@@ -16,10 +16,7 @@ class RequestsHeader extends StatelessWidget {
             children: [
               const Kicker('Admin Control Center'),
               const SizedBox(height: 4),
-              Text(
-                'All Employee Requests',
-                style: HygTypography.pageTitle,
-              ),
+              Text('All Employee Requests', style: HygTypography.pageTitle),
               const SizedBox(height: 2),
               Text(
                 'View and monitor ESARF, Leave, and Perk requests across the organisation.',
@@ -103,32 +100,38 @@ class _RequestsPanelState extends State<RequestsPanel>
     }
 
     if (_dateFrom != null || _dateTo != null) {
-      items = items.where((r) {
-        if (r.submittedAt == null || r.submittedAt!.isEmpty) return false;
-        try {
-          final dt = DateTime.parse(r.submittedAt!).toUtc();
-          final submitted = DateTime(dt.year, dt.month, dt.day);
-          if (_dateFrom != null && submitted.isBefore(_dateFrom!)) return false;
-          if (_dateTo != null && submitted.isAfter(_dateTo!)) return false;
-          return true;
-        } catch (_) {
-          return false;
-        }
-      }).toList(growable: false);
+      items = items
+          .where((r) {
+            if (r.submittedAt == null || r.submittedAt!.isEmpty) return false;
+            try {
+              final dt = DateTime.parse(r.submittedAt!).toUtc();
+              final submitted = DateTime(dt.year, dt.month, dt.day);
+              if (_dateFrom != null && submitted.isBefore(_dateFrom!))
+                return false;
+              if (_dateTo != null && submitted.isAfter(_dateTo!)) return false;
+              return true;
+            } catch (_) {
+              return false;
+            }
+          })
+          .toList(growable: false);
     }
 
     if (_searchQuery.isNotEmpty) {
       final q = _searchQuery.toLowerCase();
-      items = items.where((r) {
-        return (r.employeeName ?? '').toLowerCase().contains(q) ||
-            (r.employeeNo ?? '').toLowerCase().contains(q) ||
-            (r.departmentName ?? '').toLowerCase().contains(q) ||
-            (r.storeName ?? '').toLowerCase().contains(q) ||
-            r.requestTypeName.toLowerCase().contains(q) ||
-            (r.leaveCategory ?? '').toLowerCase().contains(q) ||
-            (r.perkProductName ?? '').toLowerCase().contains(q) ||
-            (r.reason ?? '').toLowerCase().contains(q);
-      }).toList(growable: false);
+      items = items
+          .where((r) {
+            return (r.employeeName ?? '').toLowerCase().contains(q) ||
+                (r.employeeNo ?? '').toLowerCase().contains(q) ||
+                (r.departmentName ?? '').toLowerCase().contains(q) ||
+                (r.storeName ?? '').toLowerCase().contains(q) ||
+                r.requestTypeName.toLowerCase().contains(q) ||
+                (r.leaveCategory ?? '').toLowerCase().contains(q) ||
+                (r.perkProductName ?? '').toLowerCase().contains(q) ||
+                (r.reason ?? '').toLowerCase().contains(q) ||
+                (r.approverNames ?? '').toLowerCase().contains(q);
+          })
+          .toList(growable: false);
     }
 
     return items;
@@ -209,7 +212,8 @@ class _RequestsPanelState extends State<RequestsPanel>
                               ),
                               children: [
                                 const TextSpan(
-                                  text: 'Are you sure you want to delete the request from ',
+                                  text:
+                                      'Are you sure you want to delete the request from ',
                                 ),
                                 TextSpan(
                                   text: '"${item.employeeName ?? 'Unknown'}"',
@@ -346,12 +350,15 @@ class _RequestsPanelState extends State<RequestsPanel>
         : 'Delete not configured.';
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor:
-          msg.toLowerCase().contains('fail') ? const Color(0xFFB91C1C) : null,
-      duration: const Duration(seconds: 3),
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: msg.toLowerCase().contains('fail')
+            ? const Color(0xFFB91C1C)
+            : null,
+        duration: const Duration(seconds: 3),
+      ),
+    );
     widget.onRefresh();
   }
 
@@ -380,7 +387,10 @@ class _RequestsPanelState extends State<RequestsPanel>
         'Requests_${tabLabel.replaceAll(RegExp(r'[^A-Za-z0-9]'), '_')}_$dateTag.xlsx';
 
     // Rename sheet to tab name (sanitized to meet Excel worksheet name constraints)
-    String sanitizedSheetName = tabLabel.replaceAll(RegExp(r'[\\/?*\[\]:]'), '_');
+    String sanitizedSheetName = tabLabel.replaceAll(
+      RegExp(r'[\\/?*\[\]:]'),
+      '_',
+    );
     if (sanitizedSheetName.length > 31) {
       sanitizedSheetName = sanitizedSheetName.substring(0, 31);
     }
@@ -455,21 +465,45 @@ class _RequestsPanelState extends State<RequestsPanel>
     );
 
     // Numeric formats
-    final dataStyleDecimal = dataStyleRight.copyWith(numberFormat: NumFormat.standard_2);
-    final dataStyleDecimalStripe = dataStyleRightStripe.copyWith(numberFormat: NumFormat.standard_2);
+    final dataStyleDecimal = dataStyleRight.copyWith(
+      numberFormat: NumFormat.standard_2,
+    );
+    final dataStyleDecimalStripe = dataStyleRightStripe.copyWith(
+      numberFormat: NumFormat.standard_2,
+    );
 
-    final dataStyleCurrency = dataStyleRight.copyWith(numberFormat: NumFormat.standard_4);
-    final dataStyleCurrencyStripe = dataStyleRightStripe.copyWith(numberFormat: NumFormat.standard_4);
+    final dataStyleCurrency = dataStyleRight.copyWith(
+      numberFormat: NumFormat.standard_4,
+    );
+    final dataStyleCurrencyStripe = dataStyleRightStripe.copyWith(
+      numberFormat: NumFormat.standard_4,
+    );
 
-    final dataStyleInteger = dataStyleRight.copyWith(numberFormat: NumFormat.standard_3);
-    final dataStyleIntegerStripe = dataStyleRightStripe.copyWith(numberFormat: NumFormat.standard_3);
+    final dataStyleInteger = dataStyleRight.copyWith(
+      numberFormat: NumFormat.standard_3,
+    );
+    final dataStyleIntegerStripe = dataStyleRightStripe.copyWith(
+      numberFormat: NumFormat.standard_3,
+    );
 
     // Bold numeric formats
-    final dataStyleDecimalBold = dataStyleRight.copyWith(boldVal: true, numberFormat: NumFormat.standard_2);
-    final dataStyleDecimalStripeBold = dataStyleRightStripe.copyWith(boldVal: true, numberFormat: NumFormat.standard_2);
+    final dataStyleDecimalBold = dataStyleRight.copyWith(
+      boldVal: true,
+      numberFormat: NumFormat.standard_2,
+    );
+    final dataStyleDecimalStripeBold = dataStyleRightStripe.copyWith(
+      boldVal: true,
+      numberFormat: NumFormat.standard_2,
+    );
 
-    final dataStyleCurrencyBold = dataStyleRight.copyWith(boldVal: true, numberFormat: NumFormat.standard_4);
-    final dataStyleCurrencyStripeBold = dataStyleRightStripe.copyWith(boldVal: true, numberFormat: NumFormat.standard_4);
+    final dataStyleCurrencyBold = dataStyleRight.copyWith(
+      boldVal: true,
+      numberFormat: NumFormat.standard_4,
+    );
+    final dataStyleCurrencyStripeBold = dataStyleRightStripe.copyWith(
+      boldVal: true,
+      numberFormat: NumFormat.standard_4,
+    );
 
     // Status styles: soft background colors with dark text
     final approvedStyle = CellStyle(
@@ -581,23 +615,48 @@ class _RequestsPanelState extends State<RequestsPanel>
     switch (tabIndex) {
       case 0: // ESARF
         headers = [
-          'Employee No', 'Employee Name', 'Department', 'Store',
-          'Request Type', 'Status', 'Date', 'Time',
-          'Total Hours', 'Submitted',
+          'Employee No',
+          'Employee Name',
+          'Department',
+          'Store',
+          'Request Type',
+          'Status',
+          'Date',
+          'Time',
+          'Total Hours',
+          'Submitted',
         ];
         break;
       case 1: // Leave
         headers = [
-          'Employee No', 'Employee Name', 'Department', 'Store',
-          'Leave Type', 'Leave Category', 'Date', 'Total Days',
-          'Paid Days', 'Unpaid Days', 'Status', 'Submitted',
+          'Employee No',
+          'Employee Name',
+          'Department',
+          'Store',
+          'Leave Type',
+          'Leave Category',
+          'Date',
+          'Total Days',
+          'Paid Days',
+          'Unpaid Days',
+          'Status',
+          'Submitted',
         ];
         break;
       default: // Perk
         headers = [
-          'Employee No', 'Employee Name', 'Department', 'Store',
-          'Product', 'Quantity', 'Amount', 'Discount', 'Final Amount',
-          'Benefit', 'Status', 'Submitted',
+          'Employee No',
+          'Employee Name',
+          'Department',
+          'Store',
+          'Product',
+          'Quantity',
+          'Amount',
+          'Discount',
+          'Final Amount',
+          'Benefit',
+          'Status',
+          'Submitted',
         ];
     }
 
@@ -616,7 +675,9 @@ class _RequestsPanelState extends State<RequestsPanel>
           excel.updateCell(
             sanitizedSheetName,
             CellIndex.indexByColumnRow(columnIndex: c, rowIndex: r),
-            (r == startRow && c == startCol) ? (value ?? TextCellValue('')) : TextCellValue(''),
+            (r == startRow && c == startCol)
+                ? (value ?? TextCellValue(''))
+                : TextCellValue(''),
             cellStyle: cellStyle,
           );
         }
@@ -633,8 +694,18 @@ class _RequestsPanelState extends State<RequestsPanel>
     // Helper functions for date formatting
     String formatDateStr(DateTime dt) {
       final months = [
-        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
       ];
       return '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
     }
@@ -655,7 +726,8 @@ class _RequestsPanelState extends State<RequestsPanel>
     }
 
     String formatRange(String? from, String? to) {
-      if ((from == null || from.isEmpty) && (to == null || to.isEmpty)) return '';
+      if ((from == null || from.isEmpty) && (to == null || to.isEmpty))
+        return '';
       if (from != null && from.isNotEmpty && to != null && to.isNotEmpty) {
         if (from == to) return from;
         return '$from - $to';
@@ -671,7 +743,7 @@ class _RequestsPanelState extends State<RequestsPanel>
         if (parts.isEmpty) return timeStr;
         int hour = int.parse(parts[0]);
         int minute = parts.length > 1 ? int.parse(parts[1]) : 0;
-        
+
         String period = 'AM';
         if (hour >= 12) {
           period = 'PM';
@@ -681,7 +753,7 @@ class _RequestsPanelState extends State<RequestsPanel>
         } else if (hour == 0) {
           hour = 12;
         }
-        
+
         final minStr = minute.toString().padLeft(2, '0');
         return '$hour:$minStr $period';
       } catch (_) {
@@ -758,53 +830,93 @@ class _RequestsPanelState extends State<RequestsPanel>
           final timeRange = formatRange(timeFromStr, timeToStr);
           return [
             item.employeeNo != null ? TextCellValue(item.employeeNo!) : null,
-            item.employeeName != null ? TextCellValue(item.employeeName!) : null,
-            item.departmentName != null ? TextCellValue(item.departmentName!) : null,
+            item.employeeName != null
+                ? TextCellValue(item.employeeName!)
+                : null,
+            item.departmentName != null
+                ? TextCellValue(item.departmentName!)
+                : null,
             item.storeName != null ? TextCellValue(item.storeName!) : null,
             TextCellValue(item.requestTypeName),
             TextCellValue(item.statusLabel),
             TextCellValue(dateRange),
             TextCellValue(timeRange),
             item.totalHours != null ? DoubleCellValue(item.totalHours!) : null,
-            item.submittedAt != null ? TextCellValue(_formatDateString(item.submittedAt, includeTime: true)!) : null,
+            item.submittedAt != null
+                ? TextCellValue(
+                    _formatDateString(item.submittedAt, includeTime: true)!,
+                  )
+                : null,
           ];
         case 1: // Leave
-          final dateRange = formatRange(_formatDateString(item.startDate), _formatDateString(item.endDate));
+          final dateRange = formatRange(
+            _formatDateString(item.startDate),
+            _formatDateString(item.endDate),
+          );
           return [
             item.employeeNo != null ? TextCellValue(item.employeeNo!) : null,
-            item.employeeName != null ? TextCellValue(item.employeeName!) : null,
-            item.departmentName != null ? TextCellValue(item.departmentName!) : null,
+            item.employeeName != null
+                ? TextCellValue(item.employeeName!)
+                : null,
+            item.departmentName != null
+                ? TextCellValue(item.departmentName!)
+                : null,
             item.storeName != null ? TextCellValue(item.storeName!) : null,
             item.leaveType != null ? TextCellValue(item.leaveType!) : null,
-            item.leaveCategory != null ? TextCellValue(item.leaveCategory!) : null,
+            item.leaveCategory != null
+                ? TextCellValue(item.leaveCategory!)
+                : null,
             TextCellValue(dateRange),
             item.totalDays != null ? DoubleCellValue(item.totalDays!) : null,
             item.paidDays != null ? DoubleCellValue(item.paidDays!) : null,
             item.unpaidDays != null ? DoubleCellValue(item.unpaidDays!) : null,
             TextCellValue(item.statusLabel),
-            item.submittedAt != null ? TextCellValue(_formatDateString(item.submittedAt, includeTime: true)!) : null,
+            item.submittedAt != null
+                ? TextCellValue(
+                    _formatDateString(item.submittedAt, includeTime: true)!,
+                  )
+                : null,
           ];
         default: // Perk
           return [
             item.employeeNo != null ? TextCellValue(item.employeeNo!) : null,
-            item.employeeName != null ? TextCellValue(item.employeeName!) : null,
-            item.departmentName != null ? TextCellValue(item.departmentName!) : null,
+            item.employeeName != null
+                ? TextCellValue(item.employeeName!)
+                : null,
+            item.departmentName != null
+                ? TextCellValue(item.departmentName!)
+                : null,
             item.storeName != null ? TextCellValue(item.storeName!) : null,
-            item.perkProductName != null ? TextCellValue(item.perkProductName!) : null,
+            item.perkProductName != null
+                ? TextCellValue(item.perkProductName!)
+                : null,
             item.perkQuantity != null ? IntCellValue(item.perkQuantity!) : null,
             item.perkAmount != null ? DoubleCellValue(item.perkAmount!) : null,
-            item.perkDiscountAmount != null ? DoubleCellValue(item.perkDiscountAmount!) : null,
-            item.perkFinalAmount != null ? DoubleCellValue(item.perkFinalAmount!) : null,
+            item.perkDiscountAmount != null
+                ? DoubleCellValue(item.perkDiscountAmount!)
+                : null,
+            item.perkFinalAmount != null
+                ? DoubleCellValue(item.perkFinalAmount!)
+                : null,
             item.perkBenefit != null ? TextCellValue(item.perkBenefit!) : null,
             TextCellValue(item.statusLabel),
-            item.submittedAt != null ? TextCellValue(_formatDateString(item.submittedAt, includeTime: true)!) : null,
+            item.submittedAt != null
+                ? TextCellValue(
+                    _formatDateString(item.submittedAt, includeTime: true)!,
+                  )
+                : null,
           ];
       }
     }
 
     final centerCols = {'Employee No', 'Status', 'Date', 'Time', 'Submitted'};
     final currencyCols = {'Amount', 'Discount', 'Final Amount'};
-    final decimalCols = {'Total Hours', 'Total Days', 'Paid Days', 'Unpaid Days'};
+    final decimalCols = {
+      'Total Hours',
+      'Total Days',
+      'Paid Days',
+      'Unpaid Days',
+    };
     final integerCols = {'Quantity'};
 
     // ── 5. Write Data Rows (Row 4+) ─────────────────────────────────────────
@@ -817,14 +929,18 @@ class _RequestsPanelState extends State<RequestsPanel>
       // A. Write Main Request Row
       for (var c = 0; c < values.length; c++) {
         final colName = headers[c];
-        
+
         CellStyle cellStyle;
         if (colName == 'Status') {
           cellStyle = getStatusStyle(item.statusLabel, isStripe);
         } else if (colName == 'Total Hours' || colName == 'Total Days') {
-          cellStyle = isStripe ? dataStyleDecimalStripeBold : dataStyleDecimalBold;
+          cellStyle = isStripe
+              ? dataStyleDecimalStripeBold
+              : dataStyleDecimalBold;
         } else if (colName == 'Final Amount') {
-          cellStyle = isStripe ? dataStyleCurrencyStripeBold : dataStyleCurrencyBold;
+          cellStyle = isStripe
+              ? dataStyleCurrencyStripeBold
+              : dataStyleCurrencyBold;
         } else if (currencyCols.contains(colName)) {
           cellStyle = isStripe ? dataStyleCurrencyStripe : dataStyleCurrency;
         } else if (decimalCols.contains(colName)) {
@@ -882,7 +998,10 @@ class _RequestsPanelState extends State<RequestsPanel>
     }
 
     // ── 6. Dynamic Column widths calculation ────────────────────────────────
-    final maxColWidths = List<int>.generate(headers.length, (c) => headers[c].length + 4);
+    final maxColWidths = List<int>.generate(
+      headers.length,
+      (c) => headers[c].length + 4,
+    );
 
     for (var r = 0; r < items.length; r++) {
       final item = items[r];
@@ -905,7 +1024,8 @@ class _RequestsPanelState extends State<RequestsPanel>
     for (var c = 0; c < headers.length; c++) {
       double width = maxColWidths[c].toDouble();
       if (width < 12.0) width = 12.0;
-      if (width > 45.0) width = 45.0; // clamp overly long text to keep layout neat
+      if (width > 45.0)
+        width = 45.0; // clamp overly long text to keep layout neat
       sheetObj.setColumnWidth(c, width);
     }
 
@@ -920,7 +1040,7 @@ class _RequestsPanelState extends State<RequestsPanel>
       );
       return;
     }
-    
+
     // Post-process ZIP bytes to remove unused drawing definitions and prevent corruption warning in MS Excel
     final fixedBytesList = _postProcessExcelBytes(encodedBytes);
     final fileBytes = Uint8List.fromList(fixedBytesList);
@@ -993,7 +1113,7 @@ class _RequestsPanelState extends State<RequestsPanel>
     try {
       final archive = ZipDecoder().decodeBytes(encodedBytes);
       final outArchive = Archive();
-      
+
       for (final file in archive.files) {
         if (file.name == '[Content_Types].xml') {
           final contentBytes = file.content as List<int>;
@@ -1003,15 +1123,17 @@ class _RequestsPanelState extends State<RequestsPanel>
             '',
           );
           final fixedBytes = utf8.encode(fixedXml);
-          outArchive.addFile(ArchiveFile(file.name, fixedBytes.length, fixedBytes));
+          outArchive.addFile(
+            ArchiveFile(file.name, fixedBytes.length, fixedBytes),
+          );
         } else if (file.name.startsWith('xl/worksheets/_rels/') ||
-                   file.name.startsWith('xl/drawings/')) {
+            file.name.startsWith('xl/drawings/')) {
           continue;
         } else {
           outArchive.addFile(file);
         }
       }
-      
+
       final fixed = ZipEncoder().encode(outArchive);
       return fixed ?? encodedBytes;
     } catch (_) {
@@ -1130,15 +1252,17 @@ class _RequestsPanelState extends State<RequestsPanel>
                         ),
                         filled: true,
                         fillColor: HygColors.background,
-                        contentPadding:
-                            const EdgeInsets.symmetric(vertical: 10),
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: 10,
+                        ),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(9),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(9),
-                          borderSide:
-                              const BorderSide(color: Color(0xFFCBD5E1)),
+                          borderSide: const BorderSide(
+                            color: Color(0xFFCBD5E1),
+                          ),
                         ),
                       ),
                     ),
@@ -1165,19 +1289,27 @@ class _RequestsPanelState extends State<RequestsPanel>
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(9),
-                        borderSide:
-                            const BorderSide(color: Color(0xFFCBD5E1)),
+                        borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
                       ),
                     ),
                     items: const [
                       DropdownMenuItem(value: 'all', child: Text('All Status')),
-                      DropdownMenuItem(value: 'pending', child: Text('Pending')),
                       DropdownMenuItem(
-                          value: 'approved', child: Text('Approved')),
+                        value: 'pending',
+                        child: Text('Pending'),
+                      ),
                       DropdownMenuItem(
-                          value: 'rejected', child: Text('Rejected')),
+                        value: 'approved',
+                        child: Text('Approved'),
+                      ),
                       DropdownMenuItem(
-                          value: 'cancelled', child: Text('Cancelled')),
+                        value: 'rejected',
+                        child: Text('Rejected'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'cancelled',
+                        child: Text('Cancelled'),
+                      ),
                     ],
                   ),
                 ),
@@ -1190,11 +1322,18 @@ class _RequestsPanelState extends State<RequestsPanel>
             padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
             child: Row(
               children: [
-                const Icon(Icons.date_range, size: 16, color: Color(0xFF64748B)),
+                const Icon(
+                  Icons.date_range,
+                  size: 16,
+                  color: Color(0xFF64748B),
+                ),
                 const SizedBox(width: 6),
-                Text('Submitted:',
-                    style: HygTypography.tableHeader
-                        .copyWith(color: const Color(0xFF64748B))),
+                Text(
+                  'Submitted:',
+                  style: HygTypography.tableHeader.copyWith(
+                    color: const Color(0xFF64748B),
+                  ),
+                ),
                 const SizedBox(width: 8),
                 _DateRangePill(
                   dateFrom: _dateFrom,
@@ -1246,7 +1385,9 @@ class _RequestsPanelState extends State<RequestsPanel>
                     }),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: const Color(0xFFFEE2E2),
                         borderRadius: BorderRadius.circular(6),
@@ -1295,7 +1436,8 @@ class _RequestsPanelState extends State<RequestsPanel>
               child: EmployeesStateMessage(
                 icon: Icons.inbox_outlined,
                 title: 'No requests found',
-                message: _searchQuery.isNotEmpty ||
+                message:
+                    _searchQuery.isNotEmpty ||
                         _statusFilter != 'all' ||
                         _dateFrom != null ||
                         _dateTo != null
@@ -1407,7 +1549,9 @@ class _DateRangePill extends StatelessWidget {
             Icon(
               Icons.date_range,
               size: 15,
-              color: isActive ? const Color(0xFF1E40AF) : const Color(0xFF94A3B8),
+              color: isActive
+                  ? const Color(0xFF1E40AF)
+                  : const Color(0xFF94A3B8),
             ),
             const SizedBox(width: 6),
             Text(
@@ -1415,7 +1559,9 @@ class _DateRangePill extends StatelessWidget {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: isActive ? const Color(0xFF1E40AF) : const Color(0xFF64748B),
+                color: isActive
+                    ? const Color(0xFF1E40AF)
+                    : const Color(0xFF64748B),
               ),
             ),
           ],
@@ -1473,25 +1619,27 @@ class _RequestsTable extends StatelessWidget {
     return DataCell(
       Tooltip(
         message: store,
-        child: _limitedText(
-          store,
-          width: _storeWidth,
-          maxLines: 2,
-          wrap: true,
-        ),
+        child: _limitedText(store, width: _storeWidth, maxLines: 2, wrap: true),
       ),
     );
   }
-  
+
   DataCell _reasonCell(String value) {
     return DataCell(
       Tooltip(
         message: value,
-        child: _limitedText(
-          value,
-          width: _reasonWidth,
-          maxLines: 2,
-        ),
+        child: _limitedText(value, width: _reasonWidth, maxLines: 2),
+      ),
+    );
+  }
+
+  DataCell _approverCell(AdminRequestItem item) {
+    final names = item.approverNames;
+    final display = (names != null && names.isNotEmpty) ? names : '—';
+    return DataCell(
+      Tooltip(
+        message: display,
+        child: _limitedText(display, width: 140, maxLines: 2),
       ),
     );
   }
@@ -1528,6 +1676,7 @@ class _RequestsTable extends StatelessWidget {
           const DataColumn(label: Text('Date To')),
           const DataColumn(label: Text('Hours')),
           const DataColumn(label: Text('Reason')),
+          const DataColumn(label: Text('Approver')),
           const DataColumn(label: Text('Status')),
           const DataColumn(label: Text('Submitted')),
           if (showDelete) const DataColumn(label: Text('Actions')),
@@ -1543,6 +1692,7 @@ class _RequestsTable extends StatelessWidget {
           const DataColumn(label: Text('Days')),
           const DataColumn(label: Text('Type')),
           const DataColumn(label: Text('Reason')),
+          const DataColumn(label: Text('Approver')),
           const DataColumn(label: Text('Status')),
           const DataColumn(label: Text('Submitted')),
           if (showDelete) const DataColumn(label: Text('Actions')),
@@ -1558,6 +1708,7 @@ class _RequestsTable extends StatelessWidget {
           const DataColumn(label: Text('Amount')),
           const DataColumn(label: Text('Final')),
           const DataColumn(label: Text('Txn Date')),
+          const DataColumn(label: Text('Approver')),
           const DataColumn(label: Text('Status')),
           const DataColumn(label: Text('Submitted')),
           if (showDelete) const DataColumn(label: Text('Actions')),
@@ -1568,70 +1719,85 @@ class _RequestsTable extends StatelessWidget {
   DataRow _buildRow(AdminRequestItem item) {
     switch (category) {
       case AdminRequestCategory.esarf:
-        return DataRow(cells: [
-          _employeeCell(item),
-          DataCell(Text(item.departmentName ?? '—')),
-          _storeCell(item),
-          DataCell(Text(item.requestTypeName)),
-          DataCell(Text(item.dateFrom ?? '—')),
-          DataCell(Text(item.dateTo ?? '—')),
-          DataCell(Text(item.totalHours != null ? '${item.totalHours}h' : '—')),
-          _reasonCell(item.reason ?? item.timeSchedule ?? '—'),
-          _statusCell(item),
-          _submittedCell(item),
-          if (showDelete) _actionsCell(item),
-        ]);
+        return DataRow(
+          cells: [
+            _employeeCell(item),
+            DataCell(Text(item.departmentName ?? '—')),
+            _storeCell(item),
+            DataCell(Text(item.requestTypeName)),
+            DataCell(Text(item.dateFrom ?? '—')),
+            DataCell(Text(item.dateTo ?? '—')),
+            DataCell(
+              Text(item.totalHours != null ? '${item.totalHours}h' : '—'),
+            ),
+            _reasonCell(item.reason ?? item.timeSchedule ?? '—'),
+            _approverCell(item),
+            _statusCell(item),
+            _submittedCell(item),
+            if (showDelete) _actionsCell(item),
+          ],
+        );
 
       case AdminRequestCategory.leave:
-        return DataRow(cells: [
-          _employeeCell(item),
-          DataCell(Text(item.departmentName ?? '—')),
-          _storeCell(item),
-          DataCell(Text(item.leaveCategory ?? '—')),
-          DataCell(Text(item.startDate ?? '—')),
-          DataCell(Text(item.endDate ?? '—')),
-          DataCell(Text(item.totalDays != null ? '${item.totalDays}d' : '—')),
-          DataCell(Text(item.leaveType ?? '—')),
-          _reasonCell(item.reason ?? '—'),
-          _statusCell(item),
-          _submittedCell(item),
-          if (showDelete) _actionsCell(item),
-        ]);
+        return DataRow(
+          cells: [
+            _employeeCell(item),
+            DataCell(Text(item.departmentName ?? '—')),
+            _storeCell(item),
+            DataCell(Text(item.leaveCategory ?? '—')),
+            DataCell(Text(item.startDate ?? '—')),
+            DataCell(Text(item.endDate ?? '—')),
+            DataCell(Text(item.totalDays != null ? '${item.totalDays}d' : '—')),
+            DataCell(Text(item.leaveType ?? '—')),
+            _reasonCell(item.reason ?? '—'),
+            _approverCell(item),
+            _statusCell(item),
+            _submittedCell(item),
+            if (showDelete) _actionsCell(item),
+          ],
+        );
 
       case AdminRequestCategory.perk:
-        return DataRow(cells: [
-          _employeeCell(item),
-          DataCell(Text(item.departmentName ?? '—')),
-          _storeCell(item),
-          DataCell(Text(
-            item.requestTypeCode == 'discount' ? 'Discount' : 'Charge',
-          )),
-          DataCell(
-            Tooltip(
-              message: item.perkProductName ?? '—',
-              child: _limitedText(
-                item.perkProductName ?? '—',
-                width: _productWidth,
-                maxLines: 2,
+        return DataRow(
+          cells: [
+            _employeeCell(item),
+            DataCell(Text(item.departmentName ?? '—')),
+            _storeCell(item),
+            DataCell(
+              Text(item.requestTypeCode == 'discount' ? 'Discount' : 'Charge'),
+            ),
+            DataCell(
+              Tooltip(
+                message: item.perkProductName ?? '—',
+                child: _limitedText(
+                  item.perkProductName ?? '—',
+                  width: _productWidth,
+                  maxLines: 2,
+                ),
               ),
             ),
-          ),
-          DataCell(Text('${item.perkQuantity ?? 0}')),
-          DataCell(Text(
-            item.perkAmount != null
-                ? '₱${item.perkAmount!.toStringAsFixed(2)}'
-                : '—',
-          )),
-          DataCell(Text(
-            item.perkFinalAmount != null
-                ? '₱${item.perkFinalAmount!.toStringAsFixed(2)}'
-                : '—',
-          )),
-          DataCell(Text(item.dateFrom ?? '—')),
-          _statusCell(item),
-          _submittedCell(item),
-          if (showDelete) _actionsCell(item),
-        ]);
+            DataCell(Text('${item.perkQuantity ?? 0}')),
+            DataCell(
+              Text(
+                item.perkAmount != null
+                    ? '₱${item.perkAmount!.toStringAsFixed(2)}'
+                    : '—',
+              ),
+            ),
+            DataCell(
+              Text(
+                item.perkFinalAmount != null
+                    ? '₱${item.perkFinalAmount!.toStringAsFixed(2)}'
+                    : '—',
+              ),
+            ),
+            DataCell(Text(item.dateFrom ?? '—')),
+            _approverCell(item),
+            _statusCell(item),
+            _submittedCell(item),
+            if (showDelete) _actionsCell(item),
+          ],
+        );
     }
   }
 

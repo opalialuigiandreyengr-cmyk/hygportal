@@ -1634,12 +1634,56 @@ class _RequestsTable extends StatelessWidget {
   }
 
   DataCell _approverCell(AdminRequestItem item) {
-    final names = item.approverNames;
-    final display = (names != null && names.isNotEmpty) ? names : '—';
+    if (item.approvalSummary.isEmpty) {
+      return DataCell(
+        Tooltip(
+          message: '—',
+          child: _limitedText('—', width: 140, maxLines: 2),
+        ),
+      );
+    }
+
     return DataCell(
       Tooltip(
-        message: display,
-        child: _limitedText(display, width: 140, maxLines: 2),
+        message: item.approverDetail,
+        child: SizedBox(
+          width: 160,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: item.approvalSummary.map((entry) {
+              final name = (entry['approver_name'] ?? entry['name'] ?? 'Unknown').toString().trim();
+              final status = (entry['status'] ?? 'pending').toString().toLowerCase();
+              final (icon, color) = switch (status) {
+                'approved' => (Icons.check, Color(0xFF166534)),
+                'rejected' => (Icons.error_outline, Color(0xFFB91C1C)),
+                'cancelled' => (Icons.error_outline, Color(0xFF64748B)),
+                'needs_admin_review' => (Icons.warning_amber_rounded, Color(0xFFB45309)),
+                _ => (Icons.warning_amber_rounded, Color(0xFF1E40AF)),
+              };
+
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 16, color: color),
+                  const SizedBox(width: 5),
+                  Flexible(
+                    child: Text(
+                      name,
+                      style: HygTypography.tableBody.copyWith(
+                        color: color,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                  ),
+                ],
+              );
+            }).toList(),
+          ),
+        ),
       ),
     );
   }

@@ -7,6 +7,8 @@ class EmployeePreview {
     required this.id,
     required this.name,
     required this.initial,
+    this.firstName,
+    this.middleName,
     required this.email,
     required this.phone,
     required this.photoUrl,
@@ -26,6 +28,8 @@ class EmployeePreview {
   final String id;
   final String name;
   final String initial;
+  final String? firstName;
+  final String? middleName;
   final String? email;
   final String? phone;
   final String? photoUrl;

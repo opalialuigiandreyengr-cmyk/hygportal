@@ -574,6 +574,8 @@ class EmployeeDirectoryService {
       id: _stringValue(row['employee_id'], fallback: ''),
       name: fullName,
       initial: _initial(fullName),
+      firstName: _nullableString(row['first_name']),
+      middleName: _nullableString(row['middle_name']),
       email: _nullableString(row['email']),
       phone: _nullableString(row['phone']),
       photoUrl: _nullableString(row['photo_url']),
@@ -1264,11 +1266,27 @@ class RegisteredUsersService {
     return response.toString();
   }
 
+  static Future<String> deductLeaveCredits({
+    required String userProfileId,
+    required double deductDays,
+  }) async {
+    final response = await _client.rpc(
+      'admin_deduct_employee_leave_credits',
+      params: {
+        'p_user_profile_id': userProfileId,
+        'p_deduct_days': deductDays,
+      },
+    );
+
+    return response.toString();
+  }
+
   static Future<String> createUnlinkedUser({
     required String username,
     required String email,
     required String password,
     required String appRole,
+    String? employeeId,
   }) async {
     final response = await _client.rpc(
       'admin_create_unlinked_user',
@@ -1277,6 +1295,7 @@ class RegisteredUsersService {
         'p_email': email,
         'p_password': password,
         'p_app_role': appRole,
+        'p_employee_id': employeeId,
       },
     );
 

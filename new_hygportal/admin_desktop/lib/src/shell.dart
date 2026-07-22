@@ -356,10 +356,17 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
     double annualCreditDays,
   ) async {
     try {
-      await RegisteredUsersService.setLeaveCredits(
-        userProfileId: user.userProfileId,
-        annualCreditDays: annualCreditDays,
-      );
+      if (annualCreditDays < 0) {
+        await RegisteredUsersService.deductLeaveCredits(
+          userProfileId: user.userProfileId,
+          deductDays: -annualCreditDays,
+        );
+      } else {
+        await RegisteredUsersService.setLeaveCredits(
+          userProfileId: user.userProfileId,
+          annualCreditDays: annualCreditDays,
+        );
+      }
       await _loadUsers();
       _showDepartmentMessage('Leave credits updated successfully.');
     } catch (error) {
@@ -377,6 +384,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
         email: request.email,
         password: request.password,
         appRole: request.appRole,
+        employeeId: request.employeeId,
       );
       await _loadUsers();
       _showDepartmentMessage('User created successfully.');
@@ -1474,6 +1482,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
                           const SizedBox(height: 14),
                           UsersPanel(
                             users: _registeredUsers,
+                            employees: _employees,
                             isLoading: _isLoadingUsers,
                             error: _usersError,
                             onRefresh: _loadUsers,

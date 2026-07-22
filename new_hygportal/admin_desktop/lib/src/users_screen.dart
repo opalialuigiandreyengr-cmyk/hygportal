@@ -48,6 +48,7 @@ class UsersHeader extends StatelessWidget {
 class UsersPanel extends StatefulWidget {
   const UsersPanel({
     required this.users,
+    required this.employees,
     required this.isLoading,
     required this.error,
     required this.onRefresh,
@@ -60,6 +61,7 @@ class UsersPanel extends StatefulWidget {
   });
 
   final List<RegisteredUserPreview> users;
+  final List<EmployeePreview> employees;
   final bool isLoading;
   final String? error;
   final VoidCallback onRefresh;
@@ -124,9 +126,16 @@ class _UsersPanelState extends State<UsersPanel> {
   }
 
   Future<void> _addUser() async {
+    final linkedEmployeeIds = widget.users
+        .map((u) => u.employeeId)
+        .whereType<String>()
+        .toSet();
+    final availableEmployees = widget.employees
+        .where((e) => !linkedEmployeeIds.contains(e.id))
+        .toList();
     final request = await showDialog<AddUserRequest>(
       context: context,
-      builder: (context) => const AddUserDialog(),
+      builder: (context) => AddUserDialog(employees: availableEmployees),
     );
     if (request == null) return;
     await widget.onCreateUser(request);
@@ -754,16 +763,20 @@ class AddUserRequest {
     required this.email,
     required this.password,
     required this.appRole,
+    this.employeeId,
   });
 
   final String username;
   final String email;
   final String password;
   final String appRole;
+  final String? employeeId;
 }
 
 class AddUserDialog extends StatefulWidget {
-  const AddUserDialog({super.key});
+  const AddUserDialog({required this.employees, super.key});
+
+  final List<EmployeePreview> employees;
 
   @override
   State<AddUserDialog> createState() => _AddUserDialogState();
@@ -775,7 +788,18 @@ class _AddUserDialogState extends State<AddUserDialog> {
   final _passwordController = TextEditingController();
   final _confirmController = TextEditingController();
   var _role = 'employee';
+  String? _selectedEmployeeId;
   String? _error;
+
+  bool get _hasEmployees => widget.employees.isNotEmpty;
+
+  EmployeePreview? get _selectedEmployee {
+    if (_selectedEmployeeId == null) return null;
+    for (final e in widget.employees) {
+      if (e.id == _selectedEmployeeId) return e;
+    }
+    return null;
+  }
 
   @override
   void dispose() {
@@ -784,6 +808,24 @@ class _AddUserDialogState extends State<AddUserDialog> {
     _passwordController.dispose();
     _confirmController.dispose();
     super.dispose();
+  }
+
+  void _onEmployeeSelected(String? value) {
+    setState(() {
+      _selectedEmployeeId = (value == null || value.isEmpty) ? null : value;
+      final emp = _selectedEmployee;
+      if (emp != null) {
+        _emailController.text = emp.email ?? '';
+        final firstName = (emp.firstName ?? '')
+            .toLowerCase()
+            .replaceAll(RegExp(r'[^a-z]'), '');
+        if (firstName.isNotEmpty) {
+          _usernameController.text = firstName;
+        }
+      } else {
+        _emailController.clear();
+      }
+    });
   }
 
   void _submit() {
@@ -815,6 +857,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
         email: email,
         password: password,
         appRole: _role,
+        employeeId: _selectedEmployee?.id,
       ),
     );
   }
@@ -825,187 +868,502 @@ class _AddUserDialogState extends State<AddUserDialog> {
 
     return Dialog(
       insetPadding: const EdgeInsets.all(28),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       backgroundColor: Colors.white,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 520),
+        constraints: const BoxConstraints(maxWidth: 540),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(22, 20, 22, 18),
+          padding: const EdgeInsets.fromLTRB(24, 22, 24, 20),
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFFF7D6),
-                        border: Border.all(color: const Color(0xFFF4D77A)),
-                        borderRadius: BorderRadius.circular(9),
-                      ),
-                      child: const Icon(
-                        Icons.person_add_alt_1_outlined,
-                        color: Color(0xFF8A5A00),
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Add User',
-                        style: HygTypography.pageTitle.copyWith(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: 'Close',
-                      onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(
-                        Icons.close,
-                        color: Color(0xFF64748B),
-                        size: 20,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                const Divider(height: 1, color: Color(0xFFF1DFA2)),
+                _buildHeader(),
+                const SizedBox(height: 20),
+                _buildAccountSection(roles),
                 const SizedBox(height: 18),
-                Text(
-                  'Create a login account without linking an employee profile.',
-                  style: HygTypography.body.copyWith(
-                    color: HygColors.ink,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
+                _buildEmployeeSection(),
+                if (_selectedEmployee != null) ...[
+                  const SizedBox(height: 14),
+                  _buildEmployeePreview(),
+                ],
+                if (_error != null) ...[
+                  const SizedBox(height: 14),
+                  _buildErrorBanner(),
+                ],
+                const SizedBox(height: 20),
+                _buildFooter(),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Row(
+      children: [
+        Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFFFDE68A), Color(0xFFFACC15)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(11),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFFACC15).withValues(alpha: 0.3),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: const Icon(
+            Icons.person_add_alt_1_outlined,
+            color: Color(0xFF78350F),
+            size: 21,
+          ),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Add User',
+                style: HygTypography.pageTitle.copyWith(fontSize: 20),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'Create account and optionally link an employee.',
+                style: HygTypography.body.copyWith(
+                  fontSize: 12.5,
+                  color: HygColors.muted,
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  'This user will appear as no linked employee until assigned later.',
-                  style: HygTypography.body.copyWith(
-                    color: const Color(0xFF7A6320),
-                    fontSize: 14,
-                    fontWeight: FontWeight.w400,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                ModalTextField(
-                  controller: _usernameController,
-                  label: 'Username',
-                  required: true,
-                ),
-                const SizedBox(height: 12),
-                ModalTextField(
-                  controller: _emailController,
-                  label: 'Email',
-                  required: true,
-                ),
-                const SizedBox(height: 12),
-                ModalTextField(
+              ),
+            ],
+          ),
+        ),
+        IconButton(
+          tooltip: 'Close',
+          onPressed: () => Navigator.of(context).pop(),
+          icon: const Icon(Icons.close, color: Color(0xFF94A3B8), size: 20),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAccountSection(List<String> roles) {
+    return _SectionCard(
+      icon: Icons.badge_outlined,
+      iconColor: const Color(0xFFD97706),
+      title: 'Login Credentials',
+      child: Column(
+        children: [
+          ModalTextField(
+            controller: _usernameController,
+            label: 'Username',
+            required: true,
+          ),
+          const SizedBox(height: 12),
+          ModalTextField(
+            controller: _emailController,
+            label: _selectedEmployee != null ? 'Email (auto-filled)' : 'Email',
+            required: true,
+            readOnly: _selectedEmployee != null,
+            trailingIcon: _selectedEmployee != null
+                ? Icons.link
+                : null,
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: ModalTextField(
                   controller: _passwordController,
                   label: 'Password',
                   required: true,
                   obscureText: true,
                 ),
-                const SizedBox(height: 12),
-                ModalTextField(
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ModalTextField(
                   controller: _confirmController,
-                  label: 'Confirm Password',
+                  label: 'Confirm',
                   required: true,
                   obscureText: true,
                 ),
-                const SizedBox(height: 16),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                FieldLabel(label: 'Role', required: true),
+                const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
                   children: [
                     for (final role in roles)
-                      ChoiceChip(
-                        label: Text(
-                          role.toUpperCase(),
-                          style: HygTypography.body.copyWith(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: _role == role
-                                ? HygColors.ink
-                                : const Color(0xFF7A6320),
-                          ),
-                        ),
+                      _RoleChip(
+                        label: role.toUpperCase(),
                         selected: _role == role,
-                        onSelected: (_) => setState(() => _role = role),
-                        selectedColor: const Color(0xFFFFF3B0),
-                        backgroundColor: const Color(0xFFFFFCF2),
-                        side: BorderSide(
-                          color: _role == role
-                              ? const Color(0xFFE4C24D)
-                              : const Color(0xFFF1DFA2),
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                        onTap: () => setState(() => _role = role),
                       ),
-                  ],
-                ),
-                if (_error != null) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    _error!,
-                    style: HygTypography.body.copyWith(
-                      color: const Color(0xFFDC2626),
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 20),
-                const Divider(height: 1, color: Color(0xFFF1DFA2)),
-                const SizedBox(height: 14),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    SizedBox(
-                      height: 40,
-                      width: 104,
-                      child: OutlinedButton(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFF7A6320),
-                          side: const BorderSide(color: Color(0xFFF1DFA2)),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        onPressed: () => Navigator.of(context).pop(),
-                        child: const Text('Cancel'),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    SizedBox(
-                      height: 40,
-                      width: 124,
-                      child: FilledButton.icon(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFFF6C400),
-                          foregroundColor: HygColors.ink,
-                          textStyle: HygTypography.button.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        onPressed: _submit,
-                        icon: const Icon(Icons.check, size: 16),
-                        label: const Text('Add'),
-                      ),
-                    ),
                   ],
                 ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmployeeSection() {
+    return _SectionCard(
+      icon: Icons.work_outline,
+      iconColor: const Color(0xFF0369A1),
+      title: 'Link Employee',
+      subtitle: _hasEmployees
+          ? 'Optional — skip to assign later.'
+          : 'No unlinked employees available.',
+      child: _hasEmployees
+          ? DropdownButtonFormField<String>(
+              isExpanded: true,
+              initialValue: '',
+              decoration: modalInputDecoration(
+                hint: 'Select an employee...',
+              ),
+              style: HygTypography.input.copyWith(fontSize: 14),
+              dropdownColor: Colors.white,
+              icon: const Icon(
+                Icons.keyboard_arrow_down,
+                color: Color(0xFF334155),
+              ),
+              items: [
+                const DropdownMenuItem<String>(
+                  value: '',
+                  child: Text(
+                    'No linked employee',
+                    style: TextStyle(color: Color(0xFF94A3B8)),
+                  ),
+                ),
+                ...widget.employees.map(
+                      (emp) => DropdownMenuItem<String>(
+                        value: emp.id,
+                        child: Text(
+                          '${emp.name}  •  ${emp.idNumber}',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+              ],
+              onChanged: _onEmployeeSelected,
+            )
+          : Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(9),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.info_outline,
+                    size: 16,
+                    color: Color(0xFF94A3B8),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'All employees are already linked. Create the user first, then assign later.',
+                      style: HygTypography.body.copyWith(
+                        fontSize: 12.5,
+                        color: HygColors.muted,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+    );
+  }
+
+  Widget _buildEmployeePreview() {
+    final emp = _selectedEmployee!;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFFEFF6FF),
+            const Color(0xFFDBEAFE).withValues(alpha: 0.5),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(11),
+        border: Border.all(color: const Color(0xFFBFDBFE)),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 20,
+            backgroundColor: emp.avatarColor.withValues(alpha: 0.15),
+            child: Text(
+              emp.initial,
+              style: TextStyle(
+                color: emp.avatarColor,
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  emp.name,
+                  style: HygTypography.tablePrimary.copyWith(fontSize: 13),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${emp.positionName}  •  ${emp.departmentName}',
+                  style: HygTypography.tableMuted.copyWith(
+                    fontSize: 11.5,
+                    color: const Color(0xFF475569),
+                  ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  'ID: ${emp.idNumber}',
+                  style: HygTypography.tableMuted.copyWith(
+                    fontSize: 11,
+                    color: const Color(0xFF64748B),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Remove link',
+            onPressed: () => _onEmployeeSelected(''),
+            icon: const Icon(Icons.close, size: 16, color: Color(0xFF94A3B8)),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorBanner() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFEF2F2),
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: const Color(0xFFFECACA)),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.error_outline,
+            size: 16,
+            color: Color(0xFFDC2626),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _error!,
+              style: HygTypography.body.copyWith(
+                color: const Color(0xFFDC2626),
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFooter() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        SizedBox(
+          height: 40,
+          child: OutlinedButton(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFF475569),
+              side: const BorderSide(color: Color(0xFFE2E8F0)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+        ),
+        const SizedBox(width: 10),
+        SizedBox(
+          height: 40,
+          child: FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFF6C400),
+              foregroundColor: HygColors.ink,
+              textStyle: HygTypography.button.copyWith(fontWeight: FontWeight.w600),
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: _submit,
+            icon: const Icon(Icons.check_rounded, size: 18),
+            label: const Text('Create User'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SectionCard extends StatelessWidget {
+  const _SectionCard({
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.child,
+    this.subtitle,
+  });
+
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final String? subtitle;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFAFBFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE8ECF1)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: Icon(icon, size: 16, color: iconColor),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: HygTypography.body.copyWith(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: HygColors.ink,
+                      ),
+                    ),
+                    if (subtitle != null)
+                      Text(
+                        subtitle!,
+                        style: HygTypography.body.copyWith(
+                          fontSize: 11.5,
+                          color: HygColors.muted,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class _RoleChip extends StatelessWidget {
+  const _RoleChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFFFEF3C7) : Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: selected ? const Color(0xFFF59E0B) : const Color(0xFFE2E8F0),
+            width: selected ? 1.5 : 1,
+          ),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1),
+                  ),
+                ]
+              : null,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11.5,
+            fontWeight: FontWeight.w700,
+            color: selected ? const Color(0xFF92400E) : const Color(0xFF64748B),
+            letterSpacing: 0.3,
           ),
         ),
       ),
@@ -1653,7 +2011,9 @@ class UserLeaveCreditsDialog extends StatefulWidget {
 
 class _UserLeaveCreditsDialogState extends State<UserLeaveCreditsDialog> {
   late final TextEditingController _creditsController;
+  late final TextEditingController _deductController;
   String? _error;
+  String? _deductError;
 
   @override
   void initState() {
@@ -1661,15 +2021,17 @@ class _UserLeaveCreditsDialogState extends State<UserLeaveCreditsDialog> {
     _creditsController = TextEditingController(
       text: _formatInitialValue(widget.user.leaveCreditDays ?? 7),
     );
+    _deductController = TextEditingController();
   }
 
   @override
   void dispose() {
     _creditsController.dispose();
+    _deductController.dispose();
     super.dispose();
   }
 
-  void _submit() {
+  void _submitCredits() {
     final value = double.tryParse(_creditsController.text.trim());
     final usedDays = widget.user.leaveUsedDays ?? 0;
     if (value == null || value < 0) {
@@ -1686,8 +2048,28 @@ class _UserLeaveCreditsDialogState extends State<UserLeaveCreditsDialog> {
     Navigator.of(context).pop(value);
   }
 
+  void _submitDeduct() {
+    final deductDays = double.tryParse(_deductController.text.trim());
+    final currentAnnual = widget.user.leaveCreditDays ?? 7;
+    final usedDays = widget.user.leaveUsedDays ?? 0;
+    final remainingDays = currentAnnual - usedDays;
+    if (deductDays == null || deductDays <= 0) {
+      setState(() => _deductError = 'Enter a number greater than zero.');
+      return;
+    }
+    if (deductDays > remainingDays) {
+      setState(
+        () => _deductError =
+            'Cannot deduct more than remaining credits (${_formatDays(remainingDays)}).',
+      );
+      return;
+    }
+    Navigator.of(context).pop(-deductDays);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final currentAnnual = widget.user.leaveCreditDays ?? 7;
     final usedDays = widget.user.leaveUsedDays ?? 0;
     final remainingDays = widget.user.leaveRemainingDays ?? 0;
     return Dialog(
@@ -1696,95 +2078,166 @@ class _UserLeaveCreditsDialogState extends State<UserLeaveCreditsDialog> {
       backgroundColor: Colors.white,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 460),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(22, 20, 22, 18),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(
-                    Icons.event_available_outlined,
-                    color: HygColors.goldStrong,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Allocate Leave Credits',
-                      style: HygTypography.pageTitle.copyWith(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w600,
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(22, 20, 22, 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.event_available_outlined,
+                      color: HygColors.goldStrong,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Allocate Leave Credits',
+                        style: HygTypography.pageTitle.copyWith(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
+                    IconButton(
+                      tooltip: 'Close',
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(
+                        Icons.close,
+                        color: Color(0xFF64748B),
+                        size: 20,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  widget.user.fullName,
+                  style: HygTypography.tableBody.copyWith(
+                    color: HygColors.ink,
+                    fontWeight: FontWeight.w800,
                   ),
-                  IconButton(
-                    tooltip: 'Close',
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(
-                      Icons.close,
-                      color: Color(0xFF64748B),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Annual: ${_formatDays(currentAnnual)}  •  Used: ${_formatDays(usedDays)}  •  Remaining: ${_formatDays(remainingDays)}',
+                  style: HygTypography.tableBody.copyWith(color: HygColors.muted),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _creditsController,
+                  autofocus: true,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: 'Annual leave credits',
+                    hintText: 'Example: 7',
+                    errorText: _error,
+                    suffixText: 'days',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  onSubmitted: (_) => _submitCredits(),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    const SizedBox(width: 10),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: HygColors.gold,
+                        foregroundColor: HygColors.ink,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      onPressed: _submitCredits,
+                      icon: const Icon(Icons.save_outlined, size: 18),
+                      label: const Text('Save Credits'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  height: 1,
+                  color: const Color(0xFFE2E8F0),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.remove_circle_outline,
+                      color: Color(0xFFDC2626),
                       size: 20,
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                widget.user.fullName,
-                style: HygTypography.tableBody.copyWith(
-                  color: HygColors.ink,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Used: ${_formatDays(usedDays)}  •  Remaining: ${_formatDays(remainingDays)}',
-                style: HygTypography.tableBody.copyWith(color: HygColors.muted),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _creditsController,
-                autofocus: true,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                decoration: InputDecoration(
-                  labelText: 'Annual leave credits',
-                  hintText: 'Example: 7',
-                  errorText: _error,
-                  suffixText: 'days',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                onSubmitted: (_) => _submit(),
-              ),
-              const SizedBox(height: 18),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Cancel'),
-                  ),
-                  const SizedBox(width: 10),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: HygColors.gold,
-                      foregroundColor: HygColors.ink,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Manual Deduction',
+                      style: HygTypography.tableBody.copyWith(
+                        color: HygColors.ink,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
                       ),
                     ),
-                    onPressed: _submit,
-                    icon: const Icon(Icons.save_outlined, size: 18),
-                    label: const Text('Save Credits'),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Deduct days from annual credits to match current leave.',
+                  style: HygTypography.tableBody.copyWith(
+                    color: HygColors.muted,
+                    fontSize: 12,
                   ),
-                ],
-              ),
-            ],
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _deductController,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: 'Days to deduct',
+                    hintText: 'Enter days',
+                    errorText: _deductError,
+                    suffixText: 'days',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  onSubmitted: (_) => _submitDeduct(),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Cancel'),
+                    ),
+                    const SizedBox(width: 10),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFDC2626),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      onPressed: _submitDeduct,
+                      icon: const Icon(Icons.remove_outlined, size: 18),
+                      label: const Text('Deduct'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

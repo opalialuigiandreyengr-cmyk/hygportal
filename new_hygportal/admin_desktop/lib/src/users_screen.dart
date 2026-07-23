@@ -57,6 +57,7 @@ class UsersPanel extends StatefulWidget {
     required this.onResetPassword,
     required this.onSetLeaveCredits,
     required this.onCreateUser,
+    required this.onDeleteUser,
     super.key,
   });
 
@@ -77,6 +78,7 @@ class UsersPanel extends StatefulWidget {
   )
   onSetLeaveCredits;
   final Future<void> Function(AddUserRequest request) onCreateUser;
+  final Future<void> Function(RegisteredUserPreview user) onDeleteUser;
 
   @override
   State<UsersPanel> createState() => _UsersPanelState();
@@ -249,6 +251,7 @@ class _UsersPanelState extends State<UsersPanel> {
                 onSetRole: widget.onSetRole,
                 onResetPassword: widget.onResetPassword,
                 onSetLeaveCredits: widget.onSetLeaveCredits,
+                onDeleteUser: widget.onDeleteUser,
               ),
             ),
             const SizedBox(height: 14),
@@ -363,6 +366,7 @@ class UserRow extends StatefulWidget {
     required this.onSetRole,
     required this.onResetPassword,
     required this.onSetLeaveCredits,
+    required this.onDeleteUser,
     super.key,
   });
 
@@ -378,6 +382,7 @@ class UserRow extends StatefulWidget {
     double annualCreditDays,
   )
   onSetLeaveCredits;
+  final Future<void> Function(RegisteredUserPreview user) onDeleteUser;
 
   @override
   State<UserRow> createState() => _UserRowState();
@@ -483,6 +488,7 @@ class _UserRowState extends State<UserRow> {
                 onSetRole: widget.onSetRole,
                 onResetPassword: widget.onResetPassword,
                 onSetLeaveCredits: widget.onSetLeaveCredits,
+                onDeleteUser: widget.onDeleteUser,
               ),
             ),
           ],
@@ -571,6 +577,7 @@ class UserActionsMenu extends StatefulWidget {
     required this.onSetRole,
     required this.onResetPassword,
     required this.onSetLeaveCredits,
+    required this.onDeleteUser,
     super.key,
   });
 
@@ -588,6 +595,7 @@ class UserActionsMenu extends StatefulWidget {
     double annualCreditDays,
   )
   onSetLeaveCredits;
+  final Future<void> Function(RegisteredUserPreview user) onDeleteUser;
 
   @override
   State<UserActionsMenu> createState() => _UserActionsMenuState();
@@ -651,6 +659,16 @@ class _UserActionsMenuState extends State<UserActionsMenu> {
                 : 'Allocate leave credits',
           ),
         ),
+        const PopupMenuDivider(height: 1),
+        const PopupMenuItem(
+          value: 'delete',
+          height: 52,
+          child: _UserActionMenuItem(
+            icon: Icons.delete_outline,
+            label: 'Delete user',
+            iconColor: Color(0xFFDC2626),
+          ),
+        ),
       ],
     );
 
@@ -689,6 +707,34 @@ class _UserActionsMenuState extends State<UserActionsMenu> {
       if (credits != null) {
         await widget.onSetLeaveCredits(widget.user, credits);
       }
+    } else if (action == 'delete') {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          title: const Text('Delete User'),
+          content: Text(
+            'Are you sure you want to delete "${widget.user.username}"? This cannot be undone.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFDC2626),
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Delete'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed == true) {
+        await widget.onDeleteUser(widget.user);
+      }
     }
   }
 
@@ -726,10 +772,15 @@ class _UserActionsMenuState extends State<UserActionsMenu> {
 }
 
 class _UserActionMenuItem extends StatelessWidget {
-  const _UserActionMenuItem({required this.icon, required this.label});
+  const _UserActionMenuItem({
+    required this.icon,
+    required this.label,
+    this.iconColor,
+  });
 
   final IconData icon;
   final String label;
+  final Color? iconColor;
 
   @override
   Widget build(BuildContext context) {
@@ -737,7 +788,7 @@ class _UserActionMenuItem extends StatelessWidget {
       children: [
         SizedBox(
           width: 36,
-          child: Icon(icon, color: const Color(0xFF475569), size: 22),
+          child: Icon(icon, color: iconColor ?? const Color(0xFF475569), size: 22),
         ),
         const SizedBox(width: 8),
         Expanded(

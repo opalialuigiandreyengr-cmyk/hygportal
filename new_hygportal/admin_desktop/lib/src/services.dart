@@ -1281,6 +1281,17 @@ class RegisteredUsersService {
     return response.toString();
   }
 
+  static Future<void> deleteUser({
+    required String userProfileId,
+  }) async {
+    await _client.rpc(
+      'admin_delete_user',
+      params: {
+        'p_user_profile_id': userProfileId,
+      },
+    );
+  }
+
   static Future<String> createUnlinkedUser({
     required String username,
     required String email,

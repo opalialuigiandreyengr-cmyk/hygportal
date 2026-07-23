@@ -377,6 +377,21 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _deleteUser(RegisteredUserPreview user) async {
+    try {
+      await RegisteredUsersService.deleteUser(
+        userProfileId: user.userProfileId,
+      );
+      await _loadUsers();
+      _showDepartmentMessage('User deleted successfully.');
+    } catch (error) {
+      _showDepartmentMessage(
+        error.toString().replaceFirst('Exception: ', ''),
+        isError: true,
+      );
+    }
+  }
+
   Future<void> _createUnlinkedUser(AddUserRequest request) async {
     try {
       await RegisteredUsersService.createUnlinkedUser(
@@ -438,6 +453,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
               });
         }
       });
+      unawaited(_loadAdminWorkflow());
       _showDepartmentMessage('Position assigned successfully.');
     } catch (error) {
       _showDepartmentMessage(
@@ -466,6 +482,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
             )
             .toList();
       });
+      unawaited(_loadAdminWorkflow());
       _showDepartmentMessage('Position removed successfully.');
     } catch (error) {
       _showDepartmentMessage(
@@ -1108,6 +1125,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
           );
         }).toList();
       });
+      unawaited(_loadAdminWorkflow());
       _showDepartmentMessage('Approver level updated successfully.');
     } catch (error) {
       if (!mounted) return;
@@ -1150,6 +1168,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
           );
         }).toList();
       });
+      unawaited(_loadAdminWorkflow());
       _showDepartmentMessage('Position level updated successfully.');
     } catch (error) {
       if (!mounted) return;
@@ -1190,6 +1209,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
           );
         }).toList();
       });
+      unawaited(_loadAdminWorkflow());
       _showDepartmentMessage('Position level cleared successfully.');
     } catch (error) {
       if (!mounted) return;
@@ -1239,6 +1259,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
           );
         }).toList();
       });
+      unawaited(_loadAdminWorkflow());
       _showDepartmentMessage('Department route updated successfully.');
     } catch (error) {
       if (!mounted) return;
@@ -1491,6 +1512,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
                             onResetPassword: _resetUserPassword,
                             onSetLeaveCredits: _setUserLeaveCredits,
                             onCreateUser: _createUnlinkedUser,
+                            onDeleteUser: _deleteUser,
                           ),
                         ] else if (_activeSection == HrSection.departments) ...[
                           DepartmentsHeader(

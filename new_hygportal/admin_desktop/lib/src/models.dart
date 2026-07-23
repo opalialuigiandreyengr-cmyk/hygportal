@@ -699,6 +699,33 @@ class AdminRequestItem {
     return status;
   }
 
+  String get approverNames {
+    if (approvalSummary.isEmpty) return '—';
+    final names = approvalSummary
+        .map(
+          (entry) =>
+              (entry['approver_name'] ?? entry['name'] ?? '').toString().trim(),
+        )
+        .where((name) => name.isNotEmpty)
+        .toList(growable: false);
+    if (names.isEmpty) return '—';
+    return names.join(', ');
+  }
+
+  String get approverDetail {
+    if (approvalSummary.isEmpty) return 'No approvals recorded.';
+    return approvalSummary
+        .map((entry) {
+          final level = entry['level']?.toString() ?? '?';
+          final name = (entry['approver_name'] ?? entry['name'] ?? 'Unknown')
+              .toString()
+              .trim();
+          final status = (entry['status'] ?? 'pending').toString().trim();
+          return 'L$level: $name ($status)';
+        })
+        .join('\n');
+  }
+
   factory AdminRequestItem.fromRow(Map<String, dynamic> row) {
     final approvalRaw = row['approval_summary'];
     List<Map<String, dynamic>> approvalList = const [];

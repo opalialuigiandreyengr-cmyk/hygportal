@@ -127,7 +127,8 @@ class _RequestsPanelState extends State<RequestsPanel>
             r.requestTypeName.toLowerCase().contains(q) ||
             (r.leaveCategory ?? '').toLowerCase().contains(q) ||
             (r.perkProductName ?? '').toLowerCase().contains(q) ||
-            (r.reason ?? '').toLowerCase().contains(q);
+            (r.reason ?? '').toLowerCase().contains(q) ||
+            r.approverNames.toLowerCase().contains(q);
       }).toList(growable: false);
     }
 
@@ -1425,6 +1426,13 @@ class _DateRangePill extends StatelessWidget {
   }
 }
 
+class _ApproverEntry {
+  const _ApproverEntry({required this.name, required this.status, required this.level});
+  final String name;
+  final String status;
+  final String? level;
+}
+
 // ── Table ───────────────────────────────────────────────────────────────────
 
 class _RequestsTable extends StatelessWidget {
@@ -1496,6 +1504,119 @@ class _RequestsTable extends StatelessWidget {
     );
   }
 
+  DataCell _approverCell(AdminRequestItem item) {
+    if (item.approvalSummary.isEmpty) {
+      return DataCell(
+        Tooltip(
+          message: '—',
+          child: _limitedText('—', width: 140, maxLines: 2),
+        ),
+      );
+    }
+
+    final entries = item.approvalSummary.map((entry) {
+          final name = (entry['approver_name'] ?? entry['name'] ?? 'Unknown').toString().trim();
+          final status = (entry['status'] ?? 'pending').toString().toLowerCase();
+          final level = entry['level']?.toString();
+          return _ApproverEntry(name: name, status: status, level: level);
+        }).toList(growable: false);
+    final highlights = _resolveHighlights(entries);
+
+    return DataCell(
+      Tooltip(
+        message: item.approverDetail,
+        child: SizedBox(
+          width: 180,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: entries.map((entry) {
+              final (icon, color) = _iconForStatus(entry.status);
+              final isHighlighted = highlights.contains(entry);
+
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                margin: const EdgeInsets.only(bottom: 2),
+                decoration: BoxDecoration(
+                  color: isHighlighted ? color.withValues(alpha: 0.12) : null,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(icon, size: 16, color: color),
+                    const SizedBox(width: 5),
+                    Flexible(
+                      child: Text(
+                        entry.name,
+                        style: HygTypography.tableBody.copyWith(
+                          color: color,
+                          fontSize: 11,
+                          fontWeight: isHighlighted ? FontWeight.w800 : FontWeight.w600,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  (IconData icon, Color color) _iconForStatus(String status) {
+    switch (status) {
+      case 'approved':
+        return (Icons.check, const Color(0xFF166534));
+      case 'rejected':
+      case 'cancelled':
+        return (Icons.error_outline, const Color(0xFFB91C1C));
+      case 'needs_admin_review':
+        return (Icons.warning_amber_rounded, const Color(0xFFB45309));
+      default:
+        return (Icons.warning_amber_rounded, const Color(0xFF1E40AF));
+    }
+  }
+
+  Set<_ApproverEntry> _resolveHighlights(List<_ApproverEntry> entries) {
+    if (entries.isEmpty) return const {};
+
+    final sorted = entries.toList(growable: false);
+    sorted.sort(
+      (a, b) => _levelValue(a.level).compareTo(_levelValue(b.level)),
+    );
+
+    final result = <_ApproverEntry>{};
+
+    final first = sorted.first;
+    final firstMatch = entries.firstWhere(
+        (e) => e.name == first.name && _levelValue(e.level) == _levelValue(first.level) && e.status == first.status,
+    orElse: () => first);
+    result.add(firstMatch);
+
+    if (sorted.length > 1) {
+      final last = sorted.last;
+      final lastMatch = entries.firstWhere(
+          (e) => e.name == last.name && _levelValue(e.level) == _levelValue(last.level) && e.status == last.status,
+      orElse: () => last);
+      result.add(lastMatch);
+    }
+
+    return result;
+  }
+
+  int _levelValue(String? level) {
+    if (level == null) return 999999;
+    final parsed = int.tryParse(level);
+    if (parsed != null) return parsed;
+    final normalized = level.codeUnits.fold<int>(0, (sum, c) => sum + c);
+    return -normalized;
+  }
+
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -1528,6 +1649,7 @@ class _RequestsTable extends StatelessWidget {
           const DataColumn(label: Text('Date To')),
           const DataColumn(label: Text('Hours')),
           const DataColumn(label: Text('Reason')),
+          const DataColumn(label: Text('Approver')),
           const DataColumn(label: Text('Status')),
           const DataColumn(label: Text('Submitted')),
           if (showDelete) const DataColumn(label: Text('Actions')),
@@ -1543,6 +1665,7 @@ class _RequestsTable extends StatelessWidget {
           const DataColumn(label: Text('Days')),
           const DataColumn(label: Text('Type')),
           const DataColumn(label: Text('Reason')),
+          const DataColumn(label: Text('Approver')),
           const DataColumn(label: Text('Status')),
           const DataColumn(label: Text('Submitted')),
           if (showDelete) const DataColumn(label: Text('Actions')),
@@ -1558,6 +1681,7 @@ class _RequestsTable extends StatelessWidget {
           const DataColumn(label: Text('Amount')),
           const DataColumn(label: Text('Final')),
           const DataColumn(label: Text('Txn Date')),
+          const DataColumn(label: Text('Approver')),
           const DataColumn(label: Text('Status')),
           const DataColumn(label: Text('Submitted')),
           if (showDelete) const DataColumn(label: Text('Actions')),
@@ -1577,6 +1701,7 @@ class _RequestsTable extends StatelessWidget {
           DataCell(Text(item.dateTo ?? '—')),
           DataCell(Text(item.totalHours != null ? '${item.totalHours}h' : '—')),
           _reasonCell(item.reason ?? item.timeSchedule ?? '—'),
+          _approverCell(item),
           _statusCell(item),
           _submittedCell(item),
           if (showDelete) _actionsCell(item),
@@ -1593,6 +1718,7 @@ class _RequestsTable extends StatelessWidget {
           DataCell(Text(item.totalDays != null ? '${item.totalDays}d' : '—')),
           DataCell(Text(item.leaveType ?? '—')),
           _reasonCell(item.reason ?? '—'),
+          _approverCell(item),
           _statusCell(item),
           _submittedCell(item),
           if (showDelete) _actionsCell(item),
@@ -1628,6 +1754,7 @@ class _RequestsTable extends StatelessWidget {
                 : '—',
           )),
           DataCell(Text(item.dateFrom ?? '—')),
+          _approverCell(item),
           _statusCell(item),
           _submittedCell(item),
           if (showDelete) _actionsCell(item),

@@ -779,6 +779,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
     if (created == true) {
       await Future<void>.delayed(const Duration(milliseconds: 300));
       await _loadCompanies();
+      _showDepartmentMessage('Company created successfully.');
     }
   }
 
@@ -792,6 +793,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
     if (updated == true) {
       await Future<void>.delayed(const Duration(milliseconds: 300));
       await _loadCompanies();
+      _showDepartmentMessage('Company updated successfully.');
     }
   }
 

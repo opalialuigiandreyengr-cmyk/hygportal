@@ -74,6 +74,7 @@ class PositionsPanel extends StatelessWidget {
     required this.onRefresh,
     required this.onEditPosition,
     required this.onDeletePosition,
+    this.canEditAndDelete = true,
     super.key,
   });
 
@@ -83,6 +84,7 @@ class PositionsPanel extends StatelessWidget {
   final VoidCallback onRefresh;
   final ValueChanged<PositionPreview> onEditPosition;
   final ValueChanged<PositionPreview> onDeletePosition;
+  final bool canEditAndDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -142,6 +144,7 @@ class PositionsPanel extends StatelessWidget {
                 position: position,
                 onEdit: () => onEditPosition(position),
                 onDelete: () => onDeletePosition(position),
+                canEditAndDelete: canEditAndDelete,
               ),
             ),
         ],
@@ -565,12 +568,14 @@ class PositionRow extends StatelessWidget {
     required this.position,
     required this.onEdit,
     required this.onDelete,
+    this.canEditAndDelete = true,
     super.key,
   });
 
   final PositionPreview position;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final bool canEditAndDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -620,29 +625,31 @@ class PositionRow extends StatelessWidget {
           Expanded(flex: 2, child: BodyCell(position.updated)),
           SizedBox(
             width: 86,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                IconButton(
-                  tooltip: 'Edit position',
-                  onPressed: onEdit,
-                  icon: const Icon(
-                    Icons.edit,
-                    color: Color(0xFF2563EB),
-                    size: 18,
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Delete position',
-                  onPressed: onDelete,
-                  icon: const Icon(
-                    Icons.delete_outline,
-                    color: Color(0xFFDC2626),
-                    size: 18,
-                  ),
-                ),
-              ],
-            ),
+            child: canEditAndDelete
+                ? Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      IconButton(
+                        tooltip: 'Edit position',
+                        onPressed: onEdit,
+                        icon: const Icon(
+                          Icons.edit,
+                          color: Color(0xFF2563EB),
+                          size: 18,
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Delete position',
+                        onPressed: onDelete,
+                        icon: const Icon(
+                          Icons.delete_outline,
+                          color: Color(0xFFDC2626),
+                          size: 18,
+                        ),
+                      ),
+                    ],
+                  )
+                : const SizedBox(),
           ),
         ],
       ),

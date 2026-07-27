@@ -61,6 +61,14 @@ class AdminLoginSession {
     final role = appRole.toLowerCase();
     return role == 'admin' || role == 'super_admin';
   }
+
+  bool get isHr {
+    return appRole.toLowerCase() == 'hr';
+  }
+
+  bool get canEditAndDeleteMasterData {
+    return canManageAdminSettings;
+  }
 }
 
 class EmployeeDirectoryService {

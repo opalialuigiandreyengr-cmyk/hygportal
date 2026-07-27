@@ -621,6 +621,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
   void _selectSection(HrSection section) {
     if (!widget.session.canManageAdminSettings &&
         {
+          HrSection.companies,
           HrSection.approvalRoutes,
           HrSection.authorityLevels,
           HrSection.approverAssignments,
@@ -1571,6 +1572,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
                             onRefresh: _loadPositions,
                             onEditPosition: _openEditPositionModal,
                             onDeletePosition: _confirmDeletePosition,
+                            canEditAndDelete: widget.session.canEditAndDeleteMasterData,
                           ),
                         ] else if (_activeSection == HrSection.clusters) ...[
                           ClustersHeader(
@@ -1585,6 +1587,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
                             onRefresh: _loadAreas,
                             onEditArea: _openEditAreaModal,
                             onDeleteArea: _confirmDeleteArea,
+                            canEditAndDelete: widget.session.canEditAndDeleteMasterData,
                           ),
                           const SizedBox(height: 14),
                           ClustersPanel(
@@ -1594,6 +1597,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
                             onRefresh: _loadClusters,
                             onEditCluster: _openEditClusterModal,
                             onDeleteCluster: _confirmDeleteCluster,
+                            canEditAndDelete: widget.session.canEditAndDeleteMasterData,
                           ),
                         ] else if (_activeSection == HrSection.stores) ...[
                           StoresHeader(onAddStore: _openAddStoreModal),
@@ -1605,6 +1609,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
                             onRefresh: _loadStores,
                             onEditStore: _openEditStoreModal,
                             onDeleteStore: _confirmDeleteStore,
+                            canEditAndDelete: widget.session.canEditAndDeleteMasterData,
                           ),
                         ],
                       ],
@@ -1691,12 +1696,13 @@ class HrSidebar extends StatelessWidget {
                     active: activeSection == HrSection.employees,
                     onTap: () => onSelectSection(HrSection.employees),
                   ),
-                  HrNavItem(
-                    icon: Icons.business_outlined,
-                    label: 'Companies',
-                    active: activeSection == HrSection.companies,
-                    onTap: () => onSelectSection(HrSection.companies),
-                  ),
+                  if (session.canManageAdminSettings)
+                    HrNavItem(
+                      icon: Icons.business_outlined,
+                      label: 'Companies',
+                      active: activeSection == HrSection.companies,
+                      onTap: () => onSelectSection(HrSection.companies),
+                    ),
                   if (session.canManageAdminSettings) ...[
                     HrNavItem(
                       icon: Icons.route_outlined,

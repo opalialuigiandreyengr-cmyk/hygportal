@@ -222,6 +222,7 @@ class StoresPanel extends StatelessWidget {
     required this.onRefresh,
     required this.onEditStore,
     required this.onDeleteStore,
+    this.canEditAndDelete = true,
     super.key,
   });
 
@@ -231,6 +232,7 @@ class StoresPanel extends StatelessWidget {
   final VoidCallback onRefresh;
   final ValueChanged<StorePreview> onEditStore;
   final ValueChanged<StorePreview> onDeleteStore;
+  final bool canEditAndDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -283,6 +285,7 @@ class StoresPanel extends StatelessWidget {
                 store: store,
                 onEdit: () => onEditStore(store),
                 onDelete: () => onDeleteStore(store),
+                canEditAndDelete: canEditAndDelete,
               ),
             ),
         ],
@@ -311,10 +314,12 @@ class _StoreRow extends StatelessWidget {
     required this.store,
     required this.onEdit,
     required this.onDelete,
+    this.canEditAndDelete = true,
   });
   final StorePreview store;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final bool canEditAndDelete;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -334,28 +339,30 @@ class _StoreRow extends StatelessWidget {
         Expanded(flex: 2, child: BodyCell(store.created)),
         SizedBox(
           width: 88,
-          child: Row(
-            children: [
-              IconButton(
-                tooltip: 'Edit store',
-                onPressed: onEdit,
-                icon: const Icon(
-                  Icons.edit,
-                  color: Color(0xFF2563EB),
-                  size: 18,
-                ),
-              ),
-              IconButton(
-                tooltip: 'Delete store',
-                onPressed: onDelete,
-                icon: const Icon(
-                  Icons.delete_outline,
-                  color: Color(0xFFDC2626),
-                  size: 18,
-                ),
-              ),
-            ],
-          ),
+          child: canEditAndDelete
+              ? Row(
+                  children: [
+                    IconButton(
+                      tooltip: 'Edit store',
+                      onPressed: onEdit,
+                      icon: const Icon(
+                        Icons.edit,
+                        color: Color(0xFF2563EB),
+                        size: 18,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Delete store',
+                      onPressed: onDelete,
+                      icon: const Icon(
+                        Icons.delete_outline,
+                        color: Color(0xFFDC2626),
+                        size: 18,
+                      ),
+                    ),
+                  ],
+                )
+              : const SizedBox(),
         ),
       ],
     ),

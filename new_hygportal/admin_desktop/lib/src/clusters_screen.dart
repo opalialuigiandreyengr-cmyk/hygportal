@@ -365,6 +365,7 @@ class ClustersPanel extends StatelessWidget {
     required this.onRefresh,
     required this.onEditCluster,
     required this.onDeleteCluster,
+    this.canEditAndDelete = true,
     super.key,
   });
 
@@ -374,6 +375,7 @@ class ClustersPanel extends StatelessWidget {
   final VoidCallback onRefresh;
   final ValueChanged<ClusterPreview> onEditCluster;
   final ValueChanged<ClusterPreview> onDeleteCluster;
+  final bool canEditAndDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -426,6 +428,7 @@ class ClustersPanel extends StatelessWidget {
                 cluster: cluster,
                 onEdit: () => onEditCluster(cluster),
                 onDelete: () => onDeleteCluster(cluster),
+                canEditAndDelete: canEditAndDelete,
               ),
             ),
         ],
@@ -453,10 +456,12 @@ class _ClusterRow extends StatelessWidget {
     required this.cluster,
     required this.onEdit,
     required this.onDelete,
+    this.canEditAndDelete = true,
   });
   final ClusterPreview cluster;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final bool canEditAndDelete;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -475,28 +480,30 @@ class _ClusterRow extends StatelessWidget {
         Expanded(flex: 2, child: BodyCell(cluster.created)),
         SizedBox(
           width: 88,
-          child: Row(
-            children: [
-              IconButton(
-                tooltip: 'Edit cluster',
-                onPressed: onEdit,
-                icon: const Icon(
-                  Icons.edit,
-                  color: Color(0xFF2563EB),
-                  size: 18,
-                ),
-              ),
-              IconButton(
-                tooltip: 'Delete cluster',
-                onPressed: onDelete,
-                icon: const Icon(
-                  Icons.delete_outline,
-                  color: Color(0xFFDC2626),
-                  size: 18,
-                ),
-              ),
-            ],
-          ),
+          child: canEditAndDelete
+              ? Row(
+                  children: [
+                    IconButton(
+                      tooltip: 'Edit cluster',
+                      onPressed: onEdit,
+                      icon: const Icon(
+                        Icons.edit,
+                        color: Color(0xFF2563EB),
+                        size: 18,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Delete cluster',
+                      onPressed: onDelete,
+                      icon: const Icon(
+                        Icons.delete_outline,
+                        color: Color(0xFFDC2626),
+                        size: 18,
+                      ),
+                    ),
+                  ],
+                )
+              : const SizedBox(),
         ),
       ],
     ),
@@ -511,6 +518,7 @@ class AreasPanel extends StatelessWidget {
     required this.onRefresh,
     required this.onEditArea,
     required this.onDeleteArea,
+    this.canEditAndDelete = true,
     super.key,
   });
 
@@ -520,6 +528,7 @@ class AreasPanel extends StatelessWidget {
   final VoidCallback onRefresh;
   final ValueChanged<AreaPreview> onEditArea;
   final ValueChanged<AreaPreview> onDeleteArea;
+  final bool canEditAndDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -572,6 +581,7 @@ class AreasPanel extends StatelessWidget {
                 area: area,
                 onEdit: () => onEditArea(area),
                 onDelete: () => onDeleteArea(area),
+                canEditAndDelete: canEditAndDelete,
               ),
             ),
         ],
@@ -599,10 +609,12 @@ class _AreaRow extends StatelessWidget {
     required this.area,
     required this.onEdit,
     required this.onDelete,
+    this.canEditAndDelete = true,
   });
   final AreaPreview area;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final bool canEditAndDelete;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -621,28 +633,30 @@ class _AreaRow extends StatelessWidget {
         Expanded(flex: 2, child: BodyCell(area.created)),
         SizedBox(
           width: 88,
-          child: Row(
-            children: [
-              IconButton(
-                tooltip: 'Edit area',
-                onPressed: onEdit,
-                icon: const Icon(
-                  Icons.edit,
-                  color: Color(0xFF2563EB),
-                  size: 18,
-                ),
-              ),
-              IconButton(
-                tooltip: 'Delete area',
-                onPressed: onDelete,
-                icon: const Icon(
-                  Icons.delete_outline,
-                  color: Color(0xFFDC2626),
-                  size: 18,
-                ),
-              ),
-            ],
-          ),
+          child: canEditAndDelete
+              ? Row(
+                  children: [
+                    IconButton(
+                      tooltip: 'Edit area',
+                      onPressed: onEdit,
+                      icon: const Icon(
+                        Icons.edit,
+                        color: Color(0xFF2563EB),
+                        size: 18,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Delete area',
+                      onPressed: onDelete,
+                      icon: const Icon(
+                        Icons.delete_outline,
+                        color: Color(0xFFDC2626),
+                        size: 18,
+                      ),
+                    ),
+                  ],
+                )
+              : const SizedBox(),
         ),
       ],
     ),

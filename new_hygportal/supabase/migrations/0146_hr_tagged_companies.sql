@@ -144,7 +144,6 @@ begin
     '',
     '',
     '',
-    now(),
     '{"provider":"email","providers":["email"]}'::jsonb,
     jsonb_build_object('email_verified', true),
     now(),

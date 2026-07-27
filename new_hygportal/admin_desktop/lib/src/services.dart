@@ -787,6 +787,14 @@ class CompanyDirectoryService {
     required String address,
     required String logoUrl,
   }) async {
+    if (await LocalSyncService.isOnline()) {
+      return await _createCompanyRemote(
+        name: name,
+        contactNumber: contactNumber,
+        address: address,
+        logoUrl: logoUrl,
+      );
+    }
     await LocalSyncService.enqueue(
       entity: 'company',
       action: 'create',
@@ -797,10 +805,6 @@ class CompanyDirectoryService {
         'logoUrl': logoUrl,
       },
     );
-    if (await LocalSyncService.isOnline()) {
-      await LocalSyncService.syncNow();
-      return 'Queued locally and syncing to Supabase...';
-    }
     return 'Saved locally (offline). Will sync when internet is available.';
   }
 
@@ -832,6 +836,15 @@ class CompanyDirectoryService {
     required String address,
     required String logoUrl,
   }) async {
+    if (await LocalSyncService.isOnline()) {
+      return await _updateCompanyRemote(
+        id: id,
+        name: name,
+        contactNumber: contactNumber,
+        address: address,
+        logoUrl: logoUrl,
+      );
+    }
     await LocalSyncService.enqueue(
       entity: 'company',
       action: 'update',
@@ -843,10 +856,6 @@ class CompanyDirectoryService {
         'logoUrl': logoUrl,
       },
     );
-    if (await LocalSyncService.isOnline()) {
-      await LocalSyncService.syncNow();
-      return 'Update queued locally and syncing to Supabase...';
-    }
     return 'Update saved locally (offline). Will sync when internet is available.';
   }
 
@@ -874,15 +883,14 @@ class CompanyDirectoryService {
   }
 
   static Future<String> deleteCompany(String id) async {
+    if (await LocalSyncService.isOnline()) {
+      return await _deleteCompanyRemote(id);
+    }
     await LocalSyncService.enqueue(
       entity: 'company',
       action: 'delete',
       payload: {'id': id},
     );
-    if (await LocalSyncService.isOnline()) {
-      await LocalSyncService.syncNow();
-      return 'Delete queued locally and syncing to Supabase...';
-    }
     return 'Delete queued offline. Will sync when internet is available.';
   }
 

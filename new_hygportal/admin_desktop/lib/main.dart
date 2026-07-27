@@ -39,6 +39,9 @@ Future<void> main() async {
     url: AppConfig.supabaseUrl,
     anonKey: AppConfig.supabaseAnonKey,
   );
+  if (Supabase.instance.client.auth.currentSession == null) {
+    unawaited(Supabase.instance.client.auth.signOut());
+  }
   await LocalSyncService.initialize();
   unawaited(LocalSyncService.syncNow());
 

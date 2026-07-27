@@ -57,14 +57,16 @@ class CompaniesHeader extends StatelessWidget {
   }
 }
 
-class AddCompanyDialog extends StatefulWidget {
-  const AddCompanyDialog({super.key});
+class CompanyDialog extends StatefulWidget {
+  const CompanyDialog({this.company, super.key});
+
+  final CompanyPreview? company;
 
   @override
-  State<AddCompanyDialog> createState() => _AddCompanyDialogState();
+  State<CompanyDialog> createState() => _CompanyDialogState();
 }
 
-class _AddCompanyDialogState extends State<AddCompanyDialog> {
+class _CompanyDialogState extends State<CompanyDialog> {
   final _nameController = TextEditingController();
   final _contactController = TextEditingController();
   final _addressController = TextEditingController();
@@ -72,6 +74,16 @@ class _AddCompanyDialogState extends State<AddCompanyDialog> {
   String? _logoFileName;
   var _isSaving = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.company != null) {
+      _nameController.text = widget.company!.name;
+      _contactController.text = widget.company!.contactNumber;
+      _addressController.text = widget.company!.address;
+    }
+  }
 
   @override
   void dispose() {
@@ -112,12 +124,22 @@ class _AddCompanyDialogState extends State<AddCompanyDialog> {
     });
 
     try {
-      await CompanyDirectoryService.createCompany(
-        name: name,
-        contactNumber: _contactController.text,
-        address: _addressController.text,
-        logoUrl: '',
-      );
+      if (widget.company == null) {
+        await CompanyDirectoryService.createCompany(
+          name: name,
+          contactNumber: _contactController.text,
+          address: _addressController.text,
+          logoUrl: '',
+        );
+      } else {
+        await CompanyDirectoryService.updateCompany(
+          id: widget.company!.id,
+          name: name,
+          contactNumber: _contactController.text,
+          address: _addressController.text,
+          logoUrl: '',
+        );
+      }
 
       if (!mounted) return;
       Navigator.of(context).pop(true);
@@ -369,6 +391,7 @@ class CompaniesPanel extends StatelessWidget {
     required this.error,
     required this.onRefresh,
     required this.onDeleteCompany,
+    required this.onEditCompany,
     super.key,
   });
 
@@ -377,6 +400,7 @@ class CompaniesPanel extends StatelessWidget {
   final String? error;
   final VoidCallback onRefresh;
   final ValueChanged<CompanyPreview> onDeleteCompany;
+  final ValueChanged<CompanyPreview> onEditCompany;
 
   @override
   Widget build(BuildContext context) {
@@ -450,10 +474,12 @@ class CompaniesPanel extends StatelessWidget {
               onAction: onRefresh,
             )
           else
-            ...companies.map(
-              (company) => CompanyRow(
-                company: company,
-                onDelete: () => onDeleteCompany(company),
+            ...List.generate(
+              companies.length,
+              (index) => CompanyTableRow(
+                company: companies[index],
+                onDelete: () => onDeleteCompany(companies[index]),
+                onEdit: () => onEditCompany(companies[index]),
               ),
             ),
         ],
@@ -490,11 +516,17 @@ class CompanyTableHeader extends StatelessWidget {
   }
 }
 
-class CompanyRow extends StatelessWidget {
-  const CompanyRow({required this.company, required this.onDelete, super.key});
+class CompanyTableRow extends StatelessWidget {
+  const CompanyTableRow({
+    required this.company,
+    required this.onDelete,
+    required this.onEdit,
+    super.key,
+  });
 
   final CompanyPreview company;
   final VoidCallback onDelete;
+  final VoidCallback onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -549,7 +581,7 @@ class CompanyRow extends StatelessWidget {
               children: [
                 IconButton(
                   tooltip: 'Edit company',
-                  onPressed: () {},
+                  onPressed: onEdit,
                   icon: const Icon(
                     Icons.edit,
                     color: Color(0xFF2563EB),

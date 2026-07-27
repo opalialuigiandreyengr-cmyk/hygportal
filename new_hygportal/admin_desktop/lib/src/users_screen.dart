@@ -49,6 +49,7 @@ class UsersPanel extends StatefulWidget {
   const UsersPanel({
     required this.users,
     required this.employees,
+    required this.companies,
     required this.isLoading,
     required this.error,
     required this.onRefresh,
@@ -63,13 +64,17 @@ class UsersPanel extends StatefulWidget {
 
   final List<RegisteredUserPreview> users;
   final List<EmployeePreview> employees;
+  final List<CompanyPreview> companies;
   final bool isLoading;
   final String? error;
   final VoidCallback onRefresh;
   final Future<void> Function(RegisteredUserPreview user, bool isBanned)
   onSetBan;
-  final Future<void> Function(RegisteredUserPreview user, String appRole)
-  onSetRole;
+  final Future<void> Function(
+    RegisteredUserPreview user,
+    String appRole, {
+    List<String>? companyIds,
+  }) onSetRole;
   final Future<void> Function(RegisteredUserPreview user, String newPassword)
   onResetPassword;
   final Future<void> Function(
@@ -137,7 +142,10 @@ class _UsersPanelState extends State<UsersPanel> {
         .toList();
     final request = await showDialog<AddUserRequest>(
       context: context,
-      builder: (context) => AddUserDialog(employees: availableEmployees),
+      builder: (context) => AddUserDialog(
+        employees: availableEmployees,
+        companies: widget.companies,
+      ),
     );
     if (request == null) return;
     await widget.onCreateUser(request);
@@ -247,6 +255,7 @@ class _UsersPanelState extends State<UsersPanel> {
             ..._visibleUsers.map(
               (user) => UserRow(
                 user: user,
+                companies: widget.companies,
                 onSetBan: widget.onSetBan,
                 onSetRole: widget.onSetRole,
                 onResetPassword: widget.onResetPassword,
@@ -362,6 +371,7 @@ class UsersTableHeader extends StatelessWidget {
 class UserRow extends StatefulWidget {
   const UserRow({
     required this.user,
+    required this.companies,
     required this.onSetBan,
     required this.onSetRole,
     required this.onResetPassword,
@@ -371,10 +381,14 @@ class UserRow extends StatefulWidget {
   });
 
   final RegisteredUserPreview user;
+  final List<CompanyPreview> companies;
   final Future<void> Function(RegisteredUserPreview user, bool isBanned)
   onSetBan;
-  final Future<void> Function(RegisteredUserPreview user, String appRole)
-  onSetRole;
+  final Future<void> Function(
+    RegisteredUserPreview user,
+    String appRole, {
+    List<String>? companyIds,
+  }) onSetRole;
   final Future<void> Function(RegisteredUserPreview user, String newPassword)
   onResetPassword;
   final Future<void> Function(
@@ -480,6 +494,7 @@ class _UserRowState extends State<UserRow> {
               width: 52,
               child: UserActionsMenu(
                 user: widget.user,
+                companies: widget.companies,
                 isActive: _isHovered || _isMenuOpen,
                 onMenuOpenChanged: (value) {
                   if (mounted) setState(() => _isMenuOpen = value);
@@ -571,6 +586,7 @@ class _UserInitialAvatar extends StatelessWidget {
 class UserActionsMenu extends StatefulWidget {
   const UserActionsMenu({
     required this.user,
+    required this.companies,
     required this.isActive,
     required this.onMenuOpenChanged,
     required this.onSetBan,
@@ -582,12 +598,16 @@ class UserActionsMenu extends StatefulWidget {
   });
 
   final RegisteredUserPreview user;
+  final List<CompanyPreview> companies;
   final bool isActive;
   final ValueChanged<bool> onMenuOpenChanged;
   final Future<void> Function(RegisteredUserPreview user, bool isBanned)
   onSetBan;
-  final Future<void> Function(RegisteredUserPreview user, String appRole)
-  onSetRole;
+  final Future<void> Function(
+    RegisteredUserPreview user,
+    String appRole, {
+    List<String>? companyIds,
+  }) onSetRole;
   final Future<void> Function(RegisteredUserPreview user, String newPassword)
   onResetPassword;
   final Future<void> Function(
@@ -684,12 +704,19 @@ class _UserActionsMenuState extends State<UserActionsMenu> {
         await widget.onSetBan(widget.user, !widget.user.isBanned);
       }
     } else if (action == 'role') {
-      final role = await showDialog<String>(
+      final result = await showDialog<UserRoleDialogResult>(
         context: context,
-        builder: (context) => UserRoleDialog(user: widget.user),
+        builder: (context) => UserRoleDialog(
+          user: widget.user,
+          companies: widget.companies,
+        ),
       );
-      if (role != null) {
-        await widget.onSetRole(widget.user, role);
+      if (result != null) {
+        await widget.onSetRole(
+          widget.user,
+          result.role,
+          companyIds: result.companyIds,
+        );
       }
     } else if (action == 'password') {
       final password = await showDialog<String>(
@@ -815,6 +842,7 @@ class AddUserRequest {
     required this.password,
     required this.appRole,
     this.employeeId,
+    this.companyIds,
   });
 
   final String username;
@@ -822,12 +850,18 @@ class AddUserRequest {
   final String password;
   final String appRole;
   final String? employeeId;
+  final List<String>? companyIds;
 }
 
 class AddUserDialog extends StatefulWidget {
-  const AddUserDialog({required this.employees, super.key});
+  const AddUserDialog({
+    required this.employees,
+    required this.companies,
+    super.key,
+  });
 
   final List<EmployeePreview> employees;
+  final List<CompanyPreview> companies;
 
   @override
   State<AddUserDialog> createState() => _AddUserDialogState();
@@ -840,6 +874,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
   final _confirmController = TextEditingController();
   var _role = 'employee';
   String? _selectedEmployeeId;
+  final List<String> _selectedCompanyIds = [];
   String? _error;
 
   bool get _hasEmployees => widget.employees.isNotEmpty;
@@ -902,13 +937,19 @@ class _AddUserDialogState extends State<AddUserDialog> {
       return;
     }
 
+    if (_role == 'hr' && _selectedCompanyIds.isEmpty) {
+      setState(() => _error = 'Please select at least one company.');
+      return;
+    }
+
     Navigator.of(context).pop(
       AddUserRequest(
         username: username,
         email: email,
         password: password,
         appRole: _role,
-        employeeId: _selectedEmployee?.id,
+        employeeId: _role == 'hr' ? null : _selectedEmployee?.id,
+        companyIds: _role == 'hr' ? _selectedCompanyIds : null,
       ),
     );
   }
@@ -934,10 +975,14 @@ class _AddUserDialogState extends State<AddUserDialog> {
                 const SizedBox(height: 20),
                 _buildAccountSection(roles),
                 const SizedBox(height: 18),
-                _buildEmployeeSection(),
-                if (_selectedEmployee != null) ...[
-                  const SizedBox(height: 14),
-                  _buildEmployeePreview(),
+                if (_role == 'hr') ...[
+                  _buildCompaniesSection(),
+                ] else ...[
+                  _buildEmployeeSection(),
+                  if (_selectedEmployee != null) ...[
+                    const SizedBox(height: 14),
+                    _buildEmployeePreview(),
+                  ],
                 ],
                 if (_error != null) ...[
                   const SizedBox(height: 14),
@@ -1069,7 +1114,18 @@ class _AddUserDialogState extends State<AddUserDialog> {
                       _RoleChip(
                         label: role.toUpperCase(),
                         selected: _role == role,
-                        onTap: () => setState(() => _role = role),
+                        onTap: () {
+                          setState(() {
+                            _role = role;
+                            if (role == 'hr') {
+                              _selectedEmployeeId = null;
+                              _emailController.clear();
+                              _usernameController.clear();
+                            } else {
+                              _selectedCompanyIds.clear();
+                            }
+                          });
+                        },
                       ),
                   ],
                 ),
@@ -1140,6 +1196,107 @@ class _AddUserDialogState extends State<AddUserDialog> {
                   Expanded(
                     child: Text(
                       'All employees are already linked. Create the user first, then assign later.',
+                      style: HygTypography.body.copyWith(
+                        fontSize: 12.5,
+                        color: HygColors.muted,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+    );
+  }
+
+  Widget _buildCompaniesSection() {
+    return _SectionCard(
+      icon: Icons.business_outlined,
+      iconColor: const Color(0xFF0369A1),
+      title: 'Link Companies',
+      subtitle: widget.companies.isNotEmpty
+          ? 'Select the companies this HR can access.'
+          : 'No companies available.',
+      child: widget.companies.isNotEmpty
+          ? Container(
+              constraints: const BoxConstraints(maxHeight: 180),
+              decoration: BoxDecoration(
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: widget.companies.length,
+                itemBuilder: (context, index) {
+                  final company = widget.companies[index];
+                  final isSelected = _selectedCompanyIds.contains(company.id);
+                  return CheckboxListTile(
+                    activeColor: HygColors.gold,
+                    checkColor: HygColors.ink,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    title: Row(
+                      children: [
+                        Container(
+                          width: 28,
+                          height: 28,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF3C7),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Center(
+                            child: Text(
+                              company.initials,
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: HygColors.goldStrong,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            company.name,
+                            style: HygTypography.body.copyWith(
+                              fontSize: 14,
+                              color: HygColors.ink,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    value: isSelected,
+                    onChanged: (bool? checked) {
+                      setState(() {
+                        if (checked == true) {
+                          _selectedCompanyIds.add(company.id);
+                        } else {
+                          _selectedCompanyIds.remove(company.id);
+                        }
+                      });
+                    },
+                  );
+                },
+              ),
+            )
+          : Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(9),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.info_outline,
+                    size: 16,
+                    color: Color(0xFF94A3B8),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'No companies have been added yet.',
                       style: HygTypography.body.copyWith(
                         fontSize: 12.5,
                         color: HygColors.muted,
@@ -1611,10 +1768,22 @@ class UserBanDialog extends StatelessWidget {
   }
 }
 
+class UserRoleDialogResult {
+  final String role;
+  final List<String>? companyIds;
+
+  UserRoleDialogResult({required this.role, this.companyIds});
+}
+
 class UserRoleDialog extends StatefulWidget {
-  const UserRoleDialog({required this.user, super.key});
+  const UserRoleDialog({
+    required this.user,
+    required this.companies,
+    super.key,
+  });
 
   final RegisteredUserPreview user;
+  final List<CompanyPreview> companies;
 
   @override
   State<UserRoleDialog> createState() => _UserRoleDialogState();
@@ -1622,6 +1791,181 @@ class UserRoleDialog extends StatefulWidget {
 
 class _UserRoleDialogState extends State<UserRoleDialog> {
   late String _role = widget.user.appRole.toLowerCase();
+  final List<String> _selectedCompanyIds = [];
+  bool _isLoadingAssignments = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCompanyAssignments();
+  }
+
+  Future<void> _loadCompanyAssignments() async {
+    setState(() => _isLoadingAssignments = true);
+    final assignments = await RegisteredUsersService.loadUserCompanyAssignments(
+      widget.user.userProfileId,
+    );
+    if (mounted) {
+      setState(() {
+        _selectedCompanyIds.clear();
+        _selectedCompanyIds.addAll(assignments);
+        _isLoadingAssignments = false;
+      });
+    }
+  }
+
+  void _submit() {
+    if (_role == 'hr' && _selectedCompanyIds.isEmpty) {
+      setState(() => _error = 'Please select at least one company.');
+      return;
+    }
+    Navigator.of(context).pop(
+      UserRoleDialogResult(
+        role: _role,
+        companyIds: _selectedCompanyIds,
+      ),
+    );
+  }
+
+  Widget _buildErrorBanner() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFEF2F2),
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: const Color(0xFFFECACA)),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.error_outline,
+            size: 16,
+            color: Color(0xFFDC2626),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _error!,
+              style: HygTypography.body.copyWith(
+                color: const Color(0xFFDC2626),
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCompaniesSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Link Companies',
+          style: HygTypography.body.copyWith(
+            color: HygColors.ink,
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 8),
+        widget.companies.isNotEmpty
+            ? Container(
+                constraints: const BoxConstraints(maxHeight: 180),
+                decoration: BoxDecoration(
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: widget.companies.length,
+                  itemBuilder: (context, index) {
+                    final company = widget.companies[index];
+                    final isSelected = _selectedCompanyIds.contains(company.id);
+                    return CheckboxListTile(
+                      activeColor: HygColors.gold,
+                      checkColor: HygColors.ink,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      title: Row(
+                        children: [
+                          Container(
+                            width: 28,
+                            height: 28,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFEF3C7),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Center(
+                              child: Text(
+                                company.initials,
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: HygColors.goldStrong,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              company.name,
+                              style: HygTypography.body.copyWith(
+                                fontSize: 14,
+                                color: HygColors.ink,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      value: isSelected,
+                      onChanged: (bool? checked) {
+                        setState(() {
+                          if (checked == true) {
+                            _selectedCompanyIds.add(company.id);
+                          } else {
+                            _selectedCompanyIds.remove(company.id);
+                          }
+                          _error = null;
+                        });
+                      },
+                    );
+                  },
+                ),
+              )
+            : Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(9),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.info_outline,
+                      size: 16,
+                      color: Color(0xFF94A3B8),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'No companies have been added yet.',
+                        style: HygTypography.body.copyWith(
+                          fontSize: 12.5,
+                          color: HygColors.muted,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1634,189 +1978,216 @@ class _UserRoleDialogState extends State<UserRoleDialog> {
         constraints: const BoxConstraints(maxWidth: 460),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(22, 20, 22, 18),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFF7D6),
-                      border: Border.all(color: const Color(0xFFF4D77A)),
-                      borderRadius: BorderRadius.circular(9),
-                    ),
-                    child: const Icon(
-                      Icons.admin_panel_settings_outlined,
-                      color: Color(0xFF8A5A00),
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Confirm Role Change',
-                      style: HygTypography.pageTitle.copyWith(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w600,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF7D6),
+                        border: Border.all(color: const Color(0xFFF4D77A)),
+                        borderRadius: BorderRadius.circular(9),
+                      ),
+                      child: const Icon(
+                        Icons.admin_panel_settings_outlined,
+                        color: Color(0xFF8A5A00),
+                        size: 20,
                       ),
                     ),
-                  ),
-                  IconButton(
-                    tooltip: 'Close',
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(
-                      Icons.close,
-                      color: Color(0xFF64748B),
-                      size: 20,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              const Divider(height: 1, color: HygColors.border),
-              const SizedBox(height: 18),
-              Text(
-                'Choose the access role for this user.',
-                style: HygTypography.body.copyWith(
-                  color: HygColors.ink,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '${widget.user.username} currently has the ${widget.user.appRole} role.',
-                style: HygTypography.body.copyWith(
-                  color: const Color(0xFF64748B),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w400,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
-                  border: Border.all(color: HygColors.border),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.person_outline,
-                      color: Color(0xFF64748B),
-                      size: 18,
-                    ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 12),
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            widget.user.username,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: HygTypography.body.copyWith(
-                              color: HygColors.ink,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            widget.user.email,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: HygTypography.body.copyWith(
-                              color: const Color(0xFF64748B),
-                              fontSize: 13,
-                              fontWeight: FontWeight.w400,
-                            ),
-                          ),
-                        ],
+                      child: Text(
+                        'Confirm Role Change',
+                        style: HygTypography.pageTitle.copyWith(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Close',
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(
+                        Icons.close,
+                        color: Color(0xFF64748B),
+                        size: 20,
                       ),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final role in roles)
-                    ChoiceChip(
-                      label: Text(
-                        role.toUpperCase(),
-                        style: HygTypography.body.copyWith(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
+                const SizedBox(height: 16),
+                const Divider(height: 1, color: HygColors.border),
+                const SizedBox(height: 18),
+                Text(
+                  'Choose the access role for this user.',
+                  style: HygTypography.body.copyWith(
+                    color: HygColors.ink,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${widget.user.username} currently has the ${widget.user.appRole} role.',
+                  style: HygTypography.body.copyWith(
+                    color: const Color(0xFF64748B),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    border: Border.all(color: HygColors.border),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.person_outline,
+                        color: Color(0xFF64748B),
+                        size: 18,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              widget.user.username,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: HygTypography.body.copyWith(
+                                color: HygColors.ink,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              widget.user.email,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: HygTypography.body.copyWith(
+                                color: const Color(0xFF64748B),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final role in roles)
+                      ChoiceChip(
+                        label: Text(
+                          role.toUpperCase(),
+                          style: HygTypography.body.copyWith(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: _role == role
+                                ? HygColors.ink
+                                : const Color(0xFF7A6320),
+                          ),
+                        ),
+                        selected: _role == role,
+                        onSelected: (_) {
+                          setState(() {
+                            _role = role;
+                            _error = null;
+                          });
+                        },
+                        selectedColor: const Color(0xFFFFF3B0),
+                        backgroundColor: const Color(0xFFFFFCF2),
+                        side: BorderSide(
                           color: _role == role
-                              ? HygColors.ink
-                              : const Color(0xFF7A6320),
-                        ),
-                      ),
-                      selected: _role == role,
-                      onSelected: (_) => setState(() => _role = role),
-                      selectedColor: const Color(0xFFFFF3B0),
-                      backgroundColor: const Color(0xFFFFFCF2),
-                      side: BorderSide(
-                        color: _role == role
-                            ? const Color(0xFFE4C24D)
-                            : const Color(0xFFF1DFA2),
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              const Divider(height: 1, color: Color(0xFFF1DFA2)),
-              const SizedBox(height: 14),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  SizedBox(
-                    height: 40,
-                    width: 104,
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFF7A6320),
-                        side: const BorderSide(color: Color(0xFFF1DFA2)),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('Cancel'),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  SizedBox(
-                    height: 40,
-                    width: 124,
-                    child: FilledButton.icon(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFFF6C400),
-                        foregroundColor: HygColors.ink,
-                        textStyle: HygTypography.button.copyWith(
-                          fontWeight: FontWeight.w600,
+                              ? const Color(0xFFE4C24D)
+                              : const Color(0xFFF1DFA2),
                         ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
                       ),
-                      onPressed: () => Navigator.of(context).pop(_role),
-                      icon: const Icon(Icons.check, size: 16),
-                      label: const Text('Save'),
-                    ),
-                  ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _isLoadingAssignments
+                    ? const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(12),
+                          child: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: HygColors.gold,
+                            ),
+                          ),
+                        ),
+                      )
+                    : _buildCompaniesSection(),
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  _buildErrorBanner(),
                 ],
-              ),
-            ],
+                const SizedBox(height: 20),
+                const Divider(height: 1, color: Color(0xFFF1DFA2)),
+                const SizedBox(height: 14),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    SizedBox(
+                      height: 40,
+                      width: 104,
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF7A6320),
+                          side: const BorderSide(color: Color(0xFFF1DFA2)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: const Text('Cancel'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    SizedBox(
+                      height: 40,
+                      width: 124,
+                      child: FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFFF6C400),
+                          foregroundColor: HygColors.ink,
+                          textStyle: HygTypography.button.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        onPressed: _submit,
+                        icon: const Icon(Icons.check, size: 16),
+                        label: const Text('Save'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

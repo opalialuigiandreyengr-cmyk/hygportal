@@ -277,6 +277,12 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
     });
 
     try {
+      if (_companies.isEmpty && !_isLoadingCompanies) {
+        unawaited(_loadCompanies());
+      }
+      if (_employees.isEmpty && !_isLoadingEmployees) {
+        unawaited(_loadEmployees(silent: silent));
+      }
       final users = await _withNetworkTimeout(
         RegisteredUsersService.loadUsers(),
       );
@@ -316,11 +322,16 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _setUserRole(RegisteredUserPreview user, String appRole) async {
+  Future<void> _setUserRole(
+    RegisteredUserPreview user,
+    String appRole, {
+    List<String>? companyIds,
+  }) async {
     try {
       await RegisteredUsersService.setUserRole(
         userProfileId: user.userProfileId,
         appRole: appRole,
+        companyIds: companyIds,
       );
       await _loadUsers();
       _showDepartmentMessage('User role updated successfully.');
@@ -400,6 +411,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
         password: request.password,
         appRole: request.appRole,
         employeeId: request.employeeId,
+        companyIds: request.companyIds,
       );
       await _loadUsers();
       _showDepartmentMessage('User created successfully.');
@@ -761,10 +773,24 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
     final created = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const AddCompanyDialog(),
+      builder: (context) => const CompanyDialog(),
     );
 
     if (created == true) {
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      await _loadCompanies();
+    }
+  }
+
+  Future<void> _openEditCompanyModal(CompanyPreview company) async {
+    final updated = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => CompanyDialog(company: company),
+    );
+
+    if (updated == true) {
+      await Future<void>.delayed(const Duration(milliseconds: 300));
       await _loadCompanies();
     }
   }
@@ -1496,6 +1522,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
                             isLoading: _isLoadingCompanies,
                             error: _companyError,
                             onRefresh: _loadCompanies,
+                            onEditCompany: _openEditCompanyModal,
                             onDeleteCompany: _confirmDeleteCompany,
                           ),
                         ] else if (_activeSection == HrSection.users) ...[
@@ -1504,6 +1531,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
                           UsersPanel(
                             users: _registeredUsers,
                             employees: _employees,
+                            companies: _companies,
                             isLoading: _isLoadingUsers,
                             error: _usersError,
                             onRefresh: _loadUsers,

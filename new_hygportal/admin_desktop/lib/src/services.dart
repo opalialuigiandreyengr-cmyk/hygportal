@@ -773,7 +773,9 @@ class CompanyDirectoryService {
               .map(CompanyDirectoryService._fromRow)
               .toList(growable: false);
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('hr_company_directory RPC failed: $e');
+      }
     }
     final cached = await LocalSyncService.loadCachedRows('company_cache');
     return cached.map(CompanyDirectoryService._fromRow).toList(growable: false);
@@ -796,7 +798,7 @@ class CompanyDirectoryService {
       },
     );
     if (await LocalSyncService.isOnline()) {
-      unawaited(LocalSyncService.syncNow());
+      await LocalSyncService.syncNow();
       return 'Queued locally and syncing to Supabase...';
     }
     return 'Saved locally (offline). Will sync when internet is available.';
@@ -823,6 +825,54 @@ class CompanyDirectoryService {
     return response.toString();
   }
 
+  static Future<String> updateCompany({
+    required String id,
+    required String name,
+    required String contactNumber,
+    required String address,
+    required String logoUrl,
+  }) async {
+    await LocalSyncService.enqueue(
+      entity: 'company',
+      action: 'update',
+      payload: {
+        'id': id,
+        'name': name,
+        'contactNumber': contactNumber,
+        'address': address,
+        'logoUrl': logoUrl,
+      },
+    );
+    if (await LocalSyncService.isOnline()) {
+      await LocalSyncService.syncNow();
+      return 'Update queued locally and syncing to Supabase...';
+    }
+    return 'Update saved locally (offline). Will sync when internet is available.';
+  }
+
+  static Future<String> _updateCompanyRemote({
+    required String id,
+    required String name,
+    required String contactNumber,
+    required String address,
+    required String logoUrl,
+  }) async {
+    final response = await _client.rpc(
+      'hr_update_company',
+      params: {
+        'p_username': AppConfig.hrUsername,
+        'p_password': AppConfig.hrPassword,
+        'p_company_id': id,
+        'p_name': name.trim(),
+        'p_contact_number': contactNumber.trim(),
+        'p_address': address.trim(),
+        'p_logo_url': logoUrl.trim(),
+      },
+    );
+
+    return response.toString();
+  }
+
   static Future<String> deleteCompany(String id) async {
     await LocalSyncService.enqueue(
       entity: 'company',
@@ -830,7 +880,7 @@ class CompanyDirectoryService {
       payload: {'id': id},
     );
     if (await LocalSyncService.isOnline()) {
-      unawaited(LocalSyncService.syncNow());
+      await LocalSyncService.syncNow();
       return 'Delete queued locally and syncing to Supabase...';
     }
     return 'Delete queued offline. Will sync when internet is available.';
@@ -1212,6 +1262,19 @@ class RegisteredUsersService {
     return response.whereType<Map<String, dynamic>>().map(_fromRow).toList();
   }
 
+  static Future<List<String>> loadUserCompanyAssignments(String userProfileId) async {
+    try {
+      final response = await _client
+          .from('hr_company_assignments')
+          .select('company_id')
+          .eq('user_profile_id', userProfileId);
+      return response
+          .map((row) => row['company_id'] as String)
+          .toList();
+    } catch (_) {}
+    return const [];
+  }
+
   static Future<String> setUserBan({
     required String userProfileId,
     required bool isBanned,
@@ -1227,10 +1290,18 @@ class RegisteredUsersService {
   static Future<String> setUserRole({
     required String userProfileId,
     required String appRole,
+    List<String>? companyIds,
   }) async {
+    final params = <String, dynamic>{
+      'p_user_profile_id': userProfileId,
+      'p_app_role': appRole,
+    };
+    if (companyIds != null) {
+      params['p_company_ids'] = companyIds;
+    }
     final response = await _client.rpc(
       'admin_set_user_role',
-      params: {'p_user_profile_id': userProfileId, 'p_app_role': appRole},
+      params: params,
     );
 
     return response.toString();
@@ -1298,6 +1369,7 @@ class RegisteredUsersService {
     required String password,
     required String appRole,
     String? employeeId,
+    List<String>? companyIds,
   }) async {
     final response = await _client.rpc(
       'admin_create_unlinked_user',
@@ -1307,6 +1379,7 @@ class RegisteredUsersService {
         'p_password': password,
         'p_app_role': appRole,
         'p_employee_id': employeeId,
+        'p_company_ids': companyIds,
       },
     );
 
@@ -2292,6 +2365,16 @@ class LocalSyncService {
     }
     if (entity == 'company' && action == 'create') {
       await CompanyDirectoryService._createCompanyRemote(
+        name: (payload['name'] ?? '').toString(),
+        contactNumber: (payload['contactNumber'] ?? '').toString(),
+        address: (payload['address'] ?? '').toString(),
+        logoUrl: (payload['logoUrl'] ?? '').toString(),
+      );
+      return;
+    }
+    if (entity == 'company' && action == 'update') {
+      await CompanyDirectoryService._updateCompanyRemote(
+        id: (payload['id'] ?? '').toString(),
         name: (payload['name'] ?? '').toString(),
         contactNumber: (payload['contactNumber'] ?? '').toString(),
         address: (payload['address'] ?? '').toString(),

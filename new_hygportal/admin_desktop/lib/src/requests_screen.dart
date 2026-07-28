@@ -1,5 +1,53 @@
 part of '../main.dart';
 
+/// Formats a 24-hour time string (e.g. "14:30:00" or "08:00") into 12-hour format ("2:30 PM", "8:00 AM").
+/// Used by both the UI Data Table and Excel Export to display human-readable time bounds.
+String _format12HourTime(String? timeStr) {
+  if (timeStr == null || timeStr.trim().isEmpty) return '';
+  try {
+    final parts = timeStr.trim().split(':');
+    if (parts.isEmpty) return timeStr;
+    int hour = int.parse(parts[0]);
+    int minute = parts.length > 1 ? int.parse(parts[1]) : 0;
+
+    String period = 'AM';
+    if (hour >= 12) {
+      period = 'PM';
+      if (hour > 12) {
+        hour -= 12;
+      }
+    } else if (hour == 0) {
+      hour = 12;
+    }
+
+    final minStr = minute.toString().padLeft(2, '0');
+    return '$hour:$minStr $period';
+  } catch (_) {
+    return timeStr;
+  }
+}
+
+/// Normalizes ESARF transaction type strings into standardized short abbreviations for UI uniformity.
+/// Examples: "Overtime" -> "OT", "Official Business" -> "OB", "Failure to Punch In/Out" -> "FIO".
+String _formatEsarfTransactionAbbr(String? raw) {
+  if (raw == null || raw.trim().isEmpty) return '—';
+  final text = raw.trim();
+  final lower = text.toLowerCase();
+
+  if (lower == 'ot' || lower.contains('overtime')) return 'OT';
+  if (lower == 'ut' || lower.contains('undertime')) return 'UT';
+  if (lower == 'ob' || lower.contains('official business')) return 'OB';
+  if (lower == 'fio' || lower.contains('failure to punch')) return 'FIO';
+  if (lower == 'cs' || lower.contains('change schedule') || lower.contains('schedule change')) return 'CS';
+  if (lower == 'use offset' || lower.contains('use offset') || lower == 'uo') return 'Use Offset';
+  if (lower == 'offset') return 'Offset';
+  if (lower == 'adjustment' || lower.contains('adjustment')) return 'Adj';
+  
+  if (text.length <= 4) return text.toUpperCase();
+
+  return text;
+}
+
 // ── Header ──────────────────────────────────────────────────────────────────
 
 class RequestsHeader extends StatelessWidget {
@@ -583,7 +631,7 @@ class _RequestsPanelState extends State<RequestsPanel>
       case 0: // ESARF
         headers = [
           'Employee No', 'Employee Name', 'Department', 'Store',
-          'Request Type', 'Status', 'Date', 'Time',
+          'Request Type', 'Status', 'Date', 'Time From', 'Time To',
           'Total Hours', 'Submitted',
         ];
         break;
@@ -754,18 +802,27 @@ class _RequestsPanelState extends State<RequestsPanel>
           final dateFromStr = _formatDateString(item.dateFrom);
           final dateToStr = _formatDateString(item.dateTo);
           final dateRange = formatRange(dateFromStr, dateToStr);
-          final timeFromStr = format12HourTime(item.timeFrom);
-          final timeToStr = format12HourTime(item.timeTo);
-          final timeRange = formatRange(timeFromStr, timeToStr);
+          // Format times for Excel export
+          final timeFromStr = _format12HourTime(item.timeFrom);
+          final timeToStr = _format12HourTime(item.timeTo);
           return [
             item.employeeNo != null ? TextCellValue(item.employeeNo!) : null,
             item.employeeName != null ? TextCellValue(item.employeeName!) : null,
             item.departmentName != null ? TextCellValue(item.departmentName!) : null,
             item.storeName != null ? TextCellValue(item.storeName!) : null,
-            TextCellValue(item.requestTypeName),
+            // Export abbreviated ESARF transaction type (OT, OB, FIO, CS, etc.)
+            TextCellValue(
+              _formatEsarfTransactionAbbr(
+                (item.transactionType != null && item.transactionType!.isNotEmpty)
+                    ? item.transactionType!
+                    : item.requestTypeName,
+              ),
+            ),
             TextCellValue(item.statusLabel),
             TextCellValue(dateRange),
-            TextCellValue(timeRange),
+            // Export Time From and Time To in separate Excel columns
+            TextCellValue(timeFromStr.isNotEmpty ? timeFromStr : '—'),
+            TextCellValue(timeToStr.isNotEmpty ? timeToStr : '—'),
             item.totalHours != null ? DoubleCellValue(item.totalHours!) : null,
             item.submittedAt != null ? TextCellValue(_formatDateString(item.submittedAt, includeTime: true)!) : null,
           ];
@@ -1644,9 +1701,13 @@ class _RequestsTable extends StatelessWidget {
           const DataColumn(label: Text('Employee')),
           const DataColumn(label: Text('Department')),
           const DataColumn(label: Text('Store')),
+          // Display uniform transaction abbreviation (OT, OB, FIO, UT, etc.)
           const DataColumn(label: Text('Type')),
           const DataColumn(label: Text('Date From')),
           const DataColumn(label: Text('Date To')),
+          // Added explicit start and end time columns for admin duration visibility
+          const DataColumn(label: Text('Time From')),
+          const DataColumn(label: Text('Time To')),
           const DataColumn(label: Text('Hours')),
           const DataColumn(label: Text('Reason')),
           const DataColumn(label: Text('Approver')),
@@ -1692,13 +1753,30 @@ class _RequestsTable extends StatelessWidget {
   DataRow _buildRow(AdminRequestItem item) {
     switch (category) {
       case AdminRequestCategory.esarf:
+        // Format 24-hour time strings into 12-hour AM/PM format
+        final timeFromFormatted = _format12HourTime(item.timeFrom);
+        final timeToFormatted = _format12HourTime(item.timeTo);
+        final timeFromDisplay = timeFromFormatted.isNotEmpty ? timeFromFormatted : (item.timeFrom ?? '—');
+        final timeToDisplay = timeToFormatted.isNotEmpty ? timeToFormatted : (item.timeTo ?? '—');
         return DataRow(cells: [
           _employeeCell(item),
           DataCell(Text(item.departmentName ?? '—')),
           _storeCell(item),
-          DataCell(Text(item.requestTypeName)),
+          // Render standardized transaction abbreviation (OT, OB, FIO, etc.)
+          DataCell(
+            Text(
+              _formatEsarfTransactionAbbr(
+                (item.transactionType != null && item.transactionType!.isNotEmpty)
+                    ? item.transactionType!
+                    : item.requestTypeName,
+              ),
+            ),
+          ),
           DataCell(Text(item.dateFrom ?? '—')),
           DataCell(Text(item.dateTo ?? '—')),
+          // Render start and end time cells
+          DataCell(Text(timeFromDisplay)),
+          DataCell(Text(timeToDisplay)),
           DataCell(Text(item.totalHours != null ? '${item.totalHours}h' : '—')),
           _reasonCell(item.reason ?? item.timeSchedule ?? '—'),
           _approverCell(item),

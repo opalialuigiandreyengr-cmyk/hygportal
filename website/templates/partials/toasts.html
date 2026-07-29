@@ -1,0 +1,47 @@
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1200;">
+      {% for category, message in messages %}
+        {% if category == 'success' %}
+          {% set bs_category = 'success' %}
+        {% elif category in ['error', 'danger'] %}
+          {% set bs_category = 'danger' %}
+        {% elif category == 'warning' %}
+          {% set bs_category = 'warning' %}
+        {% elif category == 'info' %}
+          {% set bs_category = 'info' %}
+        {% else %}
+          {% set bs_category = 'secondary' %}
+        {% endif %}
+        {% if bs_category == 'success' %}
+          {% set toast_icon = 'fa-circle-check' %}
+          {% set toast_title = 'Success' %}
+        {% elif bs_category == 'danger' %}
+          {% set toast_icon = 'fa-circle-xmark' %}
+          {% set toast_title = 'Error' %}
+        {% elif bs_category == 'warning' %}
+          {% set toast_icon = 'fa-triangle-exclamation' %}
+          {% set toast_title = 'Warning' %}
+        {% elif bs_category == 'info' %}
+          {% set toast_icon = 'fa-circle-info' %}
+          {% set toast_title = 'Info' %}
+        {% else %}
+          {% set toast_icon = 'fa-bell' %}
+          {% set toast_title = 'Notice' %}
+        {% endif %}
+        <div class="toast hyg-toast border-0 mb-2" role="alert" aria-live="assertive" aria-atomic="true" data-bs-delay="3500" data-tone="{{ bs_category }}">
+          <div class="toast-content">
+            <div class="toast-icon" aria-hidden="true">
+              <i class="fa-solid {{ toast_icon }}"></i>
+            </div>
+            <div class="toast-copy">
+              <div class="toast-title">{{ toast_title }}</div>
+              <div class="toast-body">{{ message }}</div>
+            </div>
+            <button type="button" class="btn-close ms-2" data-bs-dismiss="toast" aria-label="Close"></button>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endwith %}

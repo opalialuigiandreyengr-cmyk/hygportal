@@ -1,0 +1,343 @@
+.employee-dash-mobile {
+  display: grid;
+  gap: 0.62rem;
+  width: 100%;
+  max-width: 430px;
+  margin: 0 auto;
+}
+
+.edm-greeting h1 {
+  margin: 0;
+  color: #0f172a;
+  font-size: clamp(1.5rem, 6vw, 2rem);
+  font-weight: var(--weight-title);
+  line-height: 1.04;
+  letter-spacing: -0.02em;
+}
+
+.edm-greeting p {
+  margin: 0.24rem 0 0;
+  color: #64748b;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.edm-card,
+.edm-kpi-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.06);
+}
+
+.edm-profile-card,
+.edm-discount-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.76rem;
+  color: inherit;
+  text-decoration: none;
+  padding: 0.72rem;
+}
+
+.edm-profile-card > i,
+.edm-discount-card > i,
+.edm-perk-item > i {
+  color: #64748b;
+  font-size: 0.74rem;
+}
+
+.edm-profile-copy h2,
+.edm-section-head h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 0.96rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.edm-profile-copy p,
+.edm-section-head p {
+  margin: 0.16rem 0 0;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.edm-ring {
+  --progress: 0;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: conic-gradient(#2563eb calc(var(--progress) * 1%), #dbeafe 0);
+  position: relative;
+}
+
+.edm-ring::before {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.edm-ring span {
+  position: relative;
+  z-index: 1;
+  color: #0f172a;
+  font-size: 0.98rem;
+  font-weight: 800;
+}
+
+.edm-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.48rem;
+}
+
+.edm-kpi-card {
+  padding: 0.62rem;
+  min-height: 100px;
+  display: grid;
+  align-content: start;
+  gap: 0.16rem;
+}
+
+.edm-kpi-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  display: inline-grid;
+  place-items: center;
+  font-size: 0.68rem;
+}
+
+.edm-kpi-icon.is-purple {
+  color: #7c3aed;
+  background: #f3e8ff;
+}
+
+.edm-kpi-icon.is-green {
+  color: #16a34a;
+  background: #dcfce7;
+}
+
+.edm-kpi-icon.is-blue {
+  color: #2563eb;
+  background: #dbeafe;
+}
+
+.edm-kpi-icon.is-orange {
+  color: #ea580c;
+  background: #ffedd5;
+}
+
+.edm-kpi-card h3,
+.edm-discount-card h3 {
+  margin: 0.15rem 0 0;
+  color: #334155;
+  font-size: 0.67rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.edm-kpi-card strong,
+.edm-discount-card strong {
+  color: #0f172a;
+  font-size: 1.34rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.edm-kpi-card small,
+.edm-discount-card small {
+  color: #64748b;
+  font-size: 0.67rem;
+  font-weight: 700;
+}
+
+.edm-discount-card {
+  background: linear-gradient(180deg, #fff8ef 0%, #ffffff 100%);
+}
+
+.edm-discount-card strong {
+  color: #ea580c;
+}
+
+.edm-activity-card,
+.edm-perks-card {
+  padding: 0.72rem;
+}
+
+.edm-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.62rem;
+  margin-bottom: 0.55rem;
+}
+
+.edm-section-head a {
+  color: #2563eb;
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.edm-section-head.no-link {
+  justify-content: flex-start;
+}
+
+.edm-activity-list {
+  display: grid;
+  gap: 0.34rem;
+}
+
+.edm-activity-item {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 42px;
+}
+
+.edm-activity-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  color: #16a34a;
+  background: #ecfdf3;
+  font-size: 0.65rem;
+}
+
+.edm-activity-copy {
+  min-width: 0;
+}
+
+.edm-activity-copy strong,
+.edm-activity-copy small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.edm-activity-copy strong {
+  color: #0f172a;
+  font-size: 0.73rem;
+  font-weight: 700;
+}
+
+.edm-activity-copy small {
+  margin-top: 0.08rem;
+  color: #64748b;
+  font-size: 0.64rem;
+  font-weight: 700;
+}
+
+.edm-status {
+  border-radius: 999px;
+  padding: 0.18rem 0.45rem;
+  font-size: 0.59rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.edm-status.is-approved {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.edm-status.is-dept-mgr-approved,
+.edm-status.is-dept-hr-approved,
+.edm-status.is-hr-approved,
+.edm-status.is-mgr-approved {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.edm-status.is-pending {
+  background: #fef3c7;
+  color: #a16207;
+}
+
+.edm-status.is-rejected,
+.edm-status.is-declined {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.edm-empty-state {
+  border: 1px dashed #d1d5db;
+  border-radius: 10px;
+  padding: 0.7rem;
+  text-align: center;
+  color: #64748b;
+  font-size: 0.74rem;
+}
+
+.edm-perks-stack {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.edm-perk-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.edm-perk-copy strong {
+  color: #0f172a;
+  font-size: 0.73rem;
+  font-weight: 700;
+}
+
+.edm-perk-copy small {
+  display: block;
+  color: #64748b;
+  font-size: 0.66rem;
+  font-weight: 700;
+}
+
+.edm-track {
+  height: 5px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #e5e7eb;
+}
+
+.edm-track span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: #f97316;
+}
+
+.edm-track.is-blue span {
+  background: #2563eb;
+}
+
+@media (min-width: 780px) {
+  .employee-dash-mobile {
+    max-width: 760px;
+    gap: 0.75rem;
+  }
+
+  .edm-kpi-grid {
+    gap: 0.62rem;
+  }
+
+  .edm-activity-item {
+    min-height: 46px;
+  }
+}

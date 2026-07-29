@@ -16,6 +16,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 part 'src/app.dart';
 part 'src/shell.dart';
 part 'src/assist_screen.dart';
+part 'src/birthdays_screen.dart';
 part 'src/employees_screen.dart';
 part 'src/companies_screen.dart';
 part 'src/departments_screen.dart';

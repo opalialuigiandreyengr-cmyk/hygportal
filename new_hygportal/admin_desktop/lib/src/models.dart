@@ -20,6 +20,7 @@ class EmployeePreview {
     required this.roleDepartment,
     required this.hired,
     required this.rawHiredDate,
+    this.rawBirthDate,
     required this.createdAt,
     required this.status,
     required this.avatarColor,
@@ -41,6 +42,7 @@ class EmployeePreview {
   final String roleDepartment;
   final String hired;
   final String? rawHiredDate;
+  final String? rawBirthDate;
   final DateTime? createdAt;
   final String status;
   final Color avatarColor;

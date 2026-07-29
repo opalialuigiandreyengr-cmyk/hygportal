@@ -193,6 +193,9 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
     );
     _heightCmController.addListener(_syncBodyMetrics);
     _weightKgController.addListener(_syncBodyMetrics);
+    _birthDateController.addListener(() {
+      _updateAgeFromBirthDate(_birthDateController.text);
+    });
     for (final controller in _childNameControllers) {
       controller.addListener(_syncChildrenFields);
     }
@@ -518,6 +521,57 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
       age -= 1;
     }
     _ageController.text = age < 0 ? '' : age.toString();
+  }
+
+  Future<void> _selectDateField(
+    TextEditingController controller, {
+    DateTime? firstDate,
+    DateTime? lastDate,
+    VoidCallback? onDateSelected,
+  }) async {
+    DateTime initialDate = DateTime.now();
+    final currentText = controller.text.trim();
+    final parsedStr = _parseDate(currentText, required: false);
+    if (parsedStr != null) {
+      final parsedDate = DateTime.tryParse(parsedStr);
+      if (parsedDate != null) {
+        initialDate = parsedDate;
+      }
+    }
+
+    final minDate = firstDate ?? DateTime(1900);
+    final maxDate = lastDate ?? DateTime(2100);
+
+    if (initialDate.isBefore(minDate)) initialDate = minDate;
+    if (initialDate.isAfter(maxDate)) initialDate = maxDate;
+
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: minDate,
+      lastDate: maxDate,
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: HygColors.goldStrong,
+              onPrimary: HygColors.ink,
+              surface: Colors.white,
+              onSurface: HygColors.ink,
+            ),
+            dialogBackgroundColor: Colors.white,
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      final formatted =
+          '${picked.month.toString().padLeft(2, '0')}/${picked.day.toString().padLeft(2, '0')}/${picked.year}';
+      controller.text = formatted;
+      onDateSelected?.call();
+    }
   }
 
   void _seedBodyMetricFields() {
@@ -1218,6 +1272,15 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
                             hint: 'mm/dd/yyyy',
                             trailingIcon: Icons.calendar_today,
                             controller: _birthDateController,
+                            onTap: () => _selectDateField(
+                              _birthDateController,
+                              lastDate: DateTime.now(),
+                              onDateSelected: () {
+                                _updateAgeFromBirthDate(
+                                  _birthDateController.text,
+                                );
+                              },
+                            ),
                           ),
                           ModalTextField(
                             label: 'Age',
@@ -1253,7 +1316,6 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
                           ),
                           ModalTextField(
                             label: 'Religion',
-                            required: true,
                             hint: 'e.g. Catholic',
                             controller: _religionController,
                           ),
@@ -1476,6 +1538,7 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
                             hint: 'mm/dd/yyyy',
                             trailingIcon: Icons.calendar_today,
                             controller: _dateHiredController,
+                            onTap: () => _selectDateField(_dateHiredController),
                           ),
                           ModalSelectField(
                             label: 'Employee Type',
@@ -1698,6 +1761,14 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
                     nameControllers: _childNameControllers,
                     birthdayControllers: _childBirthdayControllers,
                     ageControllers: _childAgeControllers,
+                    onBirthdayTap: (index) => _selectDateField(
+                      _childBirthdayControllers[index],
+                      lastDate: DateTime.now(),
+                      onDateSelected: () {
+                        _updateChildAge(index);
+                        _syncChildrenFields();
+                      },
+                    ),
                   ),
                 ),
               ],
@@ -1934,12 +2005,14 @@ class ChildrenProfileRows extends StatelessWidget {
     required this.nameControllers,
     required this.birthdayControllers,
     required this.ageControllers,
+    this.onBirthdayTap,
     super.key,
   });
 
   final List<TextEditingController> nameControllers;
   final List<TextEditingController> birthdayControllers;
   final List<TextEditingController> ageControllers;
+  final void Function(int index)? onBirthdayTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1957,6 +2030,9 @@ class ChildrenProfileRows extends StatelessWidget {
               hint: 'mm/dd/yyyy',
               trailingIcon: Icons.calendar_today,
               controller: birthdayControllers[index],
+              onTap: onBirthdayTap == null
+                  ? null
+                  : () => onBirthdayTap!(index),
             );
             final ageField = ModalTextField(
               label: 'Age',
@@ -2009,6 +2085,7 @@ class ModalTextField extends StatelessWidget {
     this.trailingIcon,
     this.readOnly = false,
     this.obscureText = false,
+    this.onTap,
     super.key,
   });
 
@@ -2020,6 +2097,7 @@ class ModalTextField extends StatelessWidget {
   final IconData? trailingIcon;
   final bool readOnly;
   final bool obscureText;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -2034,10 +2112,12 @@ class ModalTextField extends StatelessWidget {
           obscureText: obscureText,
           maxLines: maxLines,
           minLines: maxLines > 1 ? maxLines : null,
+          onTap: onTap,
           style: HygTypography.input,
           decoration: modalInputDecoration(
             hint: hint,
             trailingIcon: trailingIcon,
+            onTrailingIconPressed: onTap,
           ),
         ),
       ],
@@ -2260,13 +2340,28 @@ class FieldLabel extends StatelessWidget {
 InputDecoration modalInputDecoration({
   String hint = '',
   IconData? trailingIcon,
+  VoidCallback? onTrailingIconPressed,
 }) {
+  Widget? suffixIcon;
+  if (trailingIcon != null) {
+    final iconWidget = Icon(trailingIcon, size: 18, color: HygColors.ink);
+    if (onTrailingIconPressed != null) {
+      suffixIcon = IconButton(
+        icon: iconWidget,
+        onPressed: onTrailingIconPressed,
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+        splashRadius: 18,
+      );
+    } else {
+      suffixIcon = iconWidget;
+    }
+  }
+
   return InputDecoration(
     hintText: hint,
     hintStyle: HygTypography.input.copyWith(color: const Color(0xFF6B7280)),
-    suffixIcon: trailingIcon == null
-        ? null
-        : Icon(trailingIcon, size: 18, color: HygColors.ink),
+    suffixIcon: suffixIcon,
     filled: true,
     fillColor: Colors.white,
     isDense: true,

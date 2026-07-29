@@ -1393,6 +1393,12 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
     ).push(MaterialPageRoute<void>(builder: (_) => const HygAssistScreen()));
   }
 
+  void _openHygBirthdaysScreen() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const HygBirthdaysScreen()));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1408,7 +1414,10 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
           Expanded(
             child: Column(
               children: [
-                HrTopBar(onOpenAssist: _openHygAssistScreen),
+                HrTopBar(
+                  onOpenAssist: _openHygAssistScreen,
+                  onOpenBirthdays: _openHygBirthdaysScreen,
+                ),
                 Expanded(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.all(18),
@@ -2093,9 +2102,14 @@ enum HrSection {
 }
 
 class HrTopBar extends StatelessWidget {
-  const HrTopBar({required this.onOpenAssist, super.key});
+  const HrTopBar({
+    required this.onOpenAssist,
+    this.onOpenBirthdays,
+    super.key,
+  });
 
   final VoidCallback onOpenAssist;
+  final VoidCallback? onOpenBirthdays;
 
   String _philippineDateLabel() {
     const monthNames = <String>[
@@ -2150,13 +2164,26 @@ class HrTopBar extends StatelessWidget {
             ),
           ),
           const Spacer(),
-          const TopIconButton(icon: Icons.notifications_none),
+          TopIconButton(
+            icon: Icons.cake_outlined,
+            tooltip: 'Upcoming Birthdays',
+            onTap: onOpenBirthdays,
+          ),
           const SizedBox(width: 10),
-          const TopIconButton(icon: Icons.chat_bubble_outline),
+          const TopIconButton(
+            icon: Icons.notifications_none,
+            tooltip: 'Notifications',
+          ),
+          const SizedBox(width: 10),
+          const TopIconButton(
+            icon: Icons.chat_bubble_outline,
+            tooltip: 'Messages',
+          ),
           const SizedBox(width: 10),
           TopIconButton(
             icon: Icons.auto_awesome,
             filled: true,
+            tooltip: 'HYG Assist',
             onTap: onOpenAssist,
           ),
           const SizedBox(width: 10),
@@ -2193,36 +2220,100 @@ class HrTopBar extends StatelessWidget {
   }
 }
 
-class TopIconButton extends StatelessWidget {
+class TopIconButton extends StatefulWidget {
   const TopIconButton({
     required this.icon,
     this.filled = false,
     this.onTap,
+    this.tooltip,
     super.key,
   });
 
   final IconData icon;
   final bool filled;
   final VoidCallback? onTap;
+  final String? tooltip;
+
+  @override
+  State<TopIconButton> createState() => _TopIconButtonState();
+}
+
+class _TopIconButtonState extends State<TopIconButton> {
+  bool _isHovered = false;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: Container(
-          width: 38,
-          height: 38,
-          decoration: BoxDecoration(
-            color: filled ? HygColors.gold : Colors.white,
-            border: Border.all(color: const Color(0xFFCBD5E1)),
-            borderRadius: BorderRadius.circular(12),
+    final isFilled = widget.filled;
+    final isCake = widget.icon == Icons.cake_outlined || widget.icon == Icons.cake;
+
+    Color bgColor;
+    Color borderColor;
+    Color iconColor;
+
+    if (isFilled) {
+      bgColor = _isHovered ? HygColors.goldStrong : HygColors.gold;
+      borderColor = _isHovered ? const Color(0xFFCA8A04) : const Color(0xFFCBD5E1);
+      iconColor = HygColors.ink;
+    } else if (isCake) {
+      bgColor = _isHovered ? const Color(0xFFFCE7F3) : Colors.white;
+      borderColor = _isHovered ? const Color(0xFFF472B6) : const Color(0xFFCBD5E1);
+      iconColor = _isHovered ? const Color(0xFFDB2777) : HygColors.ink;
+    } else {
+      bgColor = _isHovered ? const Color(0xFFF1F5F9) : Colors.white;
+      borderColor = _isHovered ? const Color(0xFF94A3B8) : const Color(0xFFCBD5E1);
+      iconColor = _isHovered ? const Color(0xFF0F172A) : HygColors.ink;
+    }
+
+    Widget buttonWidget = MouseRegion(
+      cursor: widget.onTap != null ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedScale(
+          scale: _isHovered ? 1.08 : 1.0,
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOutCubic,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: bgColor,
+              border: Border.all(color: borderColor, width: _isHovered ? 1.5 : 1.0),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: _isHovered
+                  ? [
+                      BoxShadow(
+                        color: (isCake
+                                ? const Color(0xFFEC4899)
+                                : isFilled
+                                    ? const Color(0xFFEAB308)
+                                    : Colors.black)
+                            .withOpacity(0.18),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
+                      ),
+                    ]
+                  : const [],
+            ),
+            child: Icon(
+              widget.icon,
+              size: 19,
+              color: iconColor,
+            ),
           ),
-          child: Icon(icon, size: 19, color: HygColors.ink),
         ),
       ),
     );
+
+    if (widget.tooltip != null && widget.tooltip!.isNotEmpty) {
+      buttonWidget = Tooltip(
+        message: widget.tooltip!,
+        child: buttonWidget,
+      );
+    }
+
+    return buttonWidget;
   }
 }

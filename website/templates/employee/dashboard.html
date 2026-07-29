@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}Dashboard | HYG Employee Portal{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pages/employee-dashboard.css') }}?v={{ static_version }}">
+{% endblock %}
+
+{% block page_content %}
+{% set discount_percent = (discount_used / annual_cash_limit * 100) if annual_cash_limit else 0 %}
+{% set transaction_percent = (discount_transaction_count / annual_cash_transaction_limit * 100) if annual_cash_transaction_limit else 0 %}
+{% set display_first_name = (employee.first_name if employee and employee.first_name else current_user.username)|trim %}
+
+<section class="employee-dash-mobile">
+  <header class="edm-greeting">
+    <h1>{{ greeting_label }},<br>{{ display_first_name|lower }}! <span aria-hidden="true">👋</span></h1>
+    <p>Here's what's happening today.</p>
+  </header>
+
+  {% if employee %}
+  <a href="{{ url_for('employee.view_employee', employee_id=employee.id) }}" class="edm-card edm-profile-card" aria-label="Open profile">
+    <div class="edm-ring" style="--progress: {{ [profile_completion, 100]|min }};">
+      <span>{{ [profile_completion, 100]|min }}%</span>
+    </div>
+    <div class="edm-profile-copy">
+      <h2>Profile Completion</h2>
+      <p>Click to view and complete your profile</p>
+    </div>
+    <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+  </a>
+  {% endif %}
+
+  <section class="edm-kpi-grid" aria-label="Request summary">
+    <article class="edm-kpi-card">
+      <span class="edm-kpi-icon is-purple"><i class="fa-regular fa-file-lines"></i></span>
+      <h3>ESARF Requests</h3>
+      <strong>{{ esarf_counts.pending }}</strong>
+      <small>{{ esarf_counts.approved }} Approved</small>
+    </article>
+    <article class="edm-kpi-card">
+      <span class="edm-kpi-icon is-green"><i class="fa-regular fa-calendar-check"></i></span>
+      <h3>Leave Requests</h3>
+      <strong>{{ leave_counts.pending }}</strong>
+      <small>Pending</small>
+    </article>
+    <article class="edm-kpi-card">
+      <span class="edm-kpi-icon is-blue"><i class="fa-regular fa-clock"></i></span>
+      <h3>Offset Hours</h3>
+      <strong>{{ "%.1f"|format(pending_offset_hours) }}</strong>
+      <small>This Year</small>
+    </article>
+  </section>
+
+  <article class="edm-card edm-discount-card">
+    <span class="edm-kpi-icon is-orange"><i class="fa-solid fa-wallet"></i></span>
+    <div>
+      <h3>Cash Discount</h3>
+      <strong>PHP {{ "{:,.0f}".format(discount_remaining) }}</strong>
+      <small>{{ discount_transaction_remaining }} Left</small>
+    </div>
+    <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+  </article>
+
+  <section class="edm-card edm-activity-card">
+    <div class="edm-section-head">
+      <div>
+        <h2>Recent Activity</h2>
+        <p>Your latest requests across leaves, ESARF, and perks.</p>
+      </div>
+      <a href="{{ url_for('employee.notifications') }}">View all</a>
+    </div>
+
+    <div class="edm-activity-list">
+      {% for activity in recent_activity %}
+      {% set status_key = (activity.status or 'Pending')|lower|replace(' ', '-') %}
+      <article class="edm-activity-item">
+        <span class="edm-activity-icon"><i class="fa-solid {{ activity.icon }}"></i></span>
+        <div class="edm-activity-copy">
+          <strong>{{ activity.title }}</strong>
+          <small>{{ activity.type }}{% if activity.date %} · {{ activity.date.strftime('%b %d, %Y') }}{% endif %}</small>
+        </div>
+        <span class="edm-status is-{{ status_key }}">{{ activity.status }}</span>
+      </article>
+      {% else %}
+      <div class="edm-empty-state">
+        <i class="fa-regular fa-folder-open"></i>
+        <p>No requests yet.</p>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="edm-card edm-perks-card">
+    <div class="edm-section-head no-link">
+      <div>
+        <h2>Perks Usage</h2>
+        <p>Current year benefit counters.</p>
+      </div>
+    </div>
+
+    <div class="edm-perks-stack">
+      <div class="edm-perk-item">
+        <span class="edm-kpi-icon is-orange"><i class="fa-solid fa-wallet"></i></span>
+        <div class="edm-perk-copy">
+          <strong>Cash discount</strong>
+          <small>PHP {{ "{:,.0f}".format(discount_used) }} / {{ "{:,.0f}".format(annual_cash_limit) }}</small>
+        </div>
+        <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+      </div>
+      <div class="edm-track"><span style="width: {{ [discount_percent, 100]|min }}%;"></span></div>
+
+      <div class="edm-perk-item">
+        <span class="edm-kpi-icon is-blue"><i class="fa-solid fa-receipt"></i></span>
+        <div class="edm-perk-copy">
+          <strong>Discount transactions</strong>
+          <small>{{ discount_transaction_count }} / {{ annual_cash_transaction_limit }}</small>
+        </div>
+      </div>
+      <div class="edm-track is-blue"><span style="width: {{ [transaction_percent, 100]|min }}%;"></span></div>
+    </div>
+  </section>
+</section>
+{% endblock %}

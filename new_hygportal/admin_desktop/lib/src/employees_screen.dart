@@ -141,7 +141,7 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
   String _civilStatus = 'Select';
   String _company = 'Select';
   String _department = 'Select';
-  String _store = 'N/A';
+  String _store = 'Select';
   String _position = 'Select';
   String _employeeType = 'Probationary';
   String _employmentStatus = 'pending';
@@ -844,19 +844,33 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
   }
 
   List<String> get _storeOptions {
-    if (_company == 'Select') return const ['N/A'];
-    final names =
+    final allNames =
+        _stores
+            .map((store) => store.name.trim())
+            .where((name) => name.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+
+    if (_company == 'Select') {
+      return ['Select', ...allNames];
+    }
+
+    final matchingNames =
         _stores
             .where(
               (store) =>
                   _normalizeOption(store.companyName) ==
                   _normalizeOption(_company),
             )
-            .map((store) => store.name)
+            .map((store) => store.name.trim())
+            .where((name) => name.isNotEmpty)
             .toSet()
             .toList()
           ..sort();
-    return ['N/A', ...names];
+
+    final names = matchingNames.isNotEmpty ? matchingNames : allNames;
+    return ['Select', ...names];
   }
 
   void _selectCompany(String value) {
@@ -865,7 +879,31 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
       if (!_storeOptions.any(
         (store) => _normalizeOption(store) == _normalizeOption(_store),
       )) {
-        _store = 'N/A';
+        _store = 'Select';
+      }
+    });
+  }
+
+  void _selectStore(String value) {
+    setState(() {
+      _store = value;
+      if (_company == 'Select' && value != 'Select') {
+        for (final store in _stores) {
+          if (_normalizeOption(store.name) == _normalizeOption(value)) {
+            if (store.companyName.trim().isNotEmpty) {
+              final matchingCompany = _companyOptions.firstWhere(
+                (c) =>
+                    _normalizeOption(c) ==
+                    _normalizeOption(store.companyName),
+                orElse: () => '',
+              );
+              if (matchingCompany.isNotEmpty) {
+                _company = matchingCompany;
+              }
+            }
+            break;
+          }
+        }
       }
     });
   }
@@ -1515,8 +1553,7 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
                             supportingColor: _storeLoadError == null
                                 ? HygColors.muted
                                 : const Color(0xFFDC2626),
-                            onChanged: (value) =>
-                                setState(() => _store = value),
+                            onChanged: _selectStore,
                           ),
                           ModalSelectField(
                             label: 'Position',

@@ -2812,4 +2812,41 @@ class AdminRequestsService {
       return 'Failed to update request: $e';
     }
   }
+
+  /// Reassigns an approver for a request step.
+  static Future<String> reassignApprover({
+    required String requestId,
+    required String newApproverEmployeeId,
+    String? stepId,
+  }) async {
+    try {
+      final params = <String, dynamic>{
+        'p_request_id': requestId,
+        'p_new_approver_employee_id': newApproverEmployeeId,
+        'p_step_id': stepId,
+      };
+      final response = await _client.rpc(
+        'admin_reassign_request_approver',
+        params: params,
+      );
+      return response?.toString() ?? 'Approver reassigned successfully.';
+    } catch (e) {
+      return 'Failed to reassign approver: $e';
+    }
+  }
+
+  /// Refreshes assigned approvers for all pending/active requests based on current approval routes and active (non-banned) status.
+  static Future<String> refreshAssignedApprovers() async {
+    try {
+      final response = await _client.rpc(
+        'admin_refresh_assigned_approvers',
+      );
+      return response?.toString() ?? 'Assigned approvers refreshed successfully.';
+    } catch (e) {
+      return 'Failed to refresh assigned approvers: $e';
+    }
+  }
 }
+
+
+

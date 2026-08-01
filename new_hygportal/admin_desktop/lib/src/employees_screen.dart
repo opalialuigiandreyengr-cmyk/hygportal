@@ -1078,9 +1078,11 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
     if (!isEditing &&
         (_company == 'Select' ||
             _department == 'Select' ||
+            _store == 'Select' ||
             _position == 'Select')) {
       setState(
-        () => _formError = 'Company, department, and position are required.',
+        () => _formError =
+            'Company, department, store, and position are required.',
       );
       return null;
     }
@@ -1545,6 +1547,7 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
                           ),
                           ModalSelectField(
                             label: 'Store',
+                            required: true,
                             value: _store,
                             options: _storeOptions,
                             supportingText: _isLoadingStoreOptions

@@ -20,6 +20,7 @@ class EmployeePreview {
     required this.roleDepartment,
     required this.hired,
     required this.rawHiredDate,
+    this.rawBirthDate,
     required this.createdAt,
     required this.status,
     required this.avatarColor,
@@ -41,6 +42,7 @@ class EmployeePreview {
   final String roleDepartment;
   final String hired;
   final String? rawHiredDate;
+  final String? rawBirthDate;
   final DateTime? createdAt;
   final String status;
   final Color avatarColor;
@@ -689,7 +691,19 @@ class AdminRequestItem {
     return AdminRequestCategory.esarf;
   }
 
+  bool get isAutoApprovedBirthdayGrant {
+    return requestId.startsWith('bday_leave_') ||
+        reason == 'Auto-approved Birthday Leave Grant' ||
+        leaveCategory == 'Birthday Leave Grant' ||
+        (approvalSummary.isNotEmpty &&
+            (approvalSummary.first['approver_name'] == 'HYG Portal System' ||
+                approvalSummary.first['name'] == 'HYG Portal System'));
+  }
+
   String get statusLabel {
+    if (isAutoApprovedBirthdayGrant) {
+      return 'Approved';
+    }
     final s = status.toLowerCase();
     if (s == 'pending') return 'Pending';
     if (s == 'approved') return 'Approved';
@@ -700,6 +714,9 @@ class AdminRequestItem {
   }
 
   String get approverNames {
+    if (isAutoApprovedBirthdayGrant) {
+      return 'HYG Portal System';
+    }
     if (approvalSummary.isEmpty) return '—';
     final names = approvalSummary
         .map(
@@ -713,6 +730,9 @@ class AdminRequestItem {
   }
 
   String get approverDetail {
+    if (isAutoApprovedBirthdayGrant) {
+      return 'HYG Portal System (Auto-Approved)';
+    }
     if (approvalSummary.isEmpty) return 'No approvals recorded.';
     return approvalSummary
         .map((entry) {

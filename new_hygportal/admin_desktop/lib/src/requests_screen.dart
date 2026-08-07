@@ -48,6 +48,15 @@ String _formatEsarfTransactionAbbr(String? raw) {
   return text;
 }
 
+/// Formats a numeric days value (e.g. 1.0 -> "1d", 1.5 -> "1.5d", 0 -> "0d").
+String _formatDaysNum(double? d) {
+  if (d == null) return '0d';
+  if (d == d.roundToDouble()) {
+    return '${d.toInt()}d';
+  }
+  return '${d}d';
+}
+
 // ── Header ──────────────────────────────────────────────────────────────────
 
 class RequestsHeader extends StatelessWidget {
@@ -117,6 +126,7 @@ class _RequestsPanelState extends State<RequestsPanel>
   String _statusFilter = 'all';
   DateTime? _dateFrom;
   DateTime? _dateTo;
+  bool _isRefreshingApprovers = false;
 
   static const _tabs = ['ESARF / Time', 'Leave', 'Perks'];
 
@@ -197,7 +207,24 @@ class _RequestsPanelState extends State<RequestsPanel>
   bool _isPerk(AdminRequestItem item) =>
       item.category == AdminRequestCategory.perk;
 
+  Future<void> _openReassignApproverDialog(
+    AdminRequestItem item, {
+    String? stepId,
+  }) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => _ReassignApproverDialog(
+        item: item,
+        stepId: stepId,
+      ),
+    );
+    if (result == true) {
+      widget.onRefresh();
+    }
+  }
+
   Future<void> _confirmDelete(AdminRequestItem item) async {
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => Dialog(
@@ -402,6 +429,32 @@ class _RequestsPanelState extends State<RequestsPanel>
       duration: const Duration(seconds: 3),
     ));
     widget.onRefresh();
+  }
+
+  Future<void> _refreshAssignedApprovers() async {
+    setState(() => _isRefreshingApprovers = true);
+    try {
+      final msg = await AdminRequestsService.refreshAssignedApprovers();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(msg),
+        backgroundColor:
+            msg.toLowerCase().contains('fail') ? const Color(0xFFB91C1C) : const Color(0xFF166534),
+        duration: const Duration(seconds: 4),
+      ));
+      widget.onRefresh();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Failed to refresh approver assignments: $e'),
+        backgroundColor: const Color(0xFFB91C1C),
+        duration: const Duration(seconds: 4),
+      ));
+    } finally {
+      if (mounted) {
+        setState(() => _isRefreshingApprovers = false);
+      }
+    }
   }
 
   // ── Excel export ──────────────────────────────────────────────────────
@@ -828,12 +881,15 @@ class _RequestsPanelState extends State<RequestsPanel>
           ];
         case 1: // Leave
           final dateRange = formatRange(_formatDateString(item.startDate), _formatDateString(item.endDate));
+          final leaveTypeDisplay = (item.leaveType?.trim().toLowerCase() == 'both')
+              ? 'Both (${_formatDaysNum(item.paidDays)} Paid, ${_formatDaysNum(item.unpaidDays)} Unpaid)'
+              : (item.leaveType ?? '—');
           return [
             item.employeeNo != null ? TextCellValue(item.employeeNo!) : null,
             item.employeeName != null ? TextCellValue(item.employeeName!) : null,
             item.departmentName != null ? TextCellValue(item.departmentName!) : null,
             item.storeName != null ? TextCellValue(item.storeName!) : null,
-            item.leaveType != null ? TextCellValue(item.leaveType!) : null,
+            TextCellValue(leaveTypeDisplay),
             item.leaveCategory != null ? TextCellValue(item.leaveCategory!) : null,
             TextCellValue(dateRange),
             item.totalDays != null ? DoubleCellValue(item.totalDays!) : null,
@@ -1324,6 +1380,36 @@ class _RequestsPanelState extends State<RequestsPanel>
                 SizedBox(
                   height: 34,
                   child: ElevatedButton.icon(
+                    onPressed: _isRefreshingApprovers ? null : _refreshAssignedApprovers,
+                    icon: _isRefreshingApprovers
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.sync, size: 16),
+                    label: const Text('Refresh Assigned Approver'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1E40AF),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      textStyle: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  height: 34,
+                  child: ElevatedButton.icon(
                     onPressed: _downloadExcel,
                     icon: const Icon(Icons.download, size: 16),
                     label: const Text('Download Excel'),
@@ -1371,7 +1457,9 @@ class _RequestsPanelState extends State<RequestsPanel>
               },
               showDelete: widget.showDeleteAction,
               onDelete: _confirmDelete,
+              onReassign: (item, stepId) => _openReassignApproverDialog(item, stepId: stepId),
             ),
+
         ],
       ),
     );
@@ -1484,10 +1572,16 @@ class _DateRangePill extends StatelessWidget {
 }
 
 class _ApproverEntry {
-  const _ApproverEntry({required this.name, required this.status, required this.level});
+  const _ApproverEntry({
+    required this.name,
+    required this.status,
+    required this.level,
+    this.stepId,
+  });
   final String name;
   final String status;
   final String? level;
+  final String? stepId;
 }
 
 // ── Table ───────────────────────────────────────────────────────────────────
@@ -1498,12 +1592,15 @@ class _RequestsTable extends StatelessWidget {
     required this.category,
     required this.onDelete,
     required this.showDelete,
+    required this.onReassign,
   });
 
   final List<AdminRequestItem> items;
   final AdminRequestCategory category;
   final void Function(AdminRequestItem) onDelete;
   final bool showDelete;
+  final void Function(AdminRequestItem item, String? stepId) onReassign;
+
 
   static const double _storeWidth = 92;
   static const double _reasonWidth = 180;
@@ -1561,8 +1658,130 @@ class _RequestsTable extends StatelessWidget {
     );
   }
 
+  DataCell _leaveTypeCell(AdminRequestItem item) {
+    final leaveType = item.leaveType?.trim() ?? '';
+    if (leaveType.isEmpty) {
+      return const DataCell(Text('—'));
+    }
+
+    if (leaveType.toLowerCase() == 'both') {
+      final paidStr = _formatDaysNum(item.paidDays);
+      final unpaidStr = _formatDaysNum(item.unpaidDays);
+      final detail = '$paidStr Paid, $unpaidStr Unpaid';
+
+      return DataCell(
+        Tooltip(
+          message: 'Both ($detail)',
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Both',
+                style: HygTypography.tableBody.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '$paidStr Paid • $unpaidStr Unpaid',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF64748B),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return DataCell(Text(leaveType));
+  }
+
   DataCell _approverCell(AdminRequestItem item) {
+    final isBirthdayLeave = item.isAutoApprovedBirthdayGrant;
+
+    if (isBirthdayLeave) {
+      return DataCell(
+        Tooltip(
+          message: 'HYG Portal System (Auto-Approved)',
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+            decoration: BoxDecoration(
+              color: const Color(0xFF166534).withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: const [
+                Icon(Icons.check, size: 16, color: Color(0xFF166534)),
+                SizedBox(width: 5),
+                Flexible(
+                  child: Text(
+                    'HYG Portal System',
+                    style: TextStyle(
+                      color: Color(0xFF166534),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     if (item.approvalSummary.isEmpty) {
+      final isPerk = item.category == AdminRequestCategory.perk;
+      final isUnknownOrFallback = !isPerk &&
+          (item.status.toLowerCase() == 'admin_fallback' ||
+          item.status.toLowerCase() == 'needs_admin_review' ||
+          item.approverNames.toLowerCase().contains('unknown'));
+
+      if (isUnknownOrFallback) {
+        return DataCell(
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _limitedText('—', width: 20, maxLines: 1),
+              const SizedBox(width: 6),
+              InkWell(
+                onTap: () => onReassign(item, null),
+                borderRadius: BorderRadius.circular(4),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E40AF).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: const Color(0xFF1E40AF).withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      Icon(Icons.swap_horiz, size: 12, color: Color(0xFF1E40AF)),
+                      SizedBox(width: 3),
+                      Text(
+                        'Reassign',
+                        style: TextStyle(
+                          color: Color(0xFF1E40AF),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+
       return DataCell(
         Tooltip(
           message: '—',
@@ -1572,10 +1791,12 @@ class _RequestsTable extends StatelessWidget {
     }
 
     final entries = item.approvalSummary.map((entry) {
-          final name = (entry['approver_name'] ?? entry['name'] ?? 'Unknown').toString().trim();
+          final rawName = (entry['approver_name'] ?? entry['name'] ?? 'Unknown').toString().trim();
+          final name = rawName.isEmpty ? 'Unknown' : rawName;
           final status = (entry['status'] ?? 'pending').toString().toLowerCase();
           final level = entry['level']?.toString();
-          return _ApproverEntry(name: name, status: status, level: level);
+          final stepId = (entry['step_id'] ?? entry['id'])?.toString();
+          return _ApproverEntry(name: name, status: status, level: level, stepId: stepId);
         }).toList(growable: false);
     final highlights = _resolveHighlights(entries);
 
@@ -1583,13 +1804,22 @@ class _RequestsTable extends StatelessWidget {
       Tooltip(
         message: item.approverDetail,
         child: SizedBox(
-          width: 180,
+          width: 220,
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: entries.map((entry) {
               final (icon, color) = _iconForStatus(entry.status);
               final isHighlighted = highlights.contains(entry);
+              final isPerk = item.category == AdminRequestCategory.perk;
+              final isEditableStatus = !isPerk &&
+                  entry.status != 'approved' &&
+                  entry.status != 'rejected' &&
+                  entry.status != 'cancelled' &&
+                  item.status.toLowerCase() != 'approved' &&
+                  item.status.toLowerCase() != 'rejected' &&
+                  item.status.toLowerCase() != 'cancelled';
+
 
               return Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
@@ -1615,6 +1845,38 @@ class _RequestsTable extends StatelessWidget {
                         maxLines: 1,
                       ),
                     ),
+                    if (isEditableStatus) ...[
+
+
+                      const SizedBox(width: 6),
+                      InkWell(
+                        onTap: () => onReassign(item, entry.stepId),
+                        borderRadius: BorderRadius.circular(4),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E40AF).withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: const Color(0xFF1E40AF).withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: const [
+                              Icon(Icons.swap_horiz, size: 12, color: Color(0xFF1E40AF)),
+                              SizedBox(width: 3),
+                              Text(
+                                'Reassign',
+                                style: TextStyle(
+                                  color: Color(0xFF1E40AF),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               );
@@ -1625,6 +1887,7 @@ class _RequestsTable extends StatelessWidget {
     );
   }
 
+
   (IconData icon, Color color) _iconForStatus(String status) {
     switch (status) {
       case 'approved':
@@ -1634,10 +1897,14 @@ class _RequestsTable extends StatelessWidget {
         return (Icons.error_outline, const Color(0xFFB91C1C));
       case 'needs_admin_review':
         return (Icons.warning_amber_rounded, const Color(0xFFB45309));
+      case 'pending':
+      case 'waiting':
+        return (Icons.access_time_rounded, const Color(0xFF1E40AF));
       default:
         return (Icons.warning_amber_rounded, const Color(0xFF1E40AF));
     }
   }
+
 
   Set<_ApproverEntry> _resolveHighlights(List<_ApproverEntry> entries) {
     if (entries.isEmpty) return const {};
@@ -1793,8 +2060,8 @@ class _RequestsTable extends StatelessWidget {
           DataCell(Text(item.leaveCategory ?? '—')),
           DataCell(Text(item.startDate ?? '—')),
           DataCell(Text(item.endDate ?? '—')),
-          DataCell(Text(item.totalDays != null ? '${item.totalDays}d' : '—')),
-          DataCell(Text(item.leaveType ?? '—')),
+          DataCell(Text(item.totalDays != null ? _formatDaysNum(item.totalDays) : '—')),
+          _leaveTypeCell(item),
           _reasonCell(item.reason ?? '—'),
           _approverCell(item),
           _statusCell(item),
@@ -1886,7 +2153,10 @@ class _RequestsTable extends StatelessWidget {
   }
 
   DataCell _statusCell(AdminRequestItem item) {
-    final color = switch (item.status.toLowerCase()) {
+    final isBirthdayLeave = item.isAutoApprovedBirthdayGrant;
+    final statusKey = isBirthdayLeave ? 'approved' : item.status.toLowerCase();
+
+    final color = switch (statusKey) {
       'approved' => const Color(0xFF166534),
       'rejected' => const Color(0xFFB91C1C),
       'cancelled' => const Color(0xFF64748B),
@@ -1894,7 +2164,7 @@ class _RequestsTable extends StatelessWidget {
       _ => const Color(0xFF1E40AF),
     };
 
-    final bgColor = switch (item.status.toLowerCase()) {
+    final bgColor = switch (statusKey) {
       'approved' => const Color(0xFFDCFCE7),
       'rejected' => const Color(0xFFFEE2E2),
       'cancelled' => const Color(0xFFF1F5F9),
@@ -1963,6 +2233,7 @@ class _RequestsTable extends StatelessWidget {
       ),
     );
   }
+
 }
 
 class _DeleteBullet extends StatelessWidget {
@@ -1995,3 +2266,401 @@ class _DeleteBullet extends StatelessWidget {
     );
   }
 }
+
+// ── Reassign Approver Dialog ──────────────────────────────────────────────────
+
+class _ReassignApproverDialog extends StatefulWidget {
+  const _ReassignApproverDialog({
+    required this.item,
+    this.stepId,
+  });
+
+  final AdminRequestItem item;
+  final String? stepId;
+
+  @override
+  State<_ReassignApproverDialog> createState() => _ReassignApproverDialogState();
+}
+
+class _ReassignApproverDialogState extends State<_ReassignApproverDialog> {
+  List<EmployeePreview> _allEmployees = [];
+  bool _isLoadingEmployees = true;
+  String _searchQuery = '';
+  EmployeePreview? _selectedEmployee;
+  bool _isSubmitting = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchEmployees();
+  }
+
+  Future<void> _fetchEmployees() async {
+    try {
+      final employees = await EmployeeDirectoryService.loadEmployees();
+      if (mounted) {
+        setState(() {
+          _allEmployees = employees;
+          _isLoadingEmployees = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = 'Failed to load employee list: $e';
+          _isLoadingEmployees = false;
+        });
+      }
+    }
+  }
+
+  List<EmployeePreview> get _filteredEmployees {
+    if (_searchQuery.trim().isEmpty) {
+      return _allEmployees;
+    }
+    final q = _searchQuery.trim().toLowerCase();
+    return _allEmployees.where((emp) {
+      final name = emp.name.toLowerCase();
+      final empNo = emp.idNumber.toLowerCase();
+      final dept = emp.departmentName.toLowerCase();
+      final pos = emp.positionName.toLowerCase();
+      final store = emp.companyName.toLowerCase();
+      return name.contains(q) ||
+          empNo.contains(q) ||
+          dept.contains(q) ||
+          pos.contains(q) ||
+          store.contains(q);
+    }).toList(growable: false);
+  }
+
+  Future<void> _confirmReassign() async {
+    if (_selectedEmployee == null || _isSubmitting) return;
+
+    setState(() {
+      _isSubmitting = true;
+      _error = null;
+    });
+
+    final message = await AdminRequestsService.reassignApprover(
+      requestId: widget.item.requestId,
+      newApproverEmployeeId: _selectedEmployee!.id,
+      stepId: widget.stepId,
+    );
+
+    if (!mounted) return;
+
+    if (message.toLowerCase().contains('failed') || message.toLowerCase().contains('error')) {
+      setState(() {
+        _error = message;
+        _isSubmitting = false;
+      });
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Approver reassigned to ${_selectedEmployee!.name}'),
+          backgroundColor: const Color(0xFF166534),
+        ),
+      );
+      Navigator.of(context).pop(true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      insetPadding: const EdgeInsets.all(28),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      backgroundColor: Colors.white,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 580, maxHeight: 680),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.person_add_alt_1_rounded,
+                      color: Color(0xFF1E40AF),
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Reassign Approver',
+                          style: TextStyle(
+                            color: HygColors.ink,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Select an approver for ${widget.item.employeeName ?? "Request"}\'s ${widget.item.requestTypeName}',
+                          style: HygTypography.body.copyWith(
+                            color: const Color(0xFF64748B),
+                            fontSize: 12,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    icon: const Icon(Icons.close, color: Color(0xFF64748B)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              const Divider(height: 1, color: Color(0xFFE2E8F0)),
+              const SizedBox(height: 16),
+
+              // Search bar
+              TextField(
+                decoration: InputDecoration(
+                  hintText: 'Search by employee name, ID, position, department...',
+                  prefixIcon: const Icon(Icons.search, size: 20, color: Color(0xFF94A3B8)),
+                  filled: true,
+                  fillColor: const Color(0xFFF8FAFC),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                  ),
+                ),
+                onChanged: (val) => setState(() => _searchQuery = val),
+              ),
+              const SizedBox(height: 12),
+
+              if (_error != null) ...[
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEE2E2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.error_outline, size: 18, color: Color(0xFFB91C1C)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _error!,
+                          style: const TextStyle(color: Color(0xFFB91C1C), fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+
+              // Employee candidates list
+              Expanded(
+                child: _isLoadingEmployees
+                    ? const Center(child: CircularProgressIndicator())
+                    : _filteredEmployees.isEmpty
+                        ? const Center(
+                            child: Text(
+                              'No matching employees found.',
+                              style: TextStyle(color: Color(0xFF64748B)),
+                            ),
+                          )
+                        : ListView.separated(
+                            itemCount: _filteredEmployees.length,
+                            separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                            itemBuilder: (context, index) {
+                              final emp = _filteredEmployees[index];
+                              final isSelected = _selectedEmployee?.id == emp.id;
+
+                              return InkWell(
+                                onTap: () => setState(() => _selectedEmployee = emp),
+                                borderRadius: BorderRadius.circular(8),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: isSelected ? const Color(0xFFEFF6FF) : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: isSelected
+                                        ? Border.all(color: const Color(0xFF2563EB), width: 1.5)
+                                        : null,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      _buildEmployeeAvatar(emp),
+                                      const SizedBox(width: 12),
+
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              emp.name,
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                                                color: HygColors.ink,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              '${emp.positionName} • ${emp.departmentName} (${emp.idNumber})',
+                                              style: const TextStyle(
+                                                fontSize: 11,
+                                                color: Color(0xFF64748B),
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      if (isSelected)
+                                        const Icon(
+                                          Icons.check_circle_rounded,
+                                          color: Color(0xFF2563EB),
+                                          size: 20,
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+              ),
+              const SizedBox(height: 16),
+              const Divider(height: 1, color: Color(0xFFE2E8F0)),
+              const SizedBox(height: 16),
+
+              // Action buttons
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  OutlinedButton(
+                    onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(false),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Color(0xFFCBD5E1)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    ),
+                    child: const Text('Cancel', style: TextStyle(color: Color(0xFF475569))),
+                  ),
+                  const SizedBox(width: 12),
+                  ElevatedButton(
+                    onPressed: (_selectedEmployee == null || _isSubmitting)
+                        ? null
+                        : _confirmReassign,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1E40AF),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    ),
+                    child: _isSubmitting
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text('Confirm Reassign'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmployeeAvatar(EmployeePreview emp) {
+    final photoUrl = emp.photoUrl?.trim() ?? '';
+    final hasPhoto = photoUrl.isNotEmpty;
+    final (bg, fg) = _getAvatarColors(emp);
+
+    return Container(
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: bg,
+        boxShadow: [
+          BoxShadow(
+            color: bg.withValues(alpha: 0.3),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: ClipOval(
+        child: hasPhoto
+            ? Image.network(
+                photoUrl,
+                width: 36,
+                height: 36,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => _buildInitialFallback(emp, bg, fg),
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) return child;
+                  return _buildInitialFallback(emp, bg, fg);
+                },
+              )
+            : _buildInitialFallback(emp, bg, fg),
+      ),
+    );
+  }
+
+  Widget _buildInitialFallback(EmployeePreview emp, Color bg, Color fg) {
+    return Container(
+      color: bg,
+      alignment: Alignment.center,
+      child: Text(
+        emp.initial.toUpperCase(),
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w800,
+          color: fg,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+
+  (Color bg, Color fg) _getAvatarColors(EmployeePreview emp) {
+    const solidColors = [
+      Color(0xFF1E40AF), // Royal Blue
+      Color(0xFF6D28D9), // Deep Violet
+      Color(0xFF047857), // Forest Emerald
+      Color(0xFFC2410C), // Deep Burnt Orange
+      Color(0xFFBE185D), // Dark Rose
+      Color(0xFF0369A1), // Deep Ocean Sky
+    ];
+    final hash = emp.name.codeUnits.fold<int>(0, (sum, c) => sum + c);
+    final bg = solidColors[hash % solidColors.length];
+    return (bg, Colors.white);
+  }
+}
+
+

@@ -84,9 +84,56 @@ class EmployeeDirectoryService {
         },
       );
       if (response is List) {
-        final rows = response.whereType<Map<String, dynamic>>().toList(
-          growable: false,
-        );
+        final rows = response
+            .whereType<Map<String, dynamic>>()
+            .map((r) => Map<String, dynamic>.from(r))
+            .toList(growable: true);
+
+        final missingBirthdates = rows.where((r) {
+          final bd = r['birth_date'] ?? r['birthdate'];
+          return bd == null || bd.toString().trim().isEmpty;
+        }).toList();
+
+        if (missingBirthdates.isNotEmpty) {
+          final futures = missingBirthdates.map((row) async {
+            final empId = row['employee_id']?.toString() ?? '';
+            if (empId.isEmpty) return null;
+            try {
+              final profResponse = await _client.rpc(
+                'hr_employee_profile_detail',
+                params: {
+                  'p_username': AppConfig.hrUsername,
+                  'p_password': AppConfig.hrPassword,
+                  'p_employee_id': empId,
+                },
+              );
+              if (profResponse is List && profResponse.isNotEmpty) {
+                final profMap = profResponse.first as Map<String, dynamic>;
+                final bdate = profMap['birth_date']?.toString().trim();
+                if (bdate != null && bdate.isNotEmpty) {
+                  return MapEntry(empId, bdate);
+                }
+              }
+            } catch (_) {}
+            return null;
+          });
+
+          final results = await Future.wait(futures);
+          final bmap = <String, String>{};
+          for (final res in results) {
+            if (res != null) {
+              bmap[res.key] = res.value;
+            }
+          }
+
+          for (final row in rows) {
+            final empId = row['employee_id']?.toString() ?? '';
+            if (bmap.containsKey(empId)) {
+              row['birth_date'] = bmap[empId];
+            }
+          }
+        }
+
         await LocalSyncService.cacheRows('employee_cache', rows);
         unawaited(LocalSyncService.syncNow());
         return _sortNewestFirst(
@@ -576,6 +623,7 @@ class EmployeeDirectoryService {
     final department = _stringValue(row['department_name']);
     final company = _stringValue(row['company_name'], fallback: '-');
     final hiredDate = _nullableString(row['hired_date']);
+    final birthDate = _nullableString(row['birth_date'] ?? row['birthdate'] ?? row['date_of_birth']);
     final createdAt = _dateTimeValue(row['created_at']);
 
     return EmployeePreview(
@@ -595,6 +643,7 @@ class EmployeeDirectoryService {
       roleDepartment: _roleDepartment(position, department),
       hired: _formatDate(_stringValue(row['hired_date'])),
       rawHiredDate: hiredDate,
+      rawBirthDate: birthDate,
       createdAt: createdAt,
       status: _stringValue(row['employment_status'], fallback: 'active'),
       avatarColor: _avatarColor(fullName),
@@ -2763,4 +2812,41 @@ class AdminRequestsService {
       return 'Failed to update request: $e';
     }
   }
+
+  /// Reassigns an approver for a request step.
+  static Future<String> reassignApprover({
+    required String requestId,
+    required String newApproverEmployeeId,
+    String? stepId,
+  }) async {
+    try {
+      final params = <String, dynamic>{
+        'p_request_id': requestId,
+        'p_new_approver_employee_id': newApproverEmployeeId,
+        'p_step_id': stepId,
+      };
+      final response = await _client.rpc(
+        'admin_reassign_request_approver',
+        params: params,
+      );
+      return response?.toString() ?? 'Approver reassigned successfully.';
+    } catch (e) {
+      return 'Failed to reassign approver: $e';
+    }
+  }
+
+  /// Refreshes assigned approvers for all pending/active requests based on current approval routes and active (non-banned) status.
+  static Future<String> refreshAssignedApprovers() async {
+    try {
+      final response = await _client.rpc(
+        'admin_refresh_assigned_approvers',
+      );
+      return response?.toString() ?? 'Assigned approvers refreshed successfully.';
+    } catch (e) {
+      return 'Failed to refresh assigned approvers: $e';
+    }
+  }
 }
+
+
+

@@ -1,4 +1,4 @@
-part of '../main.dart';
+﻿part of '../main.dart';
 
 /// Formats a 24-hour time string (e.g. "14:30:00" or "08:00") into 12-hour format ("2:30 PM", "8:00 AM").
 /// Used by both the UI Data Table and Excel Export to display human-readable time bounds.
@@ -30,7 +30,7 @@ String _format12HourTime(String? timeStr) {
 /// Normalizes ESARF transaction type strings into standardized short abbreviations for UI uniformity.
 /// Examples: "Overtime" -> "OT", "Official Business" -> "OB", "Failure to Punch In/Out" -> "FIO".
 String _formatEsarfTransactionAbbr(String? raw) {
-  if (raw == null || raw.trim().isEmpty) return '—';
+  if (raw == null || raw.trim().isEmpty) return 'Ã¢â‚¬â€';
   final text = raw.trim();
   final lower = text.toLowerCase();
 
@@ -57,7 +57,7 @@ String _formatDaysNum(double? d) {
   return '${d}d';
 }
 
-// ── Header ──────────────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Header Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 class RequestsHeader extends StatelessWidget {
   const RequestsHeader({required this.onRefresh, super.key});
@@ -95,7 +95,7 @@ class RequestsHeader extends StatelessWidget {
   }
 }
 
-// ── Tabbed Panel ────────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Tabbed Panel Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 class RequestsPanel extends StatefulWidget {
   const RequestsPanel({
@@ -202,10 +202,37 @@ class _RequestsPanelState extends State<RequestsPanel>
     return widget.requests.where((r) => r.category == category).length;
   }
 
-  // ── Action helpers ──────────────────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Action helpers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
   bool _isPerk(AdminRequestItem item) =>
       item.category == AdminRequestCategory.perk;
+
+  Future<void> _validateLeave(AdminRequestItem item) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => _ValidateLeaveDialogContent(
+        item: item,
+        onConfirm: (paid, unpaid) async {
+          await AdminRequestsService.validateLeaveRequest(
+            requestId: item.requestId,
+            newPaidDays: paid,
+            newUnpaidDays: unpaid,
+            oldPaidDays: item.paidDays ?? 0.0,
+            userProfileId: item.userProfileId,
+          );
+        },
+      ),
+    );
+    if (confirmed == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Leave request validated and credits adjusted successfully!'),
+          backgroundColor: Color(0xFF059669),
+        ),
+      );
+      widget.onRefresh();
+    }
+  }
 
   Future<void> _openReassignApproverDialog(
     AdminRequestItem item, {
@@ -457,7 +484,7 @@ class _RequestsPanelState extends State<RequestsPanel>
     }
   }
 
-  // ── Excel export ──────────────────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Excel export Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
   Future<void> _downloadExcel() async {
     final tabIndex = _tabController.index;
@@ -487,7 +514,7 @@ class _RequestsPanelState extends State<RequestsPanel>
       sanitizedSheetName = sanitizedSheetName.substring(0, 31);
     }
 
-    // ── build workbook ──────────────────────────────────────────────────
+    // Ã¢â€â‚¬Ã¢â€â‚¬ build workbook Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     final excel = Excel.createExcel();
     final sheet = excel.getDefaultSheet()!;
     excel.rename(sheet, sanitizedSheetName);
@@ -666,15 +693,15 @@ class _RequestsPanelState extends State<RequestsPanel>
     String getStatusWithEmoji(String status) {
       final s = status.toLowerCase();
       if (s.contains('approved')) {
-        return '🟢 Approved';
+        return 'Ã°Å¸Å¸Â¢ Approved';
       } else if (s.contains('pending') || s.contains('needs review')) {
-        return '🟡 Pending';
+        return 'Ã°Å¸Å¸Â¡ Pending';
       } else if (s.contains('rejected')) {
-        return '🔴 Rejected';
+        return 'Ã°Å¸â€Â´ Rejected';
       } else if (s.contains('cancelled') || s.contains('canceled')) {
-        return '⚪ Cancelled';
+        return 'Ã¢Å¡Âª Cancelled';
       } else {
-        return '⚪ $status';
+        return 'Ã¢Å¡Âª $status';
       }
     }
 
@@ -691,7 +718,7 @@ class _RequestsPanelState extends State<RequestsPanel>
       case 1: // Leave
         headers = [
           'Employee No', 'Employee Name', 'Department', 'Store',
-          'Leave Type', 'Leave Category', 'Date', 'Total Days',
+          'Leave Type', 'Leave Category', 'Leave Credits', 'Date', 'Total Days',
           'Paid Days', 'Unpaid Days', 'Status', 'Submitted',
         ];
         break;
@@ -791,7 +818,7 @@ class _RequestsPanelState extends State<RequestsPanel>
       }
     }
 
-    // ── 1. Write Title Block (Rows 0 & 1) ───────────────────────────────────
+    // Ã¢â€â‚¬Ã¢â€â‚¬ 1. Write Title Block (Rows 0 & 1) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     final titleStyle = CellStyle(
       fontFamily: 'Segoe UI',
       fontSize: 16,
@@ -837,7 +864,7 @@ class _RequestsPanelState extends State<RequestsPanel>
     // Empty Spacer Row 2
     sheetObj.setRowHeight(2, 15.0);
 
-    // ── 4. Write Table Headers (Row 3) ──────────────────────────────────────
+    // Ã¢â€â‚¬Ã¢â€â‚¬ 4. Write Table Headers (Row 3) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     for (var c = 0; c < headers.length; c++) {
       excel.updateCell(
         sanitizedSheetName,
@@ -874,8 +901,8 @@ class _RequestsPanelState extends State<RequestsPanel>
             TextCellValue(item.statusLabel),
             TextCellValue(dateRange),
             // Export Time From and Time To in separate Excel columns
-            TextCellValue(timeFromStr.isNotEmpty ? timeFromStr : '—'),
-            TextCellValue(timeToStr.isNotEmpty ? timeToStr : '—'),
+            TextCellValue(timeFromStr.isNotEmpty ? timeFromStr : 'Ã¢â‚¬â€'),
+            TextCellValue(timeToStr.isNotEmpty ? timeToStr : 'Ã¢â‚¬â€'),
             item.totalHours != null ? DoubleCellValue(item.totalHours!) : null,
             item.submittedAt != null ? TextCellValue(_formatDateString(item.submittedAt, includeTime: true)!) : null,
           ];
@@ -883,7 +910,7 @@ class _RequestsPanelState extends State<RequestsPanel>
           final dateRange = formatRange(_formatDateString(item.startDate), _formatDateString(item.endDate));
           final leaveTypeDisplay = (item.leaveType?.trim().toLowerCase() == 'both')
               ? 'Both (${_formatDaysNum(item.paidDays)} Paid, ${_formatDaysNum(item.unpaidDays)} Unpaid)'
-              : (item.leaveType ?? '—');
+              : (item.leaveType ?? 'Ã¢â‚¬â€');
           return [
             item.employeeNo != null ? TextCellValue(item.employeeNo!) : null,
             item.employeeName != null ? TextCellValue(item.employeeName!) : null,
@@ -891,6 +918,7 @@ class _RequestsPanelState extends State<RequestsPanel>
             item.storeName != null ? TextCellValue(item.storeName!) : null,
             TextCellValue(leaveTypeDisplay),
             item.leaveCategory != null ? TextCellValue(item.leaveCategory!) : null,
+            item.leaveCredits != null ? DoubleCellValue(item.leaveCredits!) : null,
             TextCellValue(dateRange),
             item.totalDays != null ? DoubleCellValue(item.totalDays!) : null,
             item.paidDays != null ? DoubleCellValue(item.paidDays!) : null,
@@ -918,10 +946,10 @@ class _RequestsPanelState extends State<RequestsPanel>
 
     final centerCols = {'Employee No', 'Status', 'Date', 'Time', 'Submitted'};
     final currencyCols = {'Amount', 'Discount', 'Final Amount'};
-    final decimalCols = {'Total Hours', 'Total Days', 'Paid Days', 'Unpaid Days'};
+    final decimalCols = {'Total Hours', 'Total Days', 'Paid Days', 'Unpaid Days', 'Leave Credits'};
     final integerCols = {'Quantity'};
 
-    // ── 5. Write Data Rows (Row 4+) ─────────────────────────────────────────
+    // Ã¢â€â‚¬Ã¢â€â‚¬ 5. Write Data Rows (Row 4+) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     int currentRow = 4;
     for (var r = 0; r < items.length; r++) {
       final item = items[r];
@@ -995,7 +1023,7 @@ class _RequestsPanelState extends State<RequestsPanel>
       currentRow++;
     }
 
-    // ── 6. Dynamic Column widths calculation ────────────────────────────────
+    // Ã¢â€â‚¬Ã¢â€â‚¬ 6. Dynamic Column widths calculation Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     final maxColWidths = List<int>.generate(headers.length, (c) => headers[c].length + 4);
 
     for (var r = 0; r < items.length; r++) {
@@ -1039,7 +1067,7 @@ class _RequestsPanelState extends State<RequestsPanel>
     final fixedBytesList = _postProcessExcelBytes(encodedBytes);
     final fileBytes = Uint8List.fromList(fixedBytesList);
 
-    // ── save via file picker ──────────────────────────────────────────
+    // Ã¢â€â‚¬Ã¢â€â‚¬ save via file picker Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     final savePath = await FilePicker.saveFile(
       dialogTitle: 'Save Excel file',
       fileName: defaultFileName,
@@ -1236,7 +1264,7 @@ class _RequestsPanelState extends State<RequestsPanel>
                       onChanged: (v) => setState(() => _searchQuery = v),
                       style: HygTypography.input.copyWith(fontSize: 13),
                       decoration: InputDecoration(
-                        hintText: 'Search employee, department, store, type…',
+                        hintText: 'Search employee, department, store, typeÃ¢â‚¬Â¦',
                         prefixIcon: const Icon(
                           Icons.search,
                           color: Color(0xFF94A3B8),
@@ -1299,7 +1327,7 @@ class _RequestsPanelState extends State<RequestsPanel>
             ),
           ),
 
-          // ── Date submitted filter + Download Excel ──────────────────────────
+          // Ã¢â€â‚¬Ã¢â€â‚¬ Date submitted filter + Download Excel Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
           Padding(
             padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
             child: Row(
@@ -1458,6 +1486,7 @@ class _RequestsPanelState extends State<RequestsPanel>
               showDelete: widget.showDeleteAction,
               onDelete: _confirmDelete,
               onReassign: (item, stepId) => _openReassignApproverDialog(item, stepId: stepId),
+              onValidate: _validateLeave,
             ),
 
         ],
@@ -1466,7 +1495,7 @@ class _RequestsPanelState extends State<RequestsPanel>
   }
 }
 
-// ── Loading ─────────────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Loading Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 class _RequestsLoadingCard extends StatelessWidget {
   const _RequestsLoadingCard();
@@ -1487,7 +1516,7 @@ class _RequestsLoadingCard extends StatelessWidget {
   }
 }
 
-// ── Error ───────────────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Error Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 class _RequestsErrorCard extends StatelessWidget {
   const _RequestsErrorCard({required this.message, required this.onRetry});
@@ -1514,7 +1543,7 @@ class _RequestsErrorCard extends StatelessWidget {
   }
 }
 
-// ── Date-range pill ─────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Date-range pill Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 class _DateRangePill extends StatelessWidget {
   const _DateRangePill({
@@ -1532,7 +1561,7 @@ class _DateRangePill extends StatelessWidget {
   Widget build(BuildContext context) {
     final isActive = dateFrom != null && dateTo != null;
     final label = isActive
-        ? '${_fmt(dateFrom!)}  –  ${_fmt(dateTo!)}'
+        ? '${_fmt(dateFrom!)}  Ã¢â‚¬â€œ  ${_fmt(dateTo!)}'
         : 'Pick date range';
 
     return GestureDetector(
@@ -1584,7 +1613,7 @@ class _ApproverEntry {
   final String? stepId;
 }
 
-// ── Table ───────────────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Table Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 class _RequestsTable extends StatelessWidget {
   const _RequestsTable({
@@ -1593,6 +1622,7 @@ class _RequestsTable extends StatelessWidget {
     required this.onDelete,
     required this.showDelete,
     required this.onReassign,
+    this.onValidate,
   });
 
   final List<AdminRequestItem> items;
@@ -1600,7 +1630,7 @@ class _RequestsTable extends StatelessWidget {
   final void Function(AdminRequestItem) onDelete;
   final bool showDelete;
   final void Function(AdminRequestItem item, String? stepId) onReassign;
-
+  final void Function(AdminRequestItem)? onValidate;
 
   static const double _storeWidth = 92;
   static const double _reasonWidth = 180;
@@ -1661,7 +1691,7 @@ class _RequestsTable extends StatelessWidget {
   DataCell _leaveTypeCell(AdminRequestItem item) {
     final leaveType = item.leaveType?.trim() ?? '';
     if (leaveType.isEmpty) {
-      return const DataCell(Text('—'));
+      return const DataCell(Text('Ã¢â‚¬â€'));
     }
 
     if (leaveType.toLowerCase() == 'both') {
@@ -1684,7 +1714,7 @@ class _RequestsTable extends StatelessWidget {
               ),
               const SizedBox(height: 2),
               Text(
-                '$paidStr Paid • $unpaidStr Unpaid',
+                '$paidStr Paid Ã¢â‚¬Â¢ $unpaidStr Unpaid',
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
@@ -1748,7 +1778,7 @@ class _RequestsTable extends StatelessWidget {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _limitedText('—', width: 20, maxLines: 1),
+              _limitedText('Ã¢â‚¬â€', width: 20, maxLines: 1),
               const SizedBox(width: 6),
               InkWell(
                 onTap: () => onReassign(item, null),
@@ -1784,8 +1814,8 @@ class _RequestsTable extends StatelessWidget {
 
       return DataCell(
         Tooltip(
-          message: '—',
-          child: _limitedText('—', width: 140, maxLines: 2),
+          message: 'Ã¢â‚¬â€',
+          child: _limitedText('Ã¢â‚¬â€', width: 140, maxLines: 2),
         ),
       );
     }
@@ -1891,6 +1921,7 @@ class _RequestsTable extends StatelessWidget {
   (IconData icon, Color color) _iconForStatus(String status) {
     switch (status) {
       case 'approved':
+      case 'validated':
         return (Icons.check, const Color(0xFF166534));
       case 'rejected':
       case 'cancelled':
@@ -1988,6 +2019,7 @@ class _RequestsTable extends StatelessWidget {
           const DataColumn(label: Text('Department')),
           const DataColumn(label: Text('Store')),
           const DataColumn(label: Text('Leave Category')),
+          const DataColumn(label: Text('Leave Credits')),
           const DataColumn(label: Text('Start')),
           const DataColumn(label: Text('End')),
           const DataColumn(label: Text('Days')),
@@ -2023,11 +2055,11 @@ class _RequestsTable extends StatelessWidget {
         // Format 24-hour time strings into 12-hour AM/PM format
         final timeFromFormatted = _format12HourTime(item.timeFrom);
         final timeToFormatted = _format12HourTime(item.timeTo);
-        final timeFromDisplay = timeFromFormatted.isNotEmpty ? timeFromFormatted : (item.timeFrom ?? '—');
-        final timeToDisplay = timeToFormatted.isNotEmpty ? timeToFormatted : (item.timeTo ?? '—');
+        final timeFromDisplay = timeFromFormatted.isNotEmpty ? timeFromFormatted : (item.timeFrom ?? 'Ã¢â‚¬â€');
+        final timeToDisplay = timeToFormatted.isNotEmpty ? timeToFormatted : (item.timeTo ?? 'Ã¢â‚¬â€');
         return DataRow(cells: [
           _employeeCell(item),
-          DataCell(Text(item.departmentName ?? '—')),
+          DataCell(Text(item.departmentName ?? 'Ã¢â‚¬â€')),
           _storeCell(item),
           // Render standardized transaction abbreviation (OT, OB, FIO, etc.)
           DataCell(
@@ -2039,13 +2071,13 @@ class _RequestsTable extends StatelessWidget {
               ),
             ),
           ),
-          DataCell(Text(item.dateFrom ?? '—')),
-          DataCell(Text(item.dateTo ?? '—')),
+          DataCell(Text(item.dateFrom ?? 'Ã¢â‚¬â€')),
+          DataCell(Text(item.dateTo ?? 'Ã¢â‚¬â€')),
           // Render start and end time cells
           DataCell(Text(timeFromDisplay)),
           DataCell(Text(timeToDisplay)),
-          DataCell(Text(item.totalHours != null ? '${item.totalHours}h' : '—')),
-          _reasonCell(item.reason ?? item.timeSchedule ?? '—'),
+          DataCell(Text(item.totalHours != null ? '${item.totalHours}h' : 'Ã¢â‚¬â€')),
+          _reasonCell(item.reason ?? item.timeSchedule ?? 'Ã¢â‚¬â€'),
           _approverCell(item),
           _statusCell(item),
           _submittedCell(item),
@@ -2055,14 +2087,15 @@ class _RequestsTable extends StatelessWidget {
       case AdminRequestCategory.leave:
         return DataRow(cells: [
           _employeeCell(item),
-          DataCell(Text(item.departmentName ?? '—')),
+          DataCell(Text(item.departmentName ?? 'Ã¢â‚¬â€')),
           _storeCell(item),
-          DataCell(Text(item.leaveCategory ?? '—')),
-          DataCell(Text(item.startDate ?? '—')),
-          DataCell(Text(item.endDate ?? '—')),
-          DataCell(Text(item.totalDays != null ? _formatDaysNum(item.totalDays) : '—')),
+          DataCell(Text(item.leaveCategory ?? 'Ã¢â‚¬â€')),
+          DataCell(Text(item.leaveCredits != null ? _formatDaysNum(item.leaveCredits) : 'Ã¢â‚¬â€')),
+          DataCell(Text(item.startDate ?? 'Ã¢â‚¬â€')),
+          DataCell(Text(item.endDate ?? 'Ã¢â‚¬â€')),
+          DataCell(Text(item.totalDays != null ? _formatDaysNum(item.totalDays) : 'Ã¢â‚¬â€')),
           _leaveTypeCell(item),
-          _reasonCell(item.reason ?? '—'),
+          _reasonCell(item.reason ?? 'Ã¢â‚¬â€'),
           _approverCell(item),
           _statusCell(item),
           _submittedCell(item),
@@ -2072,16 +2105,16 @@ class _RequestsTable extends StatelessWidget {
       case AdminRequestCategory.perk:
         return DataRow(cells: [
           _employeeCell(item),
-          DataCell(Text(item.departmentName ?? '—')),
+          DataCell(Text(item.departmentName ?? 'Ã¢â‚¬â€')),
           _storeCell(item),
           DataCell(Text(
             item.requestTypeCode == 'discount' ? 'Discount' : 'Charge',
           )),
           DataCell(
             Tooltip(
-              message: item.perkProductName ?? '—',
+              message: item.perkProductName ?? 'Ã¢â‚¬â€',
               child: _limitedText(
-                item.perkProductName ?? '—',
+                item.perkProductName ?? 'Ã¢â‚¬â€',
                 width: _productWidth,
                 maxLines: 2,
               ),
@@ -2090,15 +2123,15 @@ class _RequestsTable extends StatelessWidget {
           DataCell(Text('${item.perkQuantity ?? 0}')),
           DataCell(Text(
             item.perkAmount != null
-                ? '₱${item.perkAmount!.toStringAsFixed(2)}'
-                : '—',
+                ? 'Ã¢â€šÂ±${item.perkAmount!.toStringAsFixed(2)}'
+                : 'Ã¢â‚¬â€',
           )),
           DataCell(Text(
             item.perkFinalAmount != null
-                ? '₱${item.perkFinalAmount!.toStringAsFixed(2)}'
-                : '—',
+                ? 'Ã¢â€šÂ±${item.perkFinalAmount!.toStringAsFixed(2)}'
+                : 'Ã¢â‚¬â€',
           )),
-          DataCell(Text(item.dateFrom ?? '—')),
+          DataCell(Text(item.dateFrom ?? 'Ã¢â‚¬â€')),
           _approverCell(item),
           _statusCell(item),
           _submittedCell(item),
@@ -2195,7 +2228,7 @@ class _RequestsTable extends StatelessWidget {
     final raw = item.submittedAt;
 
     if (raw == null || raw.isEmpty) {
-      return const DataCell(Text('—'));
+      return const DataCell(Text('Ã¢â‚¬â€'));
     }
 
     try {
@@ -2212,24 +2245,51 @@ class _RequestsTable extends StatelessWidget {
 
   DataCell _actionsCell(AdminRequestItem item) {
     return DataCell(
-      Tooltip(
-        message: 'Delete request',
-        child: InkWell(
-          borderRadius: BorderRadius.circular(6),
-          onTap: () => onDelete(item),
-          child: Container(
-            padding: const EdgeInsets.all(5),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFEE2E2),
-              borderRadius: BorderRadius.circular(6),
+      Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (category == AdminRequestCategory.leave && onValidate != null) ...[
+            Tooltip(
+              message: 'Validate request',
+              child: InkWell(
+                borderRadius: BorderRadius.circular(6),
+                onTap: () => onValidate!(item),
+                child: Container(
+                  padding: const EdgeInsets.all(5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFD1FAE5),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Icon(
+                    Icons.check_circle_outline,
+                    size: 16,
+                    color: Color(0xFF059669),
+                  ),
+                ),
+              ),
             ),
-            child: const Icon(
-              Icons.delete_outline,
-              size: 16,
-              color: Color(0xFFB91C1C),
+            const SizedBox(width: 8),
+          ],
+          Tooltip(
+            message: 'Delete request',
+            child: InkWell(
+              borderRadius: BorderRadius.circular(6),
+              onTap: () => onDelete(item),
+              child: Container(
+                padding: const EdgeInsets.all(5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEE2E2),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Icon(
+                  Icons.delete_outline,
+                  size: 16,
+                  color: Color(0xFFB91C1C),
+                ),
+              ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -2267,7 +2327,7 @@ class _DeleteBullet extends StatelessWidget {
   }
 }
 
-// ── Reassign Approver Dialog ──────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Reassign Approver Dialog Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 class _ReassignApproverDialog extends StatefulWidget {
   const _ReassignApproverDialog({
@@ -2524,7 +2584,7 @@ class _ReassignApproverDialogState extends State<_ReassignApproverDialog> {
                                             ),
                                             const SizedBox(height: 2),
                                             Text(
-                                              '${emp.positionName} • ${emp.departmentName} (${emp.idNumber})',
+                                              '${emp.positionName} Ã¢â‚¬Â¢ ${emp.departmentName} (${emp.idNumber})',
                                               style: const TextStyle(
                                                 fontSize: 11,
                                                 color: Color(0xFF64748B),
@@ -2663,4 +2723,126 @@ class _ReassignApproverDialogState extends State<_ReassignApproverDialog> {
   }
 }
 
-
+
+class _ValidateLeaveDialogContent extends StatefulWidget {
+  const _ValidateLeaveDialogContent({required this.item, required this.onConfirm, super.key});
+  final AdminRequestItem item;
+  final Future<void> Function(double paid, double unpaid) onConfirm;
+
+  @override
+  State<_ValidateLeaveDialogContent> createState() => _ValidateLeaveDialogContentState();
+}
+
+class _ValidateLeaveDialogContentState extends State<_ValidateLeaveDialogContent> {
+  late TextEditingController _paidCtrl;
+  late TextEditingController _unpaidCtrl;
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _paidCtrl = TextEditingController(text: widget.item.paidDays?.toString() ?? '0');
+    _unpaidCtrl = TextEditingController(text: widget.item.unpaidDays?.toString() ?? '0');
+  }
+
+  @override
+  void dispose() {
+    _paidCtrl.dispose();
+    _unpaidCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final paid = double.tryParse(_paidCtrl.text) ?? 0.0;
+    final unpaid = double.tryParse(_unpaidCtrl.text) ?? 0.0;
+    setState(() => _isLoading = true);
+    try {
+      await widget.onConfirm(paid, unpaid);
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      insetPadding: const EdgeInsets.all(28),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      backgroundColor: Colors.white,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Validate Leave Request', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              const Text('Are you sure you want to validate this request?', style: TextStyle(color: Colors.black87)),
+              const SizedBox(height: 16),
+              _buildRow('Category', widget.item.leaveCategory ?? 'Ã¢â‚¬â€'),
+              _buildRow('Credits Available', widget.item.leaveCredits?.toString() ?? 'Ã¢â‚¬â€'),
+              _buildRow('Leave Type', widget.item.leaveType ?? 'Ã¢â‚¬â€'),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _paidCtrl,
+                      decoration: const InputDecoration(labelText: 'With Pay (Days)', border: OutlineInputBorder()),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: TextField(
+                      controller: _unpaidCtrl,
+                      decoration: const InputDecoration(labelText: 'Without Pay (Days)', border: OutlineInputBorder()),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: _isLoading ? null : () => Navigator.of(context).pop(false),
+                    child: const Text('Cancel', style: TextStyle(color: Colors.black54)),
+                  ),
+                  const SizedBox(width: 12),
+                  ElevatedButton(
+                    onPressed: _isLoading ? null : _submit,
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF059669)),
+                    child: _isLoading ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Text('Validate & Save', style: TextStyle(color: Colors.white)),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          SizedBox(width: 120, child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.black54))),
+          Expanded(child: Text(value, style: const TextStyle(fontWeight: FontWeight.w500))),
+        ],
+      ),
+    );
+  }
+}
+
+
+

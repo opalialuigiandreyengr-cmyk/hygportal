@@ -1,4 +1,4 @@
-﻿part of '../main.dart';
+part of '../main.dart';
 
 /// Formats a 24-hour time string (e.g. "14:30:00" or "08:00") into 12-hour format ("2:30 PM", "8:00 AM").
 /// Used by both the UI Data Table and Excel Export to display human-readable time bounds.
@@ -908,7 +908,7 @@ class _RequestsPanelState extends State<RequestsPanel>
           ];
         case 1: // Leave
           final dateRange = formatRange(_formatDateString(item.startDate), _formatDateString(item.endDate));
-          final leaveTypeDisplay = (item.leaveType?.trim().toLowerCase() == 'both')
+          final leaveTypeDisplay = (item.leaveType?.trim().toLowerCase() == 'both' || item.leaveType?.trim().toLowerCase() == 'with and without pay')
               ? 'Both (${_formatDaysNum(item.paidDays)} Paid, ${_formatDaysNum(item.unpaidDays)} Unpaid)'
               : (item.leaveType ?? 'Ã¢â‚¬â€');
           return [
@@ -1264,7 +1264,7 @@ class _RequestsPanelState extends State<RequestsPanel>
                       onChanged: (v) => setState(() => _searchQuery = v),
                       style: HygTypography.input.copyWith(fontSize: 13),
                       decoration: InputDecoration(
-                        hintText: 'Search employee, department, store, typeÃ¢â‚¬Â¦',
+                        hintText: 'Search employee, department, store, type...',
                         prefixIcon: const Icon(
                           Icons.search,
                           color: Color(0xFF94A3B8),
@@ -1561,7 +1561,7 @@ class _DateRangePill extends StatelessWidget {
   Widget build(BuildContext context) {
     final isActive = dateFrom != null && dateTo != null;
     final label = isActive
-        ? '${_fmt(dateFrom!)}  Ã¢â‚¬â€œ  ${_fmt(dateTo!)}'
+        ? '${_fmt(dateFrom!)}  -  ${_fmt(dateTo!)}'
         : 'Pick date range';
 
     return GestureDetector(
@@ -1694,7 +1694,7 @@ class _RequestsTable extends StatelessWidget {
       return const DataCell(Text('Ã¢â‚¬â€'));
     }
 
-    if (leaveType.toLowerCase() == 'both') {
+    if (leaveType.toLowerCase() == 'both' || leaveType.toLowerCase() == 'with and without pay') {
       final paidStr = _formatDaysNum(item.paidDays);
       final unpaidStr = _formatDaysNum(item.unpaidDays);
       final detail = '$paidStr Paid, $unpaidStr Unpaid';
@@ -1714,7 +1714,7 @@ class _RequestsTable extends StatelessWidget {
               ),
               const SizedBox(height: 2),
               Text(
-                '$paidStr Paid Ã¢â‚¬Â¢ $unpaidStr Unpaid',
+                '$paidStr Paid • $unpaidStr Unpaid',
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
@@ -2123,12 +2123,12 @@ class _RequestsTable extends StatelessWidget {
           DataCell(Text('${item.perkQuantity ?? 0}')),
           DataCell(Text(
             item.perkAmount != null
-                ? 'Ã¢â€šÂ±${item.perkAmount!.toStringAsFixed(2)}'
+                ? '₱${item.perkAmount!.toStringAsFixed(2)}'
                 : 'Ã¢â‚¬â€',
           )),
           DataCell(Text(
             item.perkFinalAmount != null
-                ? 'Ã¢â€šÂ±${item.perkFinalAmount!.toStringAsFixed(2)}'
+                ? '₱${item.perkFinalAmount!.toStringAsFixed(2)}'
                 : 'Ã¢â‚¬â€',
           )),
           DataCell(Text(item.dateFrom ?? 'Ã¢â‚¬â€')),
@@ -2584,7 +2584,7 @@ class _ReassignApproverDialogState extends State<_ReassignApproverDialog> {
                                             ),
                                             const SizedBox(height: 2),
                                             Text(
-                                              '${emp.positionName} Ã¢â‚¬Â¢ ${emp.departmentName} (${emp.idNumber})',
+                                              '${emp.positionName} • ${emp.departmentName} (${emp.idNumber})',
                                               style: const TextStyle(
                                                 fontSize: 11,
                                                 color: Color(0xFF64748B),

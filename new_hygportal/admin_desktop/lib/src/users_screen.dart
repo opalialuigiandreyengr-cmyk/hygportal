@@ -72,8 +72,9 @@ class UsersPanel extends StatefulWidget {
   onResetPassword;
   final Future<void> Function(
     RegisteredUserPreview user,
-    double annualCreditDays,
-  )
+    double annualCreditDays, [
+    LeaveCreditMode mode,
+  ])
   onSetLeaveCredits;
   final Future<void> Function(AddUserRequest request) onCreateUser;
   final Future<void> Function(RegisteredUserPreview user) onDeleteUser;
@@ -386,8 +387,9 @@ class UserRow extends StatefulWidget {
   onResetPassword;
   final Future<void> Function(
     RegisteredUserPreview user,
-    double annualCreditDays,
-  )
+    double annualCreditDays, [
+    LeaveCreditMode mode,
+  ])
   onSetLeaveCredits;
   final Future<void> Function(RegisteredUserPreview user) onDeleteUser;
 
@@ -605,8 +607,9 @@ class UserActionsMenu extends StatefulWidget {
   onResetPassword;
   final Future<void> Function(
     RegisteredUserPreview user,
-    double annualCreditDays,
-  )
+    double annualCreditDays, [
+    LeaveCreditMode mode,
+  ])
   onSetLeaveCredits;
   final Future<void> Function(RegisteredUserPreview user) onDeleteUser;
 
@@ -720,12 +723,12 @@ class _UserActionsMenuState extends State<UserActionsMenu> {
         await widget.onResetPassword(widget.user, password);
       }
     } else if (action == 'leave') {
-      final credits = await showDialog<double>(
+      final result = await showDialog<UserLeaveCreditsResult>(
         context: context,
         builder: (context) => UserLeaveCreditsDialog(user: widget.user),
       );
-      if (credits != null) {
-        await widget.onSetLeaveCredits(widget.user, credits);
+      if (result != null) {
+        await widget.onSetLeaveCredits(widget.user, result.amount, result.mode);
       }
     } else if (action == 'delete') {
       final confirmed = await showDialog<bool>(
@@ -2415,6 +2418,18 @@ class _UserPasswordDialogState extends State<UserPasswordDialog> {
   }
 }
 
+enum LeaveCreditMode { set, deduct, reimburse }
+
+class UserLeaveCreditsResult {
+  const UserLeaveCreditsResult({
+    required this.amount,
+    required this.mode,
+  });
+
+  final double amount;
+  final LeaveCreditMode mode;
+}
+
 class UserLeaveCreditsDialog extends StatefulWidget {
   const UserLeaveCreditsDialog({required this.user, super.key});
 
@@ -2426,8 +2441,10 @@ class UserLeaveCreditsDialog extends StatefulWidget {
 
 class _UserLeaveCreditsDialogState extends State<UserLeaveCreditsDialog> {
   late final TextEditingController _creditsController;
+  late final TextEditingController _reimburseController;
   late final TextEditingController _deductController;
   String? _error;
+  String? _reimburseError;
   String? _deductError;
 
   @override
@@ -2436,12 +2453,14 @@ class _UserLeaveCreditsDialogState extends State<UserLeaveCreditsDialog> {
     _creditsController = TextEditingController(
       text: _formatInitialValue(widget.user.leaveCreditDays ?? 7),
     );
+    _reimburseController = TextEditingController();
     _deductController = TextEditingController();
   }
 
   @override
   void dispose() {
     _creditsController.dispose();
+    _reimburseController.dispose();
     _deductController.dispose();
     super.dispose();
   }
@@ -2460,7 +2479,23 @@ class _UserLeaveCreditsDialogState extends State<UserLeaveCreditsDialog> {
       );
       return;
     }
-    Navigator.of(context).pop(value);
+    Navigator.of(context).pop(
+      UserLeaveCreditsResult(amount: value, mode: LeaveCreditMode.set),
+    );
+  }
+
+  void _submitReimburse() {
+    final reimburseDays = double.tryParse(_reimburseController.text.trim());
+    if (reimburseDays == null || reimburseDays <= 0) {
+      setState(() => _reimburseError = 'Enter a number greater than zero.');
+      return;
+    }
+    Navigator.of(context).pop(
+      UserLeaveCreditsResult(
+        amount: reimburseDays,
+        mode: LeaveCreditMode.reimburse,
+      ),
+    );
   }
 
   void _submitDeduct() {
@@ -2479,7 +2514,12 @@ class _UserLeaveCreditsDialogState extends State<UserLeaveCreditsDialog> {
       );
       return;
     }
-    Navigator.of(context).pop(-deductDays);
+    Navigator.of(context).pop(
+      UserLeaveCreditsResult(
+        amount: deductDays,
+        mode: LeaveCreditMode.deduct,
+      ),
+    );
   }
 
   @override
@@ -2492,7 +2532,7 @@ class _UserLeaveCreditsDialogState extends State<UserLeaveCreditsDialog> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       backgroundColor: Colors.white,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 460),
+        constraints: const BoxConstraints(maxWidth: 620),
         child: SingleChildScrollView(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(22, 20, 22, 18),
@@ -2585,71 +2625,156 @@ class _UserLeaveCreditsDialogState extends State<UserLeaveCreditsDialog> {
                 ),
                 const SizedBox(height: 16),
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(
-                      Icons.remove_circle_outline,
-                      color: Color(0xFFDC2626),
-                      size: 20,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.add_circle_outline,
+                                color: Color(0xFF16A34A),
+                                size: 20,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Reimburse Leave Credit',
+                                  style: HygTypography.tableBody.copyWith(
+                                    color: HygColors.ink,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Add credit to remaining balance whenever a deduction problem occurs.',
+                            style: HygTypography.tableBody.copyWith(
+                              color: HygColors.muted,
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          TextField(
+                            controller: _reimburseController,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            decoration: InputDecoration(
+                              labelText: 'Days to reimburse',
+                              hintText: 'Enter days',
+                              errorText: _reimburseError,
+                              suffixText: 'days',
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                            onSubmitted: (_) => _submitReimburse(),
+                          ),
+                          const SizedBox(height: 12),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF16A34A),
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              onPressed: _submitReimburse,
+                              icon: const Icon(Icons.add_outlined, size: 18),
+                              label: const Text('Reimburse'),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Manual Deduction',
-                      style: HygTypography.tableBody.copyWith(
-                        color: HygColors.ink,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
+                    const SizedBox(width: 20),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.remove_circle_outline,
+                                color: Color(0xFFDC2626),
+                                size: 20,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Manual Deduction',
+                                  style: HygTypography.tableBody.copyWith(
+                                    color: HygColors.ink,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Deduct days from annual credits to match current leave.',
+                            style: HygTypography.tableBody.copyWith(
+                              color: HygColors.muted,
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          TextField(
+                            controller: _deductController,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            decoration: InputDecoration(
+                              labelText: 'Days to deduct',
+                              hintText: 'Enter days',
+                              errorText: _deductError,
+                              suffixText: 'days',
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                            onSubmitted: (_) => _submitDeduct(),
+                          ),
+                          const SizedBox(height: 12),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFDC2626),
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              onPressed: _submitDeduct,
+                              icon: const Icon(Icons.remove_outlined, size: 18),
+                              label: const Text('Deduct'),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  'Deduct days from annual credits to match current leave.',
-                  style: HygTypography.tableBody.copyWith(
-                    color: HygColors.muted,
-                    fontSize: 12,
+                const SizedBox(height: 16),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Cancel'),
                   ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _deductController,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  decoration: InputDecoration(
-                    labelText: 'Days to deduct',
-                    hintText: 'Enter days',
-                    errorText: _deductError,
-                    suffixText: 'days',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  onSubmitted: (_) => _submitDeduct(),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('Cancel'),
-                    ),
-                    const SizedBox(width: 10),
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFDC2626),
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                      onPressed: _submitDeduct,
-                      icon: const Icon(Icons.remove_outlined, size: 18),
-                      label: const Text('Deduct'),
-                    ),
-                  ],
                 ),
               ],
             ),

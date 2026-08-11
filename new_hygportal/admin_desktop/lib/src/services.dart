@@ -489,6 +489,8 @@ class EmployeeDirectoryService {
       'religion': payload.religion,
       'height': payload.height,
       'weight': payload.weight,
+      'reasonOfInactivity': payload.reasonOfInactivity,
+      'dateInactive': payload.dateInactive,
       'elementarySchool': payload.elementarySchool,
       'elementaryYear': payload.elementaryYear,
       'secondarySchool': payload.secondarySchool,
@@ -540,6 +542,8 @@ class EmployeeDirectoryService {
       employeeType: _nullableString(row['employee_type']),
       schedule: _nullableString(row['time_schedule']),
       dayOffDay: _nullableString(row['day_off_day']),
+      reasonOfInactivity: _nullableString(row['reason_of_inactivity']),
+      dateInactive: _nullableString(row['date_inactive']),
       payrollClass: _nullableString(row['payroll_class']),
       bankType: _nullableString(row['bank_type']),
       companyName: _nullableString(row['company_name']),
@@ -1411,6 +1415,21 @@ class RegisteredUsersService {
       params: {
         'p_user_profile_id': userProfileId,
         'p_deduct_days': deductDays,
+      },
+    );
+
+    return response.toString();
+  }
+
+  static Future<String> reimburseLeaveCredits({
+    required String userProfileId,
+    required double reimburseDays,
+  }) async {
+    final response = await _client.rpc(
+      'admin_reimburse_employee_leave_credits',
+      params: {
+        'p_user_profile_id': userProfileId,
+        'p_reimburse_days': reimburseDays,
       },
     );
 
@@ -2323,6 +2342,8 @@ class LocalSyncService {
               .toString(),
           schedule: (payload['schedule'] ?? '09:00 AM - 06:00 PM').toString(),
           dayOffDay: (payload['dayOffDay'] ?? 'Sunday').toString(),
+          reasonOfInactivity: (payload['reasonOfInactivity'] ?? '').toString(),
+          dateInactive: (payload['dateInactive'] ?? '').toString(),
           payrollClass: (payload['payrollClass'] ?? '').toString(),
           tin: (payload['tin'] ?? '').toString(),
           sss: (payload['sss'] ?? '').toString(),
@@ -2387,6 +2408,8 @@ class LocalSyncService {
               .toString(),
           schedule: (payload['schedule'] ?? '09:00 AM - 06:00 PM').toString(),
           dayOffDay: (payload['dayOffDay'] ?? 'Sunday').toString(),
+          reasonOfInactivity: (payload['reasonOfInactivity'] ?? '').toString(),
+          dateInactive: (payload['dateInactive'] ?? '').toString(),
           payrollClass: (payload['payrollClass'] ?? '').toString(),
           tin: (payload['tin'] ?? '').toString(),
           sss: (payload['sss'] ?? '').toString(),

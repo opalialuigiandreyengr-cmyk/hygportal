@@ -94,6 +94,8 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
   final _presentAddressController = TextEditingController();
   final _permanentAddressController = TextEditingController();
   final _dateHiredController = TextEditingController();
+  final _reasonOfInactivityController = TextEditingController();
+  final _dateInactiveController = TextEditingController();
   final _religionController = TextEditingController();
   final _heightController = TextEditingController();
   final _heightCmController = TextEditingController();
@@ -401,6 +403,14 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
           details.permanentAddress ?? _permanentAddressController.text;
       _dateHiredController.text =
           details.dateHired ?? _dateHiredController.text;
+      _reasonOfInactivityController.text =
+          details.reasonOfInactivity ?? _reasonOfInactivityController.text;
+      _dateInactiveController.text =
+          details.dateInactive ?? _dateInactiveController.text;
+      if (_employmentStatus.toLowerCase() == 'inactive' &&
+          _dateInactiveController.text.trim().isEmpty) {
+        _dateInactiveController.text = _todayFormatted;
+      }
       _religionController.text = details.religion ?? _religionController.text;
       _heightController.text = details.height ?? _heightController.text;
       _weightController.text = details.weight ?? _weightController.text;
@@ -517,6 +527,11 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
       age -= 1;
     }
     _ageController.text = age < 0 ? '' : age.toString();
+  }
+
+  String get _todayFormatted {
+    final now = DateTime.now();
+    return '${now.month.toString().padLeft(2, '0')}/${now.day.toString().padLeft(2, '0')}/${now.year}';
   }
 
   Future<void> _selectDateField(
@@ -1106,6 +1121,8 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
       employmentStatus: _employmentStatus,
       schedule: '$_scheduleStart - $_scheduleEnd',
       dayOffDay: _dayOffDay,
+      reasonOfInactivity: _reasonOfInactivityController.text.trim(),
+      dateInactive: _dateInactiveController.text.trim(),
       payrollClass: _payrollClass,
       tin: _tinController.text.trim(),
       sss: _sssController.text.trim(),
@@ -1592,8 +1609,12 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
                             label: 'Status',
                             value: _employmentStatus,
                             options: const ['pending', 'active', 'inactive'],
-                            onChanged: (value) =>
-                                setState(() => _employmentStatus = value),
+                            onChanged: (value) => setState(() {
+                              _employmentStatus = value;
+                              if (value == 'inactive') {
+                                _dateInactiveController.text = _todayFormatted;
+                              }
+                            }),
                           ),
                           ModalSelectField(
                             label: 'Payroll Class',
@@ -1630,6 +1651,18 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
                             ],
                             onChanged: (value) =>
                                 setState(() => _dayOffDay = value),
+                          ),
+                          ModalTextField(
+                            label: 'Reason of Inactivity',
+                            hint: 'Reason why employee is inactive',
+                            controller: _reasonOfInactivityController,
+                          ),
+                          ModalTextField(
+                            label: 'Date Inactive',
+                            hint: 'mm/dd/yyyy',
+                            trailingIcon: Icons.calendar_today,
+                            controller: _dateInactiveController,
+                            onTap: () => _selectDateField(_dateInactiveController),
                           ),
                         ],
                       ),

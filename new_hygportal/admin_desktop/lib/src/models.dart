@@ -68,6 +68,8 @@ class EmployeeProfilePayload {
     required this.employmentStatus,
     required this.schedule,
     required this.dayOffDay,
+    required this.reasonOfInactivity,
+    required this.dateInactive,
     required this.payrollClass,
     required this.tin,
     required this.sss,
@@ -125,6 +127,8 @@ class EmployeeProfilePayload {
   final String employmentStatus;
   final String schedule;
   final String dayOffDay;
+  final String reasonOfInactivity;
+  final String dateInactive;
   final String payrollClass;
   final String tin;
   final String sss;
@@ -189,6 +193,8 @@ class EmployeeProfileDetails {
     this.employeeType,
     this.schedule,
     this.dayOffDay,
+    this.reasonOfInactivity,
+    this.dateInactive,
     this.payrollClass,
     this.bankType,
     this.companyName,
@@ -246,6 +252,8 @@ class EmployeeProfileDetails {
   final String? employeeType;
   final String? schedule;
   final String? dayOffDay;
+  final String? reasonOfInactivity;
+  final String? dateInactive;
   final String? payrollClass;
   final String? bankType;
   final String? companyName;

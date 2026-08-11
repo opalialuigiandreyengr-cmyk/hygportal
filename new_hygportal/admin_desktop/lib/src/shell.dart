@@ -370,22 +370,42 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
 
   Future<void> _setUserLeaveCredits(
     RegisteredUserPreview user,
-    double annualCreditDays,
-  ) async {
+    double amount, [
+    LeaveCreditMode mode = LeaveCreditMode.set,
+  ]) async {
     try {
-      if (annualCreditDays < 0) {
-        await RegisteredUsersService.deductLeaveCredits(
-          userProfileId: user.userProfileId,
-          deductDays: -annualCreditDays,
-        );
-      } else {
-        await RegisteredUsersService.setLeaveCredits(
-          userProfileId: user.userProfileId,
-          annualCreditDays: annualCreditDays,
-        );
+      switch (mode) {
+        case LeaveCreditMode.set:
+          if (amount < 0) {
+            await RegisteredUsersService.deductLeaveCredits(
+              userProfileId: user.userProfileId,
+              deductDays: -amount,
+            );
+            _showDepartmentMessage('Leave credits deducted successfully.');
+          } else {
+            await RegisteredUsersService.setLeaveCredits(
+              userProfileId: user.userProfileId,
+              annualCreditDays: amount,
+            );
+            _showDepartmentMessage('Leave credits updated successfully.');
+          }
+          break;
+        case LeaveCreditMode.deduct:
+          await RegisteredUsersService.deductLeaveCredits(
+            userProfileId: user.userProfileId,
+            deductDays: amount,
+          );
+          _showDepartmentMessage('Leave credits deducted successfully.');
+          break;
+        case LeaveCreditMode.reimburse:
+          await RegisteredUsersService.reimburseLeaveCredits(
+            userProfileId: user.userProfileId,
+            reimburseDays: amount,
+          );
+          _showDepartmentMessage('Leave credits reimbursed successfully.');
+          break;
       }
       await _loadUsers();
-      _showDepartmentMessage('Leave credits updated successfully.');
     } catch (error) {
       _showDepartmentMessage(
         error.toString().replaceFirst('Exception: ', ''),

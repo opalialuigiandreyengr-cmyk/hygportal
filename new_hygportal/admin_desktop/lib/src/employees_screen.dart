@@ -889,8 +889,7 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
             if (store.companyName.trim().isNotEmpty) {
               final matchingCompany = _companyOptions.firstWhere(
                 (c) =>
-                    _normalizeOption(c) ==
-                    _normalizeOption(store.companyName),
+                    _normalizeOption(c) == _normalizeOption(store.companyName),
                 orElse: () => '',
               );
               if (matchingCompany.isNotEmpty) {
@@ -1616,7 +1615,7 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
                             onEndChanged: (value) =>
                                 setState(() => _scheduleEnd = value),
                           ),
-                          ModalSelectField(
+                          ModalMultiSelectField(
                             label: 'Day Off Day',
                             value: _dayOffDay,
                             options: const [
@@ -2066,9 +2065,7 @@ class ChildrenProfileRows extends StatelessWidget {
               hint: 'mm/dd/yyyy',
               trailingIcon: Icons.calendar_today,
               controller: birthdayControllers[index],
-              onTap: onBirthdayTap == null
-                  ? null
-                  : () => onBirthdayTap!(index),
+              onTap: onBirthdayTap == null ? null : () => onBirthdayTap!(index),
             );
             final ageField = ModalTextField(
               label: 'Age',
@@ -2248,6 +2245,145 @@ class ModalSelectField extends StatelessWidget {
 
   String _normalizeSelectOption(String option) {
     return option.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+  }
+}
+
+class ModalMultiSelectField extends StatefulWidget {
+  const ModalMultiSelectField({
+    required this.label,
+    required this.value,
+    required this.options,
+    required this.onChanged,
+    this.required = false,
+    this.supportingText,
+    this.supportingColor,
+    super.key,
+  });
+
+  final String label;
+  final String value;
+  final List<String> options;
+  final ValueChanged<String> onChanged;
+  final bool required;
+  final String? supportingText;
+  final Color? supportingColor;
+
+  @override
+  State<ModalMultiSelectField> createState() => _ModalMultiSelectFieldState();
+}
+
+class _ModalMultiSelectFieldState extends State<ModalMultiSelectField> {
+  void _showSelectionDialog() {
+    final currentSelected = widget.value
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty && e != 'Select')
+        .toList();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        final selected = List<String>.from(currentSelected);
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              backgroundColor: Colors.white,
+              title: Text(
+                'Select ${widget.label}',
+                style: HygTypography.pageTitle.copyWith(fontSize: 18),
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: widget.options.map((option) {
+                    return CheckboxListTile(
+                      title: Text(option, style: HygTypography.body),
+                      value: selected.contains(option),
+                      activeColor: HygColors.goldStrong,
+                      checkColor: HygColors.ink,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      contentPadding: EdgeInsets.zero,
+                      onChanged: (bool? checked) {
+                        setStateDialog(() {
+                          if (checked == true) {
+                            if (!selected.contains(option))
+                              selected.add(option);
+                          } else {
+                            selected.remove(option);
+                          }
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(color: HygColors.muted),
+                  ),
+                ),
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: HygColors.goldStrong,
+                    foregroundColor: HygColors.ink,
+                  ),
+                  onPressed: () {
+                    final newValue = selected.isEmpty
+                        ? 'Select'
+                        : selected.join(', ');
+                    widget.onChanged(newValue);
+                    Navigator.of(context).pop();
+                  },
+                  child: const Text('Confirm'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final displayValue = widget.value.trim().isEmpty ? 'Select' : widget.value;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        FieldLabel(label: widget.label, required: widget.required),
+        const SizedBox(height: 6),
+        InkWell(
+          onTap: _showSelectionDialog,
+          borderRadius: BorderRadius.circular(9),
+          child: InputDecorator(
+            decoration: modalInputDecoration(
+              trailingIcon: Icons.keyboard_arrow_down,
+            ),
+            child: Text(
+              displayValue,
+              style: HygTypography.input,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ),
+        if (widget.supportingText != null &&
+            widget.supportingText!.trim().isNotEmpty) ...[
+          const SizedBox(height: 5),
+          Text(
+            widget.supportingText!,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: HygTypography.tableMuted.copyWith(
+              color: widget.supportingColor ?? HygColors.muted,
+            ),
+          ),
+        ],
+      ],
+    );
   }
 }
 

@@ -2848,5 +2848,164 @@ class AdminRequestsService {
   }
 }
 
+class InventoryProductItem {
+  const InventoryProductItem({
+    required this.id,
+    required this.itemName,
+    required this.price,
+  });
+
+  final int id;
+  final String itemName;
+  final double price;
+
+  factory InventoryProductItem.fromJson(Map<String, dynamic> json) {
+    return InventoryProductItem(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      itemName: json['item_name']?.toString().trim() ?? '',
+      price: (json['price'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
+}
+
+class InventoryProductsService {
+  static const String _apiUrl =
+      'https://luigiandreyopalia.pythonanywhere.com/inventory/store_inventory_data';
+
+  static Future<List<InventoryProductItem>> fetchStoreInventory() async {
+    final request = await HttpClient().getUrl(Uri.parse(_apiUrl));
+    final response = await request.close();
+    if (response.statusCode == 200) {
+      final jsonString = await response.transform(utf8.decoder).join();
+      final Map<String, dynamic> body =
+          jsonDecode(jsonString) as Map<String, dynamic>;
+      final List<dynamic> rawList = (body['inventories'] as List<dynamic>?) ?? [];
+      final products = rawList
+          .map((item) =>
+              InventoryProductItem.fromJson(item as Map<String, dynamic>))
+          .where((item) => item.itemName.isNotEmpty)
+          .toList()
+        ..sort((a, b) => a.itemName.compareTo(b.itemName));
+      return products;
+    } else {
+      throw Exception('Failed to load store inventory from server.');
+    }
+  }
+}
+
+class RewardService {
+  static final _client = Supabase.instance.client;
+
+  static Future<List<RewardItem>> fetchRewards() async {
+    try {
+      final response = await _client.rpc('admin_get_rewards');
+      if (response is List) {
+        return response.map((json) {
+          final map = json as Map<String, dynamic>;
+          return RewardItem(
+            id: map['id']?.toString() ?? '',
+            productName: map['product_name']?.toString() ?? '',
+            stocks: (map['stocks'] as num?)?.toInt() ?? 0,
+            pointsValue: (map['points_value'] as num?)?.toInt() ?? 0,
+            status: map['status']?.toString() ?? 'Active',
+            createdAt: map['created_at'] != null
+                ? DateTime.tryParse(map['created_at'].toString())
+                : null,
+          );
+        }).toList();
+      }
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static Future<RewardItem?> createReward({
+    required String productName,
+    required int stocks,
+    required int pointsValue,
+    String status = 'Active',
+  }) async {
+    try {
+      final response = await _client.rpc(
+        'admin_create_reward',
+        params: {
+          'p_product_name': productName,
+          'p_stocks': stocks,
+          'p_points_value': pointsValue,
+          'p_status': status,
+        },
+      );
+      if (response is List && response.isNotEmpty) {
+        final map = response.first as Map<String, dynamic>;
+        return RewardItem(
+          id: map['id']?.toString() ?? '',
+          productName: map['product_name']?.toString() ?? '',
+          stocks: (map['stocks'] as num?)?.toInt() ?? 0,
+          pointsValue: (map['points_value'] as num?)?.toInt() ?? 0,
+          status: map['status']?.toString() ?? 'Active',
+          createdAt: map['created_at'] != null
+              ? DateTime.tryParse(map['created_at'].toString())
+              : null,
+        );
+      }
+      return null;
+    } catch (e) {
+      throw Exception('Failed to create reward: $e');
+    }
+  }
+
+  static Future<RewardItem?> updateReward({
+    required String id,
+    required String productName,
+    required int stocks,
+    required int pointsValue,
+    String status = 'Active',
+  }) async {
+    try {
+      final response = await _client.rpc(
+        'admin_update_reward',
+        params: {
+          'p_reward_id': id,
+          'p_product_name': productName,
+          'p_stocks': stocks,
+          'p_points_value': pointsValue,
+          'p_status': status,
+        },
+      );
+      if (response is List && response.isNotEmpty) {
+        final map = response.first as Map<String, dynamic>;
+        return RewardItem(
+          id: map['id']?.toString() ?? '',
+          productName: map['product_name']?.toString() ?? '',
+          stocks: (map['stocks'] as num?)?.toInt() ?? 0,
+          pointsValue: (map['points_value'] as num?)?.toInt() ?? 0,
+          status: map['status']?.toString() ?? 'Active',
+          createdAt: map['created_at'] != null
+              ? DateTime.tryParse(map['created_at'].toString())
+              : null,
+        );
+      }
+      return null;
+    } catch (e) {
+      throw Exception('Failed to update reward: $e');
+    }
+  }
+
+  static Future<bool> deleteReward(String id) async {
+    try {
+      final response = await _client.rpc(
+        'admin_delete_reward',
+        params: {'p_reward_id': id},
+      );
+      return response == true;
+    } catch (_) {
+      return false;
+    }
+  }
+}
+
+
+
 
 

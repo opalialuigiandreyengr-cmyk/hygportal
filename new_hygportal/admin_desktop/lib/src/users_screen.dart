@@ -13,17 +13,10 @@ class UsersHeader extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: const Color(0xFFFEF3C7),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(
-              Icons.manage_accounts,
-              color: HygColors.goldStrong,
-            ),
+          const Icon(
+            Icons.manage_accounts_outlined,
+            color: HygColors.goldStrong,
+            size: 42,
           ),
           const SizedBox(width: 14),
           const Expanded(

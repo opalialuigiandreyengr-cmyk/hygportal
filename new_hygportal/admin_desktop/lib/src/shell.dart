@@ -49,6 +49,8 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
   bool _isLoadingAdminWorkflow = false;
   bool _isLoadingPositions = false;
   bool _isLoadingUsers = false;
+  final _rewardsSearchController = TextEditingController();
+  final List<RewardItem> _rewardsList = [];
   Timer? _directoryRefreshTimer;
   StreamSubscription<void>? _connectionRestoredSubscription;
 
@@ -66,6 +68,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
     } else {
       _loadEmployees();
     }
+    _loadRewards();
     _connectionRestoredSubscription = LocalSyncService.onConnectionRestored
         .listen((_) => _refreshActiveSection());
     _directoryRefreshTimer = Timer.periodic(_directoryAutoRefreshInterval, (_) {
@@ -82,6 +85,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _rewardsSearchController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _directoryRefreshTimer?.cancel();
     unawaited(_connectionRestoredSubscription?.cancel());
@@ -121,6 +125,8 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
       case HrSection.authorityLevels:
       case HrSection.approverAssignments:
         unawaited(_loadAdminWorkflow());
+      case HrSection.rewards:
+        break;
     }
   }
 
@@ -855,6 +861,67 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
       await _loadStores();
       _showDepartmentMessage('Store created successfully.');
     }
+  }
+
+  Future<void> _openAddRewardModal([RewardItem? reward]) async {
+    final result = await showDialog<RewardItem>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AddRewardDialog(reward: reward),
+    );
+    if (result != null) {
+      setState(() {
+        final index = _rewardsList.indexWhere((r) => r.id == result.id);
+        if (index >= 0) {
+          _rewardsList[index] = result;
+          _showDepartmentMessage('Reward updated successfully.');
+        } else {
+          _rewardsList.add(result);
+          _showDepartmentMessage('Reward created successfully.');
+        }
+      });
+    }
+  }
+
+  Future<void> _loadRewards() async {
+    final list = await RewardService.fetchRewards();
+    if (!mounted) return;
+    setState(() {
+      _rewardsList.clear();
+      _rewardsList.addAll(list);
+    });
+  }
+
+  void _confirmDeleteReward(RewardItem item) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Reward'),
+        content: Text('Are you sure you want to delete "${item.productName}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              Navigator.of(context).pop();
+              await RewardService.deleteReward(item.id);
+              if (!mounted) return;
+              setState(() {
+                _rewardsList.removeWhere((r) => r.id == item.id);
+              });
+              _showDepartmentMessage('Reward deleted.');
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _openAddClusterModal() async {
@@ -1620,6 +1687,24 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
                             onDeleteStore: _confirmDeleteStore,
                             canEditAndDelete: widget.session.canEditAndDeleteMasterData,
                           ),
+                        ] else if (_activeSection == HrSection.rewards) ...[
+                          RewardsHeader(
+                            onAddReward: _openAddRewardModal,
+                          ),
+                          const SizedBox(height: 14),
+                          RewardsSearchBar(
+                            controller: _rewardsSearchController,
+                            onChanged: (query) {
+                              setState(() {});
+                            },
+                          ),
+                          const SizedBox(height: 14),
+                          RewardsPanel(
+                            rewards: _rewardsList,
+                            searchQuery: _rewardsSearchController.text,
+                            onEditReward: (item) => _openAddRewardModal(item),
+                            onDeleteReward: _confirmDeleteReward,
+                          ),
                         ],
                       ],
                     ),
@@ -1773,6 +1858,19 @@ class HrSidebar extends StatelessWidget {
                         label: 'Cluster / Area',
                         active: activeSection == HrSection.clusters,
                         onTap: () => onSelectSection(HrSection.clusters),
+                      ),
+                    ],
+                  ),
+                  HrNavDropdown(
+                    icon: Icons.redeem_outlined,
+                    label: 'Rewards System',
+                    active: activeSection == HrSection.rewards,
+                    items: [
+                      HrDropdownItem(
+                        icon: Icons.emoji_events_outlined,
+                        label: 'Rewards',
+                        active: activeSection == HrSection.rewards,
+                        onTap: () => onSelectSection(HrSection.rewards),
                       ),
                     ],
                   ),
@@ -2099,6 +2197,7 @@ enum HrSection {
   positions,
   clusters,
   stores,
+  rewards,
 }
 
 class HrTopBar extends StatelessWidget {

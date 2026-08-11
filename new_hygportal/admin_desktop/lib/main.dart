@@ -26,6 +26,7 @@ part 'src/admin_workflow_screen.dart';
 part 'src/positions_screen.dart';
 part 'src/users_screen.dart';
 part 'src/requests_screen.dart';
+part 'src/rewards_screen.dart';
 part 'src/shared_widgets.dart';
 part 'src/models.dart';
 part 'src/services.dart';

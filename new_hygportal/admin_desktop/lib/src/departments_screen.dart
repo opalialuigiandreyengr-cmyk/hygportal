@@ -15,14 +15,10 @@ class DepartmentsHeader extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: const Color(0xFFFEF3C7),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(Icons.account_tree, color: HygColors.goldStrong),
+          const Icon(
+            Icons.account_tree_outlined,
+            color: HygColors.goldStrong,
+            size: 42,
           ),
           const SizedBox(width: 14),
           const Expanded(

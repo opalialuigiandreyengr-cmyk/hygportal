@@ -191,6 +191,7 @@ class EmployeeProfileDetails {
     this.height,
     this.weight,
     this.employeeType,
+    this.employmentStatus,
     this.schedule,
     this.dayOffDay,
     this.reasonOfInactivity,
@@ -250,6 +251,7 @@ class EmployeeProfileDetails {
   final String? height;
   final String? weight;
   final String? employeeType;
+  final String? employmentStatus;
   final String? schedule;
   final String? dayOffDay;
   final String? reasonOfInactivity;

@@ -403,10 +403,12 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
           details.permanentAddress ?? _permanentAddressController.text;
       _dateHiredController.text =
           details.dateHired ?? _dateHiredController.text;
-      _reasonOfInactivityController.text =
-          details.reasonOfInactivity ?? _reasonOfInactivityController.text;
-      _dateInactiveController.text =
-          details.dateInactive ?? _dateInactiveController.text;
+      if (details.reasonOfInactivity != null) {
+        _reasonOfInactivityController.text = details.reasonOfInactivity!;
+      }
+      if (details.dateInactive != null) {
+        _dateInactiveController.text = details.dateInactive!;
+      }
       if (_employmentStatus.toLowerCase() == 'inactive' &&
           _dateInactiveController.text.trim().isEmpty) {
         _dateInactiveController.text = _todayFormatted;
@@ -487,6 +489,10 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
       }
       if (details.employeeType != null && details.employeeType!.isNotEmpty) {
         _employeeType = details.employeeType!;
+      }
+      if (details.employmentStatus != null &&
+          details.employmentStatus!.isNotEmpty) {
+        _employmentStatus = details.employmentStatus!.toLowerCase();
       }
       if (details.payrollClass != null && details.payrollClass!.isNotEmpty) {
         _payrollClass = details.payrollClass!;
@@ -1611,7 +1617,9 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
                             onChanged: (value) => setState(() {
                               _employmentStatus = value;
                               if (value == 'inactive') {
-                                _dateInactiveController.text = _todayFormatted;
+                                if (_dateInactiveController.text.trim().isEmpty) {
+                                  _dateInactiveController.text = _todayFormatted;
+                                }
                               }
                             }),
                           ),
@@ -1655,13 +1663,17 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
                             label: 'Reason of Inactivity',
                             hint: 'Reason why employee is inactive',
                             controller: _reasonOfInactivityController,
+                            readOnly: _employmentStatus.toLowerCase() != 'inactive',
                           ),
                           ModalTextField(
                             label: 'Date Inactive',
                             hint: 'mm/dd/yyyy',
                             trailingIcon: Icons.calendar_today,
                             controller: _dateInactiveController,
-                            onTap: () => _selectDateField(_dateInactiveController),
+                            readOnly: _employmentStatus.toLowerCase() != 'inactive',
+                            onTap: _employmentStatus.toLowerCase() == 'inactive'
+                                ? () => _selectDateField(_dateInactiveController)
+                                : null,
                           ),
                         ],
                       ),

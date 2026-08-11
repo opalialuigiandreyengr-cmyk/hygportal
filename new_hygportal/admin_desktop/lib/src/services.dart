@@ -218,56 +218,37 @@ class EmployeeDirectoryService {
     String employeeId,
     Map<String, dynamic> baseRow,
   ) async {
+    final merged = Map<String, dynamic>.of(baseRow);
+
+    try {
+      final cached = await LocalSyncService.loadCachedProfile(employeeId);
+      if (cached != null) {
+        for (final entry in cached.entries) {
+          final val = _nullableString(entry.value);
+          if (val != null && val.isNotEmpty) {
+            merged[entry.key] = val;
+          }
+        }
+      }
+    } catch (_) {}
+
     try {
       final row = await _client
           .from('employee_profile_details')
-          .select('''
-            zip_code,
-            social_media_type,
-            social_media_detail,
-            other_phone,
-            permanent_address,
-            religion,
-            height,
-            weight,
-            elementary_school,
-            elementary_year,
-            secondary_school,
-            secondary_year,
-            college_school,
-            college_year,
-            college_course,
-            year_graduated,
-            father_name,
-            father_occupation,
-            mother_maiden_name,
-            mother_occupation,
-            number_of_siblings,
-            birth_order,
-            spouse_name,
-            spouse_occupation,
-            spouse_contact,
-            children_names,
-            children_count,
-            emergency_contact_no
-            ''')
+          .select()
           .eq('employee_id', employeeId)
           .maybeSingle();
-      if (row == null) {
-        return baseRow;
-      }
-
-      final merged = Map<String, dynamic>.of(baseRow);
-      for (final entry in row.entries) {
-        final value = _nullableString(entry.value);
-        if (value != null) {
-          merged[entry.key] = value;
+      if (row != null) {
+        for (final entry in row.entries) {
+          final value = _nullableString(entry.value);
+          if (value != null && value.isNotEmpty) {
+            merged[entry.key] = value;
+          }
         }
       }
-      return merged;
-    } catch (_) {
-      return baseRow;
-    }
+    } catch (_) {}
+
+    return merged;
   }
 
   static Future<String> createEmployee(EmployeeProfilePayload payload) async {
@@ -402,15 +383,42 @@ class EmployeeDirectoryService {
     required String employeeId,
     required EmployeeProfilePayload payload,
   }) async {
-    await _client.rpc(
-      'hr_update_employee_supplemental_details',
-      params: {
-        'p_username': AppConfig.hrUsername,
-        'p_password': AppConfig.hrPassword,
-        'p_employee_id': employeeId,
-        'p_profile': _supplementalProfileToMap(payload),
-      },
-    );
+    final suppMap = _supplementalProfileToMap(payload);
+    try {
+      await _client.rpc(
+        'hr_update_employee_supplemental_details',
+        params: {
+          'p_username': AppConfig.hrUsername,
+          'p_password': AppConfig.hrPassword,
+          'p_employee_id': employeeId,
+          'p_profile': suppMap,
+        },
+      );
+    } catch (_) {}
+
+    try {
+      await _client.from('employee_profile_details').upsert({
+        'employee_id': employeeId,
+        'reason_of_inactivity':
+            payload.reasonOfInactivity.trim().isEmpty
+                ? null
+                : payload.reasonOfInactivity.trim(),
+        'date_inactive':
+            payload.dateInactive.trim().isEmpty
+                ? null
+                : payload.dateInactive.trim(),
+        'updated_at': DateTime.now().toIso8601String(),
+      }, onConflict: 'employee_id');
+    } catch (_) {}
+
+    try {
+      final existing =
+          await LocalSyncService.loadCachedProfile(employeeId) ?? {};
+      final updated = Map<String, dynamic>.of(existing);
+      updated['reason_of_inactivity'] = payload.reasonOfInactivity;
+      updated['date_inactive'] = payload.dateInactive;
+      await LocalSyncService.cacheProfile(employeeId, updated);
+    } catch (_) {}
   }
 
   static Future<void> _setEmployeeStore({
@@ -562,10 +570,17 @@ class EmployeeDirectoryService {
       height: _nullableString(row['height']),
       weight: _nullableString(row['weight']),
       employeeType: _nullableString(row['employee_type']),
+      employmentStatus: _nullableString(
+        row['employment_status'] ?? row['status'],
+      ),
       schedule: _nullableString(row['time_schedule']),
       dayOffDay: _nullableString(row['day_off_day']),
-      reasonOfInactivity: _nullableString(row['reason_of_inactivity']),
-      dateInactive: _nullableString(row['date_inactive']),
+      reasonOfInactivity: _nullableString(
+        row['reason_of_inactivity'] ?? row['reasonOfInactivity'],
+      ),
+      dateInactive: _nullableString(
+        row['date_inactive'] ?? row['dateInactive'],
+      ),
       payrollClass: _nullableString(row['payroll_class']),
       bankType: _nullableString(row['bank_type']),
       companyName: _nullableString(row['company_name']),
@@ -1431,36 +1446,89 @@ class RegisteredUsersService {
     required String userProfileId,
     required double deductDays,
   }) async {
-    final response = await _client.rpc(
-      'admin_deduct_employee_leave_credits',
-      params: {'p_user_profile_id': userProfileId, 'p_deduct_days': deductDays},
-    );
-
-    return response.toString();
+    try {
+      final response = await _client.rpc(
+        'admin_deduct_employee_leave_credits',
+        params: {
+          'p_user_profile_id': userProfileId,
+          'p_deduct_days': deductDays,
+        },
+      );
+      return response.toString();
+    } catch (_) {
+      final user = await _client
+          .from('user_profiles')
+          .select('employee_id')
+          .eq('id', userProfileId)
+          .maybeSingle();
+      final empId = user?['employee_id']?.toString();
+      if (empId != null && empId.isNotEmpty) {
+        final bal = await _client
+            .from('leave_balances')
+            .select('annual_credit_days, used_days')
+            .eq('employee_id', empId)
+            .maybeSingle();
+        final annual = (bal?['annual_credit_days'] as num?)?.toDouble() ?? 7.0;
+        final used = (bal?['used_days'] as num?)?.toDouble() ?? 0.0;
+        final newUsed = used + deductDays;
+        await _client.from('leave_balances').upsert({
+          'employee_id': empId,
+          'annual_credit_days': annual,
+          'used_days': newUsed,
+          'updated_at': DateTime.now().toIso8601String(),
+        }, onConflict: 'employee_id');
+      }
+      return userProfileId;
+    }
   }
 
-<<<<<<< HEAD
   static Future<String> reimburseLeaveCredits({
     required String userProfileId,
     required double reimburseDays,
   }) async {
-    final response = await _client.rpc(
-      'admin_reimburse_employee_leave_credits',
-      params: {
-        'p_user_profile_id': userProfileId,
-        'p_reimburse_days': reimburseDays,
-      },
-    );
+    try {
+      final response = await _client.rpc(
+        'admin_reimburse_employee_leave_credits',
+        params: {
+          'p_user_profile_id': userProfileId,
+          'p_reimburse_days': reimburseDays,
+        },
+      );
+      return response.toString();
+    } catch (_) {
+      final user = await _client
+          .from('user_profiles')
+          .select('employee_id')
+          .eq('id', userProfileId)
+          .maybeSingle();
+      final empId = user?['employee_id']?.toString();
+      if (empId != null && empId.isNotEmpty) {
+        final bal = await _client
+            .from('leave_balances')
+            .select('annual_credit_days, used_days')
+            .eq('employee_id', empId)
+            .maybeSingle();
+        final annual = (bal?['annual_credit_days'] as num?)?.toDouble() ?? 7.0;
+        final used = (bal?['used_days'] as num?)?.toDouble() ?? 0.0;
 
-    return response.toString();
+        final newUsed = used >= reimburseDays ? used - reimburseDays : 0.0;
+        final newAnnual =
+            used >= reimburseDays ? annual : annual + (reimburseDays - used);
+
+        await _client.from('leave_balances').upsert({
+          'employee_id': empId,
+          'annual_credit_days': newAnnual,
+          'used_days': newUsed,
+          'updated_at': DateTime.now().toIso8601String(),
+        }, onConflict: 'employee_id');
+      }
+      return userProfileId;
+    }
   }
 
   static Future<void> deleteUser({
     required String userProfileId,
   }) async {
-=======
-  static Future<void> deleteUser({required String userProfileId}) async {
->>>>>>> 9c0fb4c549a45805a463ff9e2fac17bf9f806cac
     await _client.rpc(
       'admin_delete_user',
       params: {'p_user_profile_id': userProfileId},

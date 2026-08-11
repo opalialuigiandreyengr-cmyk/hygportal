@@ -2446,6 +2446,11 @@ class _UserLeaveCreditsDialogState extends State<UserLeaveCreditsDialog> {
   String? _error;
   String? _reimburseError;
   String? _deductError;
+  DateTime? _hiredDate;
+  bool _isLoadingHiredDate = false;
+  String? _dateHiredText;
+  String? _employeeType;
+  String? _positionName;
 
   @override
   void initState() {
@@ -2455,6 +2460,81 @@ class _UserLeaveCreditsDialogState extends State<UserLeaveCreditsDialog> {
     );
     _reimburseController = TextEditingController();
     _deductController = TextEditingController();
+    _loadEmployeeHiredDate();
+  }
+
+  Future<void> _loadEmployeeHiredDate() async {
+    final empId = widget.user.employeeId;
+    if (empId == null || empId.trim().isEmpty) {
+      return;
+    }
+    setState(() => _isLoadingHiredDate = true);
+    try {
+      final details = await EmployeeDirectoryService.loadEmployeeProfile(
+        empId,
+      );
+      if (details != null) {
+        _dateHiredText = details.dateHired;
+        _hiredDate = _parseDateString(details.dateHired);
+        _employeeType = details.employeeType;
+        _positionName = details.positionName;
+        final suggested = _calculateSuggestedLeaveCredits();
+        if (widget.user.leaveCreditDays == null ||
+            widget.user.leaveCreditDays == 0) {
+          _creditsController.text = _formatInitialValue(suggested);
+        }
+      }
+    } catch (_) {}
+    if (mounted) {
+      setState(() => _isLoadingHiredDate = false);
+    }
+  }
+
+  double _calculateSuggestedLeaveCredits() {
+    if (_hiredDate == null) {
+      return widget.user.leaveCreditDays ?? 7;
+    }
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final oneYearAnniversary = DateTime(
+      _hiredDate!.year + 1,
+      _hiredDate!.month,
+      _hiredDate!.day,
+    );
+    final hasCompletedOneYear = !today.isBefore(oneYearAnniversary);
+    if (!hasCompletedOneYear) {
+      return 0;
+    }
+    final posName = _positionName?.trim().toLowerCase() ?? '';
+    final isManager = posName.contains('manager');
+    if (isManager) {
+      return 7;
+    }
+    final empType = _employeeType?.trim().toLowerCase() ?? '';
+    if (empType == 'regular') {
+      return 5;
+    }
+    return 7;
+  }
+
+  DateTime? _parseDateString(String? text) {
+    if (text == null || text.trim().isEmpty) {
+      return null;
+    }
+    final s = text.trim();
+    if (RegExp(r'^\d{4}-\d{2}-\d{2}').hasMatch(s)) {
+      return DateTime.tryParse(s);
+    }
+    final parts = s.split('/');
+    if (parts.length == 3) {
+      final m = int.tryParse(parts[0]);
+      final d = int.tryParse(parts[1]);
+      final y = int.tryParse(parts[2]);
+      if (m != null && d != null && y != null) {
+        return DateTime(y, m, d);
+      }
+    }
+    return DateTime.tryParse(s);
   }
 
   @override
@@ -2468,10 +2548,39 @@ class _UserLeaveCreditsDialogState extends State<UserLeaveCreditsDialog> {
   void _submitCredits() {
     final value = double.tryParse(_creditsController.text.trim());
     final usedDays = widget.user.leaveUsedDays ?? 0;
+    final hasExistingCredits = widget.user.leaveCreditDays != null &&
+        widget.user.leaveCreditDays! > 0;
+
     if (value == null || value < 0) {
       setState(() => _error = 'Enter zero or higher leave credits.');
       return;
     }
+
+    if (!hasExistingCredits) {
+      if (_hiredDate != null) {
+        final now = DateTime.now();
+        final today = DateTime(now.year, now.month, now.day);
+        final oneYearAnniversary = DateTime(
+          _hiredDate!.year + 1,
+          _hiredDate!.month,
+          _hiredDate!.day,
+        );
+        if (today.isBefore(oneYearAnniversary)) {
+          setState(
+            () => _error =
+                'The employee is yet to complete one year of service.',
+          );
+          return;
+        }
+      } else if (widget.user.employeeId != null && !_isLoadingHiredDate) {
+        setState(
+          () => _error =
+              'The employee is yet to complete one year of service.',
+        );
+        return;
+      }
+    }
+
     if (value < usedDays) {
       setState(
         () => _error =

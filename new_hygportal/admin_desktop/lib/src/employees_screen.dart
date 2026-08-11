@@ -1661,19 +1661,15 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
                           ),
                           ModalTextField(
                             label: 'Reason of Inactivity',
-                            hint: 'Reason why employee is inactive',
+                            hint: 'Reason why employee is inactive or banned',
                             controller: _reasonOfInactivityController,
-                            readOnly: _employmentStatus.toLowerCase() != 'inactive',
                           ),
                           ModalTextField(
                             label: 'Date Inactive',
                             hint: 'mm/dd/yyyy',
                             trailingIcon: Icons.calendar_today,
                             controller: _dateInactiveController,
-                            readOnly: _employmentStatus.toLowerCase() != 'inactive',
-                            onTap: _employmentStatus.toLowerCase() == 'inactive'
-                                ? () => _selectDateField(_dateInactiveController)
-                                : null,
+                            onTap: () => _selectDateField(_dateInactiveController),
                           ),
                         ],
                       ),

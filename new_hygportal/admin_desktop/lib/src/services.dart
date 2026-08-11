@@ -74,38 +74,55 @@ class AdminLoginSession {
 class EmployeeDirectoryService {
   static final _client = Supabase.instance.client;
 
+  static Future<T> _withNetworkTimeout<T>(
+    Future<T> operation, {
+    Duration duration = const Duration(seconds: 15),
+  }) {
+    return operation.timeout(
+      duration,
+      onTimeout: () => throw TimeoutException(
+        'The server did not respond. Check your internet connection.',
+      ),
+    );
+  }
+
   static Future<List<EmployeePreview>> loadEmployees() async {
+    Object? fetchError;
     try {
-      final response = await _client.rpc(
-        'hr_employee_directory',
-        params: {
-          'p_username': AppConfig.hrUsername,
-          'p_password': AppConfig.hrPassword,
-        },
+      final response = await _withNetworkTimeout(
+        _client.rpc(
+          'hr_employee_directory',
+          params: {
+            'p_username': AppConfig.hrUsername,
+            'p_password': AppConfig.hrPassword,
+          },
+        ),
       );
       if (response is List) {
-        final rows = response
-            .whereType<Map<String, dynamic>>()
-            .map((r) => Map<String, dynamic>.from(r))
-            .toList(growable: true);
-
-        final missingBirthdates = rows.where((r) {
-          final bd = r['birth_date'] ?? r['birthdate'];
-          return bd == null || bd.toString().trim().isEmpty;
-        }).toList();
+        final rows = response.whereType<Map<String, dynamic>>().toList();
+        final missingBirthdates = rows
+            .where((r) {
+              final bd = r['birth_date'] ?? r['birthdate'];
+              return bd == null || bd.toString().trim().isEmpty;
+            })
+            .take(15)
+            .toList();
 
         if (missingBirthdates.isNotEmpty) {
           final futures = missingBirthdates.map((row) async {
             final empId = row['employee_id']?.toString() ?? '';
             if (empId.isEmpty) return null;
             try {
-              final profResponse = await _client.rpc(
-                'hr_employee_profile_detail',
-                params: {
-                  'p_username': AppConfig.hrUsername,
-                  'p_password': AppConfig.hrPassword,
-                  'p_employee_id': empId,
-                },
+              final profResponse = await _withNetworkTimeout(
+                _client.rpc(
+                  'hr_employee_profile_detail',
+                  params: {
+                    'p_username': AppConfig.hrUsername,
+                    'p_password': AppConfig.hrPassword,
+                    'p_employee_id': empId,
+                  },
+                ),
+                duration: const Duration(seconds: 3),
               );
               if (profResponse is List && profResponse.isNotEmpty) {
                 final profMap = profResponse.first as Map<String, dynamic>;
@@ -140,8 +157,13 @@ class EmployeeDirectoryService {
           rows.map(EmployeeDirectoryService._fromRow).toList(growable: false),
         );
       }
-    } catch (_) {}
+    } catch (e) {
+      fetchError = e;
+    }
     final cached = await LocalSyncService.loadCachedRows('employee_cache');
+    if (cached.isEmpty && fetchError != null) {
+      throw fetchError;
+    }
     return _sortNewestFirst(
       cached.map(EmployeeDirectoryService._fromRow).toList(growable: false),
     );
@@ -250,7 +272,7 @@ class EmployeeDirectoryService {
 
   static Future<String> createEmployee(EmployeeProfilePayload payload) async {
     if (await LocalSyncService.isOnline()) {
-      return _createEmployeeRemote(payload);
+      return _withNetworkTimeout(_createEmployeeRemote(payload));
     }
     await LocalSyncService.enqueue(
       entity: 'employee',
@@ -309,7 +331,7 @@ class EmployeeDirectoryService {
     required String id,
     required EmployeeProfilePayload payload,
   }) async {
-    await _updateEmployeeRemote(id: id, payload: payload);
+    await _withNetworkTimeout(_updateEmployeeRemote(id: id, payload: payload));
     return 'Employee updated successfully.';
   }
 
@@ -627,7 +649,9 @@ class EmployeeDirectoryService {
     final department = _stringValue(row['department_name']);
     final company = _stringValue(row['company_name'], fallback: '-');
     final hiredDate = _nullableString(row['hired_date']);
-    final birthDate = _nullableString(row['birth_date'] ?? row['birthdate'] ?? row['date_of_birth']);
+    final birthDate = _nullableString(
+      row['birth_date'] ?? row['birthdate'] ?? row['date_of_birth'],
+    );
     final createdAt = _dateTimeValue(row['created_at']);
 
     return EmployeePreview(
@@ -1331,15 +1355,15 @@ class RegisteredUsersService {
     return response.whereType<Map<String, dynamic>>().map(_fromRow).toList();
   }
 
-  static Future<List<String>> loadUserCompanyAssignments(String userProfileId) async {
+  static Future<List<String>> loadUserCompanyAssignments(
+    String userProfileId,
+  ) async {
     try {
       final response = await _client
           .from('hr_company_assignments')
           .select('company_id')
           .eq('user_profile_id', userProfileId);
-      return response
-          .map((row) => row['company_id'] as String)
-          .toList();
+      return response.map((row) => row['company_id'] as String).toList();
     } catch (_) {}
     return const [];
   }
@@ -1368,10 +1392,7 @@ class RegisteredUsersService {
     if (companyIds != null) {
       params['p_company_ids'] = companyIds;
     }
-    final response = await _client.rpc(
-      'admin_set_user_role',
-      params: params,
-    );
+    final response = await _client.rpc('admin_set_user_role', params: params);
 
     return response.toString();
   }
@@ -1412,15 +1433,13 @@ class RegisteredUsersService {
   }) async {
     final response = await _client.rpc(
       'admin_deduct_employee_leave_credits',
-      params: {
-        'p_user_profile_id': userProfileId,
-        'p_deduct_days': deductDays,
-      },
+      params: {'p_user_profile_id': userProfileId, 'p_deduct_days': deductDays},
     );
 
     return response.toString();
   }
 
+<<<<<<< HEAD
   static Future<String> reimburseLeaveCredits({
     required String userProfileId,
     required double reimburseDays,
@@ -1439,11 +1458,12 @@ class RegisteredUsersService {
   static Future<void> deleteUser({
     required String userProfileId,
   }) async {
+=======
+  static Future<void> deleteUser({required String userProfileId}) async {
+>>>>>>> 9c0fb4c549a45805a463ff9e2fac17bf9f806cac
     await _client.rpc(
       'admin_delete_user',
-      params: {
-        'p_user_profile_id': userProfileId,
-      },
+      params: {'p_user_profile_id': userProfileId},
     );
   }
 
@@ -2734,7 +2754,7 @@ class AdminRequestsService {
     if (response is! List) {
       return const [];
     }
-    
+
     final requests = response
         .whereType<Map<String, dynamic>>()
         .map(AdminRequestItem.fromRow)
@@ -2750,14 +2770,18 @@ class AdminRequestsService {
           if (empNo != null && empNo.trim().isNotEmpty) {
             final profileId = u['user_profile_id']?.toString();
             if (profileId != null) profileMap[empNo] = profileId;
-            
+
             final rem = u['leave_remaining_days'];
             final cred = u['leave_credit_days'];
             double? val;
             if (rem != null) {
-              val = rem is num ? rem.toDouble() : double.tryParse(rem.toString());
+              val = rem is num
+                  ? rem.toDouble()
+                  : double.tryParse(rem.toString());
             } else if (cred != null) {
-              val = cred is num ? cred.toDouble() : double.tryParse(cred.toString());
+              val = cred is num
+                  ? cred.toDouble()
+                  : double.tryParse(cred.toString());
             }
             if (val != null) {
               creditMap[empNo] = val;
@@ -2924,10 +2948,9 @@ class AdminRequestsService {
   /// Refreshes assigned approvers for all pending/active requests based on current approval routes and active (non-banned) status.
   static Future<String> refreshAssignedApprovers() async {
     try {
-      final response = await _client.rpc(
-        'admin_refresh_assigned_approvers',
-      );
-      return response?.toString() ?? 'Assigned approvers refreshed successfully.';
+      final response = await _client.rpc('admin_refresh_assigned_approvers');
+      return response?.toString() ??
+          'Assigned approvers refreshed successfully.';
     } catch (e) {
       return 'Failed to refresh assigned approvers: $e';
     }
@@ -2965,13 +2988,17 @@ class InventoryProductsService {
       final jsonString = await response.transform(utf8.decoder).join();
       final Map<String, dynamic> body =
           jsonDecode(jsonString) as Map<String, dynamic>;
-      final List<dynamic> rawList = (body['inventories'] as List<dynamic>?) ?? [];
-      final products = rawList
-          .map((item) =>
-              InventoryProductItem.fromJson(item as Map<String, dynamic>))
-          .where((item) => item.itemName.isNotEmpty)
-          .toList()
-        ..sort((a, b) => a.itemName.compareTo(b.itemName));
+      final List<dynamic> rawList =
+          (body['inventories'] as List<dynamic>?) ?? [];
+      final products =
+          rawList
+              .map(
+                (item) =>
+                    InventoryProductItem.fromJson(item as Map<String, dynamic>),
+              )
+              .where((item) => item.itemName.isNotEmpty)
+              .toList()
+            ..sort((a, b) => a.itemName.compareTo(b.itemName));
       return products;
     } else {
       throw Exception('Failed to load store inventory from server.');
@@ -3090,8 +3117,3 @@ class RewardService {
     }
   }
 }
-
-
-
-
-

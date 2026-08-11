@@ -587,7 +587,7 @@ class DepartmentLadderUpdate {
 enum AdminRequestCategory { esarf, leave, perk }
 
 class AdminRequestItem {
-  const AdminRequestItem({
+  AdminRequestItem({
     required this.requestId,
     required this.requestTypeCode,
     required this.requestTypeName,
@@ -615,6 +615,7 @@ class AdminRequestItem {
     required this.totalHours,
     required this.leaveType,
     required this.leaveCategory,
+    required this.leaveCredits,
     required this.startDate,
     required this.endDate,
     required this.totalDays,
@@ -658,6 +659,8 @@ class AdminRequestItem {
   final double? totalHours;
   final String? leaveType;
   final String? leaveCategory;
+  double? leaveCredits;
+  String? userProfileId;
   final String? startDate;
   final String? endDate;
   final double? totalDays;
@@ -783,6 +786,7 @@ class AdminRequestItem {
       totalHours: _parseDouble(row['total_hours']),
       leaveType: row['leave_type']?.toString(),
       leaveCategory: row['leave_category']?.toString(),
+      leaveCredits: _parseDouble(row['leave_credits']) ?? _parseDouble(row['leave_credit_days']),
       startDate: row['start_date']?.toString(),
       endDate: row['end_date']?.toString(),
       totalDays: _parseDouble(row['total_days']),

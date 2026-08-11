@@ -2711,10 +2711,50 @@ class AdminRequestsService {
     if (response is! List) {
       return const [];
     }
-    return response
+    
+    final requests = response
         .whereType<Map<String, dynamic>>()
         .map(AdminRequestItem.fromRow)
-        .toList(growable: false);
+        .toList();
+
+    try {
+      final usersResponse = await _client.rpc('admin_registered_users');
+      if (usersResponse is List) {
+        final creditMap = <String, double>{};
+        final profileMap = <String, String>{};
+        for (final u in usersResponse.whereType<Map<String, dynamic>>()) {
+          final empNo = u['employee_no']?.toString();
+          if (empNo != null && empNo.trim().isNotEmpty) {
+            final profileId = u['user_profile_id']?.toString();
+            if (profileId != null) profileMap[empNo] = profileId;
+            
+            final rem = u['leave_remaining_days'];
+            final cred = u['leave_credit_days'];
+            double? val;
+            if (rem != null) {
+              val = rem is num ? rem.toDouble() : double.tryParse(rem.toString());
+            } else if (cred != null) {
+              val = cred is num ? cred.toDouble() : double.tryParse(cred.toString());
+            }
+            if (val != null) {
+              creditMap[empNo] = val;
+            }
+          }
+        }
+        for (final req in requests) {
+          if (req.employeeNo != null) {
+            if (creditMap.containsKey(req.employeeNo)) {
+              req.leaveCredits = creditMap[req.employeeNo];
+            }
+            if (profileMap.containsKey(req.employeeNo)) {
+              req.userProfileId = profileMap[req.employeeNo];
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    return requests;
   }
 
   /// Deletes a request from Supabase.
@@ -2736,6 +2776,29 @@ class AdminRequestsService {
 
   /// Updates the status of a request.
   /// [isPerk] should be `true` when the request lives in employee_perk_requests.
+  /// Validates a leave request, updating paid/unpaid days and deducting/reimbursing credits.
+  static Future<String> validateLeaveRequest({
+    required String requestId,
+    required double newPaidDays,
+    required double newUnpaidDays,
+    required double oldPaidDays,
+    required String? userProfileId,
+  }) async {
+    try {
+      final response = await _client.rpc(
+        'admin_validate_leave_request',
+        params: {
+          'p_request_id': requestId,
+          'p_paid_days': newPaidDays,
+          'p_unpaid_days': newUnpaidDays,
+        },
+      );
+      return response?.toString() ?? 'Leave request validated successfully.';
+    } catch (e) {
+      throw Exception('Validation failed: $e');
+    }
+  }
+
   static Future<String> updateRequestStatus({
     required String requestId,
     required bool isPerk,

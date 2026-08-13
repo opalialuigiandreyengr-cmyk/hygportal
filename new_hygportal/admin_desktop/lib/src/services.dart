@@ -1439,7 +1439,6 @@ class RegisteredUsersService {
     return response.toString();
   }
 
-<<<<<<< HEAD
   static Future<String> reimburseLeaveCredits({
     required String userProfileId,
     required double reimburseDays,
@@ -1455,12 +1454,7 @@ class RegisteredUsersService {
     return response.toString();
   }
 
-  static Future<void> deleteUser({
-    required String userProfileId,
-  }) async {
-=======
   static Future<void> deleteUser({required String userProfileId}) async {
->>>>>>> 9c0fb4c549a45805a463ff9e2fac17bf9f806cac
     await _client.rpc(
       'admin_delete_user',
       params: {'p_user_profile_id': userProfileId},

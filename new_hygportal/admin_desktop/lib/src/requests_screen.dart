@@ -1291,6 +1291,7 @@ class _RequestsPanelState extends State<RequestsPanel>
                   width: 150,
                   height: 38,
                   child: DropdownButtonFormField<String>(
+                    key: ValueKey(_statusFilter),
                     initialValue: _statusFilter,
                     onChanged: (v) =>
                         setState(() => _statusFilter = v ?? 'all'),

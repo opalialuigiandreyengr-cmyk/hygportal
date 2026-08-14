@@ -226,7 +226,10 @@ class EmployeeDirectoryService {
         for (final entry in cached.entries) {
           final val = _nullableString(entry.value);
           if (val != null && val.isNotEmpty) {
-            merged[entry.key] = val;
+            final existing = _nullableString(merged[entry.key]);
+            if (existing == null || existing.isEmpty) {
+              merged[entry.key] = val;
+            }
           }
         }
       }
@@ -242,7 +245,10 @@ class EmployeeDirectoryService {
         for (final entry in row.entries) {
           final value = _nullableString(entry.value);
           if (value != null && value.isNotEmpty) {
-            merged[entry.key] = value;
+            final existing = _nullableString(merged[entry.key]);
+            if (existing == null || existing.isEmpty) {
+              merged[entry.key] = value;
+            }
           }
         }
       }
@@ -573,8 +579,10 @@ class EmployeeDirectoryService {
       employmentStatus: _nullableString(
         row['employment_status'] ?? row['status'],
       ),
-      schedule: _nullableString(row['time_schedule']),
-      dayOffDay: _nullableString(row['day_off_day']),
+      schedule: _nullableString(row['time_schedule'] ?? row['schedule']),
+      dayOffDay: _nullableString(
+        row['day_off_day'] ?? row['day_off'] ?? row['dayOffDay'],
+      ),
       reasonOfInactivity: _nullableString(
         row['reason_of_inactivity'] ?? row['reasonOfInactivity'],
       ),
@@ -583,10 +591,16 @@ class EmployeeDirectoryService {
       ),
       payrollClass: _nullableString(row['payroll_class']),
       bankType: _nullableString(row['bank_type']),
-      companyName: _nullableString(row['company_name']),
-      departmentName: _nullableString(row['department_name']),
+      companyName: _nullableString(
+        row['company_name'] ?? row['company'] ?? row['companyName'],
+      ),
+      departmentName: _nullableString(
+        row['department_name'] ?? row['department'] ?? row['departmentName'],
+      ),
       storeName: storeName,
-      positionName: _nullableString(row['position_name']),
+      positionName: _nullableString(
+        row['position_name'] ?? row['position'] ?? row['positionName'],
+      ),
       tin: _nullableString(row['tin']),
       sss: _nullableString(row['sss']),
       pagibig: _nullableString(row['pagibig']),
@@ -1526,13 +1540,9 @@ class RegisteredUsersService {
     }
   }
 
-<<<<<<< HEAD
-  static Future<void> deleteUser({required String userProfileId}) async {
-=======
   static Future<void> deleteUser({
     required String userProfileId,
   }) async {
->>>>>>> 2c91c1a37316ed379112ddd126f37cf60bc326d9
     await _client.rpc(
       'admin_delete_user',
       params: {'p_user_profile_id': userProfileId},

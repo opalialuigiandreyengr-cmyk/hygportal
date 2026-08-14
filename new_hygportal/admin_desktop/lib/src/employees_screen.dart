@@ -475,17 +475,23 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
         _civilStatus = details.civilStatus!;
       }
       if (details.companyName != null && details.companyName!.isNotEmpty) {
-        _company = details.companyName!;
+        _company = _resolveLoadedOption(details.companyName!, _companyOptions);
       }
       if (details.departmentName != null &&
           details.departmentName!.isNotEmpty) {
-        _department = details.departmentName!;
+        _department = _resolveLoadedOption(
+          details.departmentName!,
+          _departmentOptions,
+        );
       }
       if (details.storeName != null && details.storeName!.isNotEmpty) {
-        _store = details.storeName!;
+        _store = _resolveLoadedOption(details.storeName!, _storeOptions);
       }
       if (details.positionName != null && details.positionName!.isNotEmpty) {
-        _position = details.positionName!;
+        _position = _resolveLoadedOption(
+          details.positionName!,
+          _positionOptions,
+        );
       }
       if (details.employeeType != null && details.employeeType!.isNotEmpty) {
         _employeeType = details.employeeType!;
@@ -2249,6 +2255,7 @@ class ModalSelectField extends StatelessWidget {
         FieldLabel(label: label, required: required),
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
+          key: ValueKey(selectedValue),
           initialValue: selectedValue,
           isExpanded: true,
           decoration: modalInputDecoration(),
@@ -2459,7 +2466,11 @@ class ScheduleRangeField extends StatelessWidget {
           children: [
             Expanded(
               child: DropdownButtonFormField<String>(
-                initialValue: startTime,
+                key: ValueKey(
+                  options.contains(startTime) ? startTime : options.first,
+                ),
+                initialValue:
+                    options.contains(startTime) ? startTime : options.first,
                 isExpanded: true,
                 decoration: modalInputDecoration(hint: 'Start time'),
                 style: HygTypography.input,
@@ -2488,7 +2499,11 @@ class ScheduleRangeField extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: DropdownButtonFormField<String>(
-                initialValue: endTime,
+                key: ValueKey(
+                  options.contains(endTime) ? endTime : options.first,
+                ),
+                initialValue:
+                    options.contains(endTime) ? endTime : options.first,
                 isExpanded: true,
                 decoration: modalInputDecoration(hint: 'End time'),
                 style: HygTypography.input,
@@ -2923,6 +2938,7 @@ class _EmployeeFilterDropdown extends StatelessWidget {
     return SizedBox(
       height: 44,
       child: DropdownButtonFormField<String>(
+        key: ValueKey(options.contains(value) ? value : options.first),
         initialValue: options.contains(value) ? value : options.first,
         isExpanded: true,
         dropdownColor: Colors.white,

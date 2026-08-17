@@ -757,6 +757,14 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
     } catch (error) {
       if (!mounted) return;
       final message = error.toString().replaceFirst('Exception: ', '');
+      if (message.contains('Employee profile was not found')) {
+        await EmployeeDirectoryService.purgeCachedEmployee(employee.id);
+        await _loadEmployees();
+        _showDepartmentMessage(
+          'Employee was already deleted from the database and has now been removed from your local table.',
+        );
+        return;
+      }
       _showDepartmentMessage(
         message.contains('hr_delete_employee') || message.contains('PGRST202')
             ? 'Employee delete function is missing. Apply migration 0069_hr_employee_delete.sql, then retry.'

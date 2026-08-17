@@ -524,6 +524,30 @@ class EmployeeDirectoryService {
         'p_delete_mode': mode.name,
       },
     );
+
+    try {
+      final cachedRows =
+          await LocalSyncService.loadCachedRows('employee_cache');
+      final updatedRows =
+          cachedRows.where((row) {
+            final rowId = (row['employee_id'] ?? row['id'])?.toString();
+            return rowId != id;
+          }).toList();
+      await LocalSyncService.cacheRows('employee_cache', updatedRows);
+    } catch (_) {}
+  }
+
+  static Future<void> purgeCachedEmployee(String id) async {
+    try {
+      final cachedRows =
+          await LocalSyncService.loadCachedRows('employee_cache');
+      final updatedRows =
+          cachedRows.where((row) {
+            final rowId = (row['employee_id'] ?? row['id'])?.toString();
+            return rowId != id;
+          }).toList();
+      await LocalSyncService.cacheRows('employee_cache', updatedRows);
+    } catch (_) {}
   }
 
   static Map<String, dynamic> _payloadToMap(EmployeeProfilePayload payload) {

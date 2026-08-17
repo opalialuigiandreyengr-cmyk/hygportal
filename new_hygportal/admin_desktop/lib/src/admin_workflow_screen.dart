@@ -659,6 +659,7 @@ class _WorkflowDropdownFilter extends StatelessWidget {
     return SizedBox(
       height: 44,
       child: DropdownButtonFormField<String>(
+        key: ValueKey(value),
         initialValue: value,
         isExpanded: true,
         icon: const Icon(
@@ -2490,6 +2491,7 @@ class _RouteRolePicker extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 DropdownButtonFormField<String?>(
+                  key: ValueKey(selected),
                   initialValue: selected,
                   isExpanded: true,
                   decoration: const InputDecoration(

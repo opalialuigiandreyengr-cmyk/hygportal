@@ -12,7 +12,7 @@ class _HygBirthdaysScreenState extends State<HygBirthdaysScreen> {
   List<EmployeePreview> _allEmployees = [];
   bool _isLoading = true;
   String? _error;
-  String _activeFilter = 'Passed'; // 'Passed', 'Today', 'Upcoming'
+  String _activeFilter = 'All'; // 'All', 'Passed', 'Today', 'Upcoming'
 
   @override
   void initState() {
@@ -56,19 +56,96 @@ class _HygBirthdaysScreenState extends State<HygBirthdaysScreen> {
 
   DateTime? _parseBirthDate(String? raw) {
     if (raw == null || raw.trim().isEmpty) return null;
+    final str = raw.trim();
+
     try {
-      return DateTime.parse(raw.trim());
-    } catch (_) {
-      final parts = raw.trim().split(RegExp(r'[-/]'));
-      if (parts.length == 3) {
-        final year = int.tryParse(parts[0]);
-        final month = int.tryParse(parts[1]);
-        final day = int.tryParse(parts[2]);
-        if (year != null && month != null && day != null) {
+      return DateTime.parse(str);
+    } catch (_) {}
+
+    final parts = str.split(RegExp(r'[\s\-/,\._]+')).where((p) => p.isNotEmpty).toList();
+    if (parts.length >= 2) {
+      int? year;
+      int? month;
+      int? day;
+
+      const months = {
+        'jan': 1, 'january': 1,
+        'feb': 2, 'february': 2,
+        'mar': 3, 'march': 3,
+        'apr': 4, 'april': 4,
+        'may': 5,
+        'jun': 6, 'june': 6,
+        'jul': 7, 'july': 7,
+        'aug': 8, 'august': 8,
+        'sep': 9, 'september': 9,
+        'oct': 10, 'october': 10,
+        'nov': 11, 'november': 11,
+        'dec': 12, 'december': 12,
+      };
+
+      for (final p in parts) {
+        final lower = p.toLowerCase();
+        if (months.containsKey(lower)) {
+          month = months[lower];
+          break;
+        }
+      }
+
+      final nums = parts.map((p) => int.tryParse(p)).whereType<int>().toList();
+
+      if (month != null) {
+        for (final n in nums) {
+          if (n > 31) {
+            year = n;
+          } else if (day == null && n >= 1 && n <= 31) {
+            day = n;
+          }
+        }
+        year ??= DateTime.now().year;
+        day ??= 1;
+        return DateTime(year, month, day);
+      }
+
+      if (nums.length == 3) {
+        if (nums[0] > 1000) {
+          year = nums[0];
+          if (nums[1] <= 12 && nums[2] <= 31) {
+            month = nums[1];
+            day = nums[2];
+          } else if (nums[2] <= 12 && nums[1] <= 31) {
+            month = nums[2];
+            day = nums[1];
+          }
+        } else if (nums[2] > 1000) {
+          year = nums[2];
+          if (nums[0] <= 12 && nums[1] <= 31) {
+            month = nums[0];
+            day = nums[1];
+          } else if (nums[1] <= 12 && nums[0] <= 31) {
+            month = nums[1];
+            day = nums[0];
+          }
+        } else {
+          if (nums[0] <= 12) {
+            month = nums[0];
+            day = nums[1];
+            year = nums[2] < 100 ? (nums[2] > 30 ? 1900 + nums[2] : 2000 + nums[2]) : nums[2];
+          }
+        }
+
+        if (year != null && month != null && day != null && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+          return DateTime(year, month, day);
+        }
+      } else if (nums.length == 2) {
+        if (nums[0] <= 12 && nums[1] <= 31) {
+          month = nums[0];
+          day = nums[1];
+          year = DateTime.now().year;
           return DateTime(year, month, day);
         }
       }
     }
+
     return null;
   }
 
@@ -123,7 +200,7 @@ class _HygBirthdaysScreenState extends State<HygBirthdaysScreen> {
     } else if (_activeFilter == 'Today') {
       return allItems.where((item) => item.isToday).toList();
     } else if (_activeFilter == 'Upcoming') {
-      return allItems.where((item) => item.isUpcoming).toList();
+      return allItems.where((item) => item.isUpcoming || item.isToday).toList();
     }
     return allItems;
   }
@@ -271,6 +348,7 @@ class _HygBirthdaysScreenState extends State<HygBirthdaysScreen> {
             label: 'Passed Birthdays',
             count: '$passed',
             bgColor: const Color(0xFFF1F5F9),
+            filterKey: 'Passed',
           ),
         ),
         const SizedBox(width: 10),
@@ -281,6 +359,7 @@ class _HygBirthdaysScreenState extends State<HygBirthdaysScreen> {
             label: "Today's Birthdays",
             count: '$today',
             bgColor: const Color(0xFFFDF2F8),
+            filterKey: 'Today',
           ),
         ),
         const SizedBox(width: 10),
@@ -291,6 +370,7 @@ class _HygBirthdaysScreenState extends State<HygBirthdaysScreen> {
             label: 'Upcoming Later',
             count: '$upcoming',
             bgColor: const Color(0xFFF5F3FF),
+            filterKey: 'Upcoming',
           ),
         ),
       ],
@@ -303,49 +383,58 @@ class _HygBirthdaysScreenState extends State<HygBirthdaysScreen> {
     required String label,
     required String count,
     required Color bgColor,
+    required String filterKey,
   }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: HygColors.border),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: bgColor,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icon, size: 18, color: iconColor),
+    final isSelected = _activeFilter == filterKey;
+    return InkWell(
+      onTap: () => setState(() => _activeFilter = filterKey),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFEFF6FF) : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF2563EB) : HygColors.border,
+            width: isSelected ? 1.5 : 1.0,
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: const TextStyle(
-                    color: HygColors.muted,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                Text(
-                  count,
-                  style: const TextStyle(
-                    color: HygColors.ink,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: bgColor,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, size: 18, color: iconColor),
             ),
-          ),
-        ],
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: isSelected ? const Color(0xFF1E40AF) : HygColors.muted,
+                      fontSize: 11,
+                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                    ),
+                  ),
+                  Text(
+                    count,
+                    style: const TextStyle(
+                      color: HygColors.ink,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -381,7 +470,7 @@ class _HygBirthdaysScreenState extends State<HygBirthdaysScreen> {
         const SizedBox(width: 12),
         Wrap(
           spacing: 6,
-          children: ['Passed', 'Today', 'Upcoming'].map((filter) {
+          children: ['All', 'Upcoming', 'Today', 'Passed'].map((filter) {
             final isSelected = _activeFilter == filter;
             return ChoiceChip(
               label: Text(filter),

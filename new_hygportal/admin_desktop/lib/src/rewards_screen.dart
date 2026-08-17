@@ -45,7 +45,7 @@ class RewardsHeader extends StatelessWidget {
                 ),
                 SizedBox(height: 3),
                 Text(
-                  'Recognize and reward users with redeemable points and incentives.',
+                  'Manage and add redeemable products and items.',
                   style: TextStyle(
                     fontFamily: HygTypography.bodyFontFamily,
                     fontFamilyFallback: HygTypography.fontFallbacks,

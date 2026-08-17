@@ -1,9 +1,16 @@
 part of '../main.dart';
 
 class EmployeesHeader extends StatelessWidget {
-  const EmployeesHeader({required this.onAddEmployee, super.key});
+  const EmployeesHeader({
+    required this.onAddEmployee,
+    this.onRefresh,
+    this.isRefreshing = false,
+    super.key,
+  });
 
   final VoidCallback onAddEmployee;
+  final VoidCallback? onRefresh;
+  final bool isRefreshing;
 
   @override
   Widget build(BuildContext context) {
@@ -34,6 +41,28 @@ class EmployeesHeader extends StatelessWidget {
               ],
             ),
           ),
+          if (onRefresh != null) ...[
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(120, 44),
+                foregroundColor: HygColors.ink,
+                side: const BorderSide(color: HygColors.border),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              onPressed: isRefreshing ? null : onRefresh,
+              icon: isRefreshing
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.refresh, size: 18),
+              label: Text(isRefreshing ? 'Refreshing...' : 'Refresh'),
+            ),
+            const SizedBox(width: 12),
+          ],
           OutlinedButton.icon(
             style: OutlinedButton.styleFrom(
               minimumSize: const Size(150, 44),
@@ -1015,7 +1044,7 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
     final message = error.toString().replaceFirst('Exception: ', '');
 
     if (message.contains('hr_set_employee_status')) {
-      return 'Employee status update function is missing. Apply migration 0058_hr_set_employee_status.sql, then retry.';
+      return 'Employee status update function is missing. Apply migration 0158_hr_employee_status_update_fix.sql, then retry.';
     }
 
     if (message.contains('create_employee_profile_with_store') ||
@@ -1024,7 +1053,7 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
     }
 
     if (message.contains('hr_update_employee_profile')) {
-      return 'Employee update function is outdated. Apply migration 0059_hr_profile_schedule_dayoff.sql, then retry.';
+      return 'Employee update function is outdated. Apply migration 0158_hr_employee_status_update_fix.sql, then retry.';
     }
 
     if (message.contains('time_schedule') || message.contains('day_off')) {
@@ -1032,7 +1061,7 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
     }
 
     if (message.contains('PGRST202')) {
-      return 'A required Supabase RPC function is missing or outdated. Re-apply migrations 0058, 0059, and 0060, then retry.';
+      return 'A required Supabase RPC function is missing or outdated. Apply migration 0158_hr_employee_status_update_fix.sql, then retry.';
     }
 
     return message;

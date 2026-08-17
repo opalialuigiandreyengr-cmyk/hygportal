@@ -369,6 +369,9 @@ class StatusPill extends StatelessWidget {
         ),
         child: Text(
           normalizedStatus.toUpperCase(),
+          maxLines: 1,
+          softWrap: false,
+          overflow: TextOverflow.ellipsis,
           style: HygTypography.tableHeader.copyWith(
             color: isActive ? const Color(0xFF16A34A) : const Color(0xFFDC2626),
             fontSize: 10,

@@ -127,6 +127,8 @@ class _RequestsPanelState extends State<RequestsPanel>
   DateTime? _dateFrom;
   DateTime? _dateTo;
   bool _isRefreshingApprovers = false;
+  int _currentPage = 1;
+  static const int _pageSize = 20;
 
   static const _tabs = ['ESARF / Time', 'Leave', 'Perks'];
 
@@ -134,7 +136,9 @@ class _RequestsPanelState extends State<RequestsPanel>
   void initState() {
     super.initState();
     _tabController = TabController(length: _tabs.length, vsync: this);
-    _tabController.addListener(() => setState(() {}));
+    _tabController.addListener(() => setState(() {
+      _currentPage = 1;
+    }));
   }
 
   @override
@@ -1175,7 +1179,19 @@ class _RequestsPanelState extends State<RequestsPanel>
     }
 
     final tabIndex = _tabController.index;
-    final items = _itemsForTab(tabIndex);
+    final allFilteredItems = _itemsForTab(tabIndex);
+    final totalItems = allFilteredItems.length;
+    final totalPages = (totalItems / _pageSize).ceil();
+    final effectiveTotalPages = totalPages == 0 ? 1 : totalPages;
+    final safePage = _currentPage.clamp(1, effectiveTotalPages);
+    if (_currentPage != safePage) {
+      _currentPage = safePage;
+    }
+    final startIndex = (safePage - 1) * _pageSize;
+    final endIndex = (startIndex + _pageSize > totalItems) ? totalItems : (startIndex + _pageSize);
+    final paginatedItems = (startIndex < totalItems)
+        ? allFilteredItems.sublist(startIndex, endIndex)
+        : <AdminRequestItem>[];
 
     return Container(
       decoration: BoxDecoration(
@@ -1261,7 +1277,7 @@ class _RequestsPanelState extends State<RequestsPanel>
                   child: SizedBox(
                     height: 38,
                     child: TextField(
-                      onChanged: (v) => setState(() => _searchQuery = v),
+                      onChanged: (v) => setState(() { _searchQuery = v; _currentPage = 1; }),
                       style: HygTypography.input.copyWith(fontSize: 13),
                       decoration: InputDecoration(
                         hintText: 'Search employee, department, store, type...',
@@ -1294,7 +1310,7 @@ class _RequestsPanelState extends State<RequestsPanel>
                     key: ValueKey(_statusFilter),
                     initialValue: _statusFilter,
                     onChanged: (v) =>
-                        setState(() => _statusFilter = v ?? 'all'),
+                        setState(() { _statusFilter = v ?? 'all'; _currentPage = 1; }),
                     style: HygTypography.tableBody,
                     decoration: InputDecoration(
                       filled: true,
@@ -1462,7 +1478,7 @@ class _RequestsPanelState extends State<RequestsPanel>
 
           const SizedBox(height: 14),
 
-          if (items.isEmpty)
+          if (allFilteredItems.isEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(18, 10, 18, 26),
               child: EmployeesStateMessage(
@@ -1476,9 +1492,9 @@ class _RequestsPanelState extends State<RequestsPanel>
                     : 'No requests in this category yet.',
               ),
             )
-          else
+          else ...[
             _RequestsTable(
-              items: items,
+              items: paginatedItems,
               category: switch (tabIndex) {
                 0 => AdminRequestCategory.esarf,
                 1 => AdminRequestCategory.leave,
@@ -1489,6 +1505,64 @@ class _RequestsPanelState extends State<RequestsPanel>
               onReassign: (item, stepId) => _openReassignApproverDialog(item, stepId: stepId),
               onValidate: _validateLeave,
             ),
+
+            // Pagination Footer Bar
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 12, 18, 18),
+              child: Row(
+                children: [
+                  Text(
+                    'Showing ${totalItems == 0 ? 0 : startIndex + 1} to $endIndex of $totalItems requests',
+                    style: HygTypography.body.copyWith(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF64748B),
+                    ),
+                  ),
+                  const Spacer(),
+                  Row(
+                    children: [
+                      IconButton(
+                        tooltip: 'First Page',
+                        onPressed: safePage > 1 ? () => setState(() => _currentPage = 1) : null,
+                        icon: const Icon(Icons.first_page, size: 18),
+                      ),
+                      IconButton(
+                        tooltip: 'Previous Page',
+                        onPressed: safePage > 1 ? () => setState(() => _currentPage = safePage - 1) : null,
+                        icon: const Icon(Icons.chevron_left, size: 18),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: HygColors.ink,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          'Page $safePage of $effectiveTotalPages',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Next Page',
+                        onPressed: safePage < effectiveTotalPages ? () => setState(() => _currentPage = safePage + 1) : null,
+                        icon: const Icon(Icons.chevron_right, size: 18),
+                      ),
+                      IconButton(
+                        tooltip: 'Last Page',
+                        onPressed: safePage < effectiveTotalPages ? () => setState(() => _currentPage = effectiveTotalPages) : null,
+                        icon: const Icon(Icons.last_page, size: 18),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
 
         ],
       ),
@@ -1616,7 +1690,7 @@ class _ApproverEntry {
 
 // Ã¢â€â‚¬Ã¢â€â‚¬ Table Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
-class _RequestsTable extends StatelessWidget {
+class _RequestsTable extends StatefulWidget {
   const _RequestsTable({
     required this.items,
     required this.category,
@@ -1632,6 +1706,29 @@ class _RequestsTable extends StatelessWidget {
   final bool showDelete;
   final void Function(AdminRequestItem item, String? stepId) onReassign;
   final void Function(AdminRequestItem)? onValidate;
+
+  @override
+  State<_RequestsTable> createState() => _RequestsTableState();
+}
+
+class _RequestsTableState extends State<_RequestsTable> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(_RequestsTable oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.items != widget.items) {
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(0);
+      }
+    }
+  }
 
   static const double _storeWidth = 92;
   static const double _reasonWidth = 180;
@@ -1782,7 +1879,7 @@ class _RequestsTable extends StatelessWidget {
               _limitedText('Ã¢â‚¬â€', width: 20, maxLines: 1),
               const SizedBox(width: 6),
               InkWell(
-                onTap: () => onReassign(item, null),
+                onTap: () => widget.onReassign(item, null),
                 borderRadius: BorderRadius.circular(4),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
@@ -1881,7 +1978,7 @@ class _RequestsTable extends StatelessWidget {
 
                       const SizedBox(width: 6),
                       InkWell(
-                        onTap: () => onReassign(item, entry.stepId),
+                        onTap: () => widget.onReassign(item, entry.stepId),
                         borderRadius: BorderRadius.circular(4),
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
@@ -1975,44 +2072,56 @@ class _RequestsTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
+    return Padding(
       padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
-      child: DataTable(
-        headingRowHeight: 42,
-        dataRowMinHeight: 52,
-        dataRowMaxHeight: 72,
-        horizontalMargin: 12,
-        columnSpacing: 12,
-        headingTextStyle: HygTypography.tableHeader,
-        dataTextStyle: HygTypography.tableBody,
-        border: TableBorder.all(color: const Color(0xFFE2E8F0)),
-        columns: _buildColumns(),
-        rows: items.map((item) => _buildRow(item)).toList(),
+      child: ScrollConfiguration(
+        behavior: ScrollConfiguration.of(context).copyWith(
+          dragDevices: {
+            PointerDeviceKind.touch,
+            PointerDeviceKind.mouse,
+            PointerDeviceKind.trackpad,
+            PointerDeviceKind.stylus,
+          },
+        ),
+        child: Scrollbar(
+          controller: _scrollController,
+          thumbVisibility: true,
+          trackVisibility: true,
+          child: SingleChildScrollView(
+            controller: _scrollController,
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.only(bottom: 12),
+            child: DataTable(
+              showCheckboxColumn: false,
+              headingRowHeight: 42,
+              dataRowMinHeight: 52,
+              dataRowMaxHeight: 72,
+              horizontalMargin: 12,
+              columnSpacing: 12,
+              headingTextStyle: HygTypography.tableHeader,
+              dataTextStyle: HygTypography.tableBody,
+              border: TableBorder.all(color: const Color(0xFFE2E8F0)),
+              columns: _buildColumns(),
+              rows: widget.items.map((item) => _buildRow(context, item)).toList(),
+            ),
+          ),
+        ),
       ),
     );
   }
 
   List<DataColumn> _buildColumns() {
-    switch (category) {
+    switch (widget.category) {
       case AdminRequestCategory.esarf:
         return [
           const DataColumn(label: Text('Employee')),
           const DataColumn(label: Text('Department')),
           const DataColumn(label: Text('Store')),
-          // Display uniform transaction abbreviation (OT, OB, FIO, UT, etc.)
           const DataColumn(label: Text('Type')),
-          const DataColumn(label: Text('Date From')),
-          const DataColumn(label: Text('Date To')),
-          // Added explicit start and end time columns for admin duration visibility
-          const DataColumn(label: Text('Time From')),
-          const DataColumn(label: Text('Time To')),
-          const DataColumn(label: Text('Hours')),
-          const DataColumn(label: Text('Reason')),
           const DataColumn(label: Text('Approver')),
           const DataColumn(label: Text('Status')),
           const DataColumn(label: Text('Submitted')),
-          if (showDelete) const DataColumn(label: Text('Actions')),
+          if (widget.showDelete) const DataColumn(label: Text('Actions')),
         ];
       case AdminRequestCategory.leave:
         return [
@@ -2029,7 +2138,7 @@ class _RequestsTable extends StatelessWidget {
           const DataColumn(label: Text('Approver')),
           const DataColumn(label: Text('Status')),
           const DataColumn(label: Text('Submitted')),
-          if (showDelete) const DataColumn(label: Text('Actions')),
+          if (widget.showDelete) const DataColumn(label: Text('Actions')),
         ];
       case AdminRequestCategory.perk:
         return [
@@ -2045,48 +2154,60 @@ class _RequestsTable extends StatelessWidget {
           const DataColumn(label: Text('Approver')),
           const DataColumn(label: Text('Status')),
           const DataColumn(label: Text('Submitted')),
-          if (showDelete) const DataColumn(label: Text('Actions')),
+          if (widget.showDelete) const DataColumn(label: Text('Actions')),
         ];
     }
   }
 
-  DataRow _buildRow(AdminRequestItem item) {
-    switch (category) {
+  DataRow _buildRow(BuildContext context, AdminRequestItem item) {
+    switch (widget.category) {
       case AdminRequestCategory.esarf:
-        // Format 24-hour time strings into 12-hour AM/PM format
-        final timeFromFormatted = _format12HourTime(item.timeFrom);
-        final timeToFormatted = _format12HourTime(item.timeTo);
-        final timeFromDisplay = timeFromFormatted.isNotEmpty ? timeFromFormatted : (item.timeFrom ?? 'Ã¢â‚¬â€');
-        final timeToDisplay = timeToFormatted.isNotEmpty ? timeToFormatted : (item.timeTo ?? 'Ã¢â‚¬â€');
-        return DataRow(cells: [
-          _employeeCell(item),
-          DataCell(Text(item.departmentName ?? 'Ã¢â‚¬â€')),
-          _storeCell(item),
-          // Render standardized transaction abbreviation (OT, OB, FIO, etc.)
-          DataCell(
-            Text(
-              _formatEsarfTransactionAbbr(
-                (item.transactionType != null && item.transactionType!.isNotEmpty)
-                    ? item.transactionType!
-                    : item.requestTypeName,
+        final txAbbr = _formatEsarfTransactionAbbr(
+          (item.transactionType != null && item.transactionType!.isNotEmpty)
+              ? item.transactionType!
+              : item.requestTypeName,
+        );
+        final entryCount = item.entries.length;
+
+        return DataRow(
+          onSelectChanged: (_) => _showDetailModal(context, item),
+          cells: [
+            _employeeCell(item),
+            DataCell(Text(item.departmentName ?? '-')),
+            _storeCell(item),
+            DataCell(
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(txAbbr),
+                  if (entryCount > 1) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFDCFCE7),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        '$entryCount entries',
+                        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF15803D)),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
-          ),
-          DataCell(Text(item.dateFrom ?? 'Ã¢â‚¬â€')),
-          DataCell(Text(item.dateTo ?? 'Ã¢â‚¬â€')),
-          // Render start and end time cells
-          DataCell(Text(timeFromDisplay)),
-          DataCell(Text(timeToDisplay)),
-          DataCell(Text(item.totalHours != null ? '${item.totalHours}h' : 'Ã¢â‚¬â€')),
-          _reasonCell(item.reason ?? item.timeSchedule ?? 'Ã¢â‚¬â€'),
-          _approverCell(item),
-          _statusCell(item),
-          _submittedCell(item),
-          if (showDelete) _actionsCell(item),
-        ]);
+            _approverCell(item),
+            _statusCell(item),
+            _submittedCell(item),
+            if (widget.showDelete) _actionsCell(item),
+          ],
+        );
 
       case AdminRequestCategory.leave:
-        return DataRow(cells: [
+        return DataRow(
+          onSelectChanged: (_) => _showDetailModal(context, item),
+          cells: [
           _employeeCell(item),
           DataCell(Text(item.departmentName ?? 'Ã¢â‚¬â€')),
           _storeCell(item),
@@ -2100,11 +2221,13 @@ class _RequestsTable extends StatelessWidget {
           _approverCell(item),
           _statusCell(item),
           _submittedCell(item),
-          if (showDelete) _actionsCell(item),
+          if (widget.showDelete) _actionsCell(item),
         ]);
 
       case AdminRequestCategory.perk:
-        return DataRow(cells: [
+        return DataRow(
+          onSelectChanged: (_) => _showDetailModal(context, item),
+          cells: [
           _employeeCell(item),
           DataCell(Text(item.departmentName ?? 'Ã¢â‚¬â€')),
           _storeCell(item),
@@ -2136,7 +2259,7 @@ class _RequestsTable extends StatelessWidget {
           _approverCell(item),
           _statusCell(item),
           _submittedCell(item),
-          if (showDelete) _actionsCell(item),
+          if (widget.showDelete) _actionsCell(item),
         ]);
     }
   }
@@ -2249,12 +2372,12 @@ class _RequestsTable extends StatelessWidget {
       Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (category == AdminRequestCategory.leave && onValidate != null) ...[
+          if (widget.category == AdminRequestCategory.leave && widget.onValidate != null) ...[
             Tooltip(
               message: 'Validate request',
               child: InkWell(
                 borderRadius: BorderRadius.circular(6),
-                onTap: () => onValidate!(item),
+                onTap: () => widget.onValidate!(item),
                 child: Container(
                   padding: const EdgeInsets.all(5),
                   decoration: BoxDecoration(
@@ -2275,7 +2398,7 @@ class _RequestsTable extends StatelessWidget {
             message: 'Delete request',
             child: InkWell(
               borderRadius: BorderRadius.circular(6),
-              onTap: () => onDelete(item),
+              onTap: () => widget.onDelete(item),
               child: Container(
                 padding: const EdgeInsets.all(5),
                 decoration: BoxDecoration(
@@ -2845,5 +2968,568 @@ class _ValidateLeaveDialogContentState extends State<_ValidateLeaveDialogContent
   }
 }
 
+void _showDetailModal(BuildContext context, AdminRequestItem item) {
+  showDialog(
+    context: context,
+    builder: (context) => _RequestDetailModal(item: item),
+  );
+}
 
+class _RequestDetailModal extends StatelessWidget {
+  const _RequestDetailModal({required this.item});
+  final AdminRequestItem item;
 
+  @override
+  Widget build(BuildContext context) {
+    final isEsarf = item.category == AdminRequestCategory.esarf;
+    final entries = isEsarf ? EsarfEntryItem.parseEsarfEntriesFromReason(item.rawRow) : <EsarfEntryItem>[];
+
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 30),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      backgroundColor: Colors.white,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 860, maxHeight: 780),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Header Bar in HygColors.ink
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              decoration: const BoxDecoration(
+                color: HygColors.ink,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(10)),
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 18,
+                    backgroundColor: HygColors.gold,
+                    child: Text(
+                      (item.employeeName != null && item.employeeName!.isNotEmpty)
+                          ? item.employeeName![0].toUpperCase()
+                          : 'E',
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: HygColors.ink, fontSize: 16),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item.employeeName ?? 'Employee Request Details',
+                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            if (item.employeeNo != null) ...[
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: HygColors.gold.withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  'Emp #${item.employeeNo}',
+                                  style: const TextStyle(color: HygColors.gold, fontSize: 11, fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                            ],
+                            Text(
+                              '${item.departmentName ?? 'Department'} • ${item.storeName ?? 'Store'}',
+                              style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white70, size: 20),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+            ),
+
+            // Content Body
+            Flexible(
+              child: SingleChildScrollView(
+                padding: isEsarf ? EdgeInsets.zero : const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // ESARF Table Layout
+                    if (isEsarf) ...[
+                      _buildEsarfEntriesTable(context, item, entries),
+                    ] else ...[
+                      // Leave & Perk Details
+                      _buildNonEsarfDetails(context, item),
+                    ],
+
+                    // Global Reason (Only for Non-ESARF)
+                    if (!isEsarf && ((item.reason != null && item.reason!.isNotEmpty) || (item.remarks != null && item.remarks!.isNotEmpty))) ...[
+                      const SizedBox(height: 14),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: HygColors.background,
+                          border: Border.all(color: HygColors.border),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Reason / Remarks', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: HygColors.muted)),
+                            const SizedBox(height: 4),
+                            Text(
+                              item.reason ?? item.remarks ?? '—',
+                              style: const TextStyle(fontSize: 12, color: HygColors.ink),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+
+                    // Global Workflow Timeline (Only for Non-ESARF)
+                    if (!isEsarf && item.approvalSummary.isNotEmpty) ...[
+                      const SizedBox(height: 14),
+                      const Text(
+                        'Approval Workflow Timeline',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: HygColors.ink),
+                      ),
+                      const SizedBox(height: 8),
+                      _buildGlobalApprovalTimeline(context, item),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+
+            // Footer
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: const BoxDecoration(
+                border: Border(top: BorderSide(color: HygColors.border)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  ElevatedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: HygColors.ink,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                    ),
+                    child: const Text('Close', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEsarfEntriesTable(BuildContext context, AdminRequestItem item, List<EsarfEntryItem> entries) {
+    final list = entries.isNotEmpty
+        ? entries
+        : [
+            EsarfEntryItem(
+              id: item.requestId,
+              requestId: item.requestId,
+              dateFrom: item.dateFrom,
+              dateTo: item.dateTo,
+              timeFrom: item.timeFrom,
+              timeTo: item.timeTo,
+              timeSchedule: item.timeSchedule,
+              dayOff: item.dayOff,
+              payrollClass: item.payrollClass,
+              transactionType: item.transactionType ?? item.requestTypeName,
+              totalHours: item.totalHours,
+              reason: item.reason,
+              status: item.status,
+            ),
+          ];
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: HygColors.border),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Table Header Bar
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            color: const Color(0xFF0F172A),
+            child: Row(
+              children: const [
+                Expanded(flex: 3, child: Text('ENTRY', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold))),
+                Expanded(flex: 3, child: Text('DATE', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold))),
+                Expanded(flex: 5, child: Text('TIME', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold))),
+                Expanded(flex: 4, child: Text('SCHEDULE', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold))),
+                Expanded(flex: 2, child: Text('HRS', style: TextStyle(color: HygColors.gold, fontSize: 12, fontWeight: FontWeight.bold))),
+                Expanded(flex: 2, child: Text('DAY OFF', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold))),
+                Expanded(flex: 3, child: Align(alignment: Alignment.centerRight, child: Text('STATUS', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)))),
+              ],
+            ),
+          ),
+
+          // Table Rows
+          for (int i = 0; i < list.length; i++) ...[
+            _buildEsarfEntryTableRow(context, item, list[i], i + 1, isEven: i % 2 == 0),
+            if (i < list.length - 1) const Divider(height: 1, color: HygColors.border),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEsarfEntryTableRow(BuildContext context, AdminRequestItem item, EsarfEntryItem entry, int index, {required bool isEven}) {
+    return Container(
+      color: isEven ? Colors.white : const Color(0xFFF8FAFC),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Entry # & Type Badge
+              Expanded(
+                flex: 3,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('#$index', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: HygColors.ink)),
+                    const SizedBox(width: 5),
+                    Flexible(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEFF6FF),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          entry.txAbbr,
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF1E40AF)),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Date
+              Expanded(
+                flex: 3,
+                child: Text(
+                  entry.datesText.isNotEmpty ? entry.datesText : '—',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: HygColors.ink),
+                ),
+              ),
+
+              // Time
+              Expanded(
+                flex: 5,
+                child: Text(
+                  entry.timesText.isNotEmpty ? entry.timesText : '—',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: HygColors.ink),
+                ),
+              ),
+
+              // Schedule
+              Expanded(
+                flex: 4,
+                child: Text(
+                  entry.timeScheduleText.isNotEmpty ? entry.timeScheduleText : '—',
+                  style: const TextStyle(fontSize: 12, color: Color(0xFF475569)),
+                ),
+              ),
+
+              // Hrs
+              Expanded(
+                flex: 2,
+                child: Text(
+                  entry.totalHours != null ? '${entry.totalHours!.toStringAsFixed(1)}h' : '—',
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Color(0xFF2563EB)),
+                ),
+              ),
+
+              // Day Off
+              Expanded(
+                flex: 2,
+                child: Text(
+                  entry.dayOffText.isNotEmpty ? entry.dayOffText : '—',
+                  style: const TextStyle(fontSize: 12, color: Color(0xFF475569)),
+                ),
+              ),
+
+              // Status (Aligned Right)
+              Expanded(
+                flex: 3,
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: _buildStatusBadge(entry.status ?? 'pending'),
+                ),
+              ),
+            ],
+          ),
+
+          // Note / Reason (Rendered below main row metrics)
+          if (entry.cleanReasonText.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Padding(
+              padding: const EdgeInsets.only(left: 2, top: 2, bottom: 2),
+              child: RichText(
+                text: TextSpan(
+                  style: HygTypography.body.copyWith(fontSize: 12, color: HygColors.ink),
+                  children: [
+                    const TextSpan(
+                      text: 'Note / Reason: ',
+                      style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF64748B)),
+                    ),
+                    TextSpan(text: entry.cleanReasonText),
+                  ],
+                ),
+              ),
+            ),
+          ],
+
+          // Embedded Approval Timeline
+          if (item.approvalSummary.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.account_tree_outlined, size: 14, color: Color(0xFF64748B)),
+                      const SizedBox(width: 5),
+                      Text(
+                        'Approval Timeline',
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF64748B)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  _buildApprovalTimelineForEntry(context, item, entry),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNonEsarfDetails(BuildContext context, AdminRequestItem item) {
+    final isLeave = item.category == AdminRequestCategory.leave;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: HygColors.border),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: _buildDetailGrid(isLeave
+          ? [
+              ('Leave Category', item.leaveCategory ?? '—'),
+              ('Leave Type', item.leaveType ?? '—'),
+              ('Available Credits', item.leaveCredits != null ? '${item.leaveCredits}' : '—'),
+              ('Start Date', item.startDate ?? '—'),
+              ('End Date', item.endDate ?? '—'),
+              ('Total Days', item.totalDays != null ? '${item.totalDays}' : '—'),
+            ]
+          : [
+              ('Type', item.requestTypeCode == 'discount' ? 'Discount' : 'Charge'),
+              ('Product', item.perkProductName ?? '—'),
+              ('Quantity', '${item.perkQuantity ?? 0}'),
+              ('Amount', item.perkAmount != null ? '₱${item.perkAmount!.toStringAsFixed(2)}' : '—'),
+              ('Final Amount', item.perkFinalAmount != null ? '₱${item.perkFinalAmount!.toStringAsFixed(2)}' : '—'),
+              ('Transaction Date', item.dateFrom ?? '—'),
+            ]),
+    );
+  }
+
+  Widget _buildDetailGrid(List<(String, String)> items) {
+    const int cols = 4;
+    final rows = <Widget>[];
+
+    for (int i = 0; i < items.length; i += cols) {
+      final chunk = items.sublist(i, (i + cols > items.length) ? items.length : i + cols);
+      rows.add(
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final pair in chunk)
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      pair.$1,
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: HygColors.muted),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      pair.$2,
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: HygColors.ink),
+                    ),
+                  ],
+                ),
+              ),
+            for (int k = chunk.length; k < cols; k++) const Expanded(child: SizedBox.shrink()),
+          ],
+        ),
+      );
+      if (i + cols < items.length) {
+        rows.add(const SizedBox(height: 12));
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: rows,
+    );
+  }
+
+  Widget _buildStatusBadge(String statusStr) {
+    final st = statusStr.toLowerCase();
+    Color bg = const Color(0xFFFEF3C7);
+    Color fg = const Color(0xFFB45309);
+    String label = 'PENDING';
+
+    if (st == 'approved' || st == 'success') {
+      bg = const Color(0xFFDCFCE7);
+      fg = const Color(0xFF15803D);
+      label = 'APPROVED';
+    } else if (st == 'rejected') {
+      bg = const Color(0xFFFEE2E2);
+      fg = const Color(0xFFB91C1C);
+      label = 'REJECTED';
+    } else if (st == 'cancelled') {
+      bg = const Color(0xFFF1F5F9);
+      fg = const Color(0xFF64748B);
+      label = 'CANCELLED';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(4)),
+      child: Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: fg)),
+    );
+  }
+
+  Widget _buildApprovalTimelineForEntry(BuildContext context, AdminRequestItem item, EsarfEntryItem? entry) {
+    final summary = item.approvalSummary;
+    if (summary.isEmpty) return const SizedBox.shrink();
+
+    final isEntryRejected = entry != null && entry.status == 'rejected';
+
+    return Column(
+      children: summary.asMap().entries.map((mapEntry) {
+        final idx = mapEntry.key;
+        final raw = mapEntry.value;
+        final rawStatus = (raw['status'] ?? 'pending').toString().toLowerCase();
+        final name = (raw['approver_name'] ?? raw['name'] ?? 'Approver ${idx + 1}').toString();
+        final level = raw['level']?.toString() ?? 'L${idx + 1}';
+
+        String displayStatus = rawStatus;
+        if (isEntryRejected) {
+          if (rawStatus == 'approved' || rawStatus == 'success' || rawStatus == 'pending') {
+            displayStatus = 'rejected';
+          } else {
+            displayStatus = 'cancelled';
+          }
+        }
+
+        final (icon, color) = _timelineIconAndColor(displayStatus);
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            children: [
+              Icon(icon, size: 15, color: color),
+              const SizedBox(width: 6),
+              Text('$level • $name', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color)),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
+                child: Text(
+                  displayStatus.toUpperCase(),
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color),
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildGlobalApprovalTimeline(BuildContext context, AdminRequestItem item) {
+    return Column(
+      children: item.approvalSummary.asMap().entries.map((mapEntry) {
+        final idx = mapEntry.key;
+        final raw = mapEntry.value;
+        final rawStatus = (raw['status'] ?? 'pending').toString().toLowerCase();
+        final name = (raw['approver_name'] ?? raw['name'] ?? 'Approver ${idx + 1}').toString();
+        final level = raw['level']?.toString() ?? 'L${idx + 1}';
+        final (icon, color) = _timelineIconAndColor(rawStatus);
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 3),
+          child: Row(
+            children: [
+              Icon(icon, size: 16, color: color),
+              const SizedBox(width: 8),
+              Text('$level • $name', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color)),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(4)),
+                child: Text(rawStatus.toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color)),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  (IconData, Color) _timelineIconAndColor(String status) {
+    switch (status) {
+      case 'approved':
+      case 'success':
+        return (Icons.check_circle, const Color(0xFF15803D));
+      case 'rejected':
+        return (Icons.cancel, const Color(0xFFB91C1C));
+      case 'cancelled':
+        return (Icons.block, const Color(0xFF64748B));
+      default:
+        return (Icons.access_time_filled, const Color(0xFFB45309));
+    }
+  }
+}

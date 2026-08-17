@@ -2837,10 +2837,12 @@ class AdminRequestsService {
       return const [];
     }
 
-    final requests = response
+    final rawRequests = response
         .whereType<Map<String, dynamic>>()
         .map(AdminRequestItem.fromRow)
         .toList();
+
+    final requests = _groupEsarfRequests(rawRequests);
 
     try {
       final usersResponse = await _client.rpc('admin_registered_users');
@@ -3027,7 +3029,7 @@ class AdminRequestsService {
     }
   }
 
-  /// Refreshes assigned approvers for all pending/active requests based on current approval routes and active (non-banned) status.
+  /// Refreshes assigned approvers for all pending/active requests based on current organizational hierarchy.
   static Future<String> refreshAssignedApprovers() async {
     try {
       final response = await _client.rpc('admin_refresh_assigned_approvers');
@@ -3036,6 +3038,83 @@ class AdminRequestsService {
     } catch (e) {
       return 'Failed to refresh assigned approvers: $e';
     }
+  }
+
+  static List<AdminRequestItem> _groupEsarfRequests(List<AdminRequestItem> items) {
+    final Map<String, AdminRequestItem> groupedMap = {};
+
+    for (final item in items) {
+      if (item.category != AdminRequestCategory.esarf) {
+        groupedMap[item.requestId] = item;
+        continue;
+      }
+
+      if (!groupedMap.containsKey(item.requestId)) {
+        groupedMap[item.requestId] = item;
+      } else {
+        final existing = groupedMap[item.requestId]!;
+        final newEntries = [...existing.entries, ...item.entries];
+
+        double totalHrs = 0;
+        final txTypes = <String>{};
+        for (final e in newEntries) {
+          if (e.totalHours != null) totalHrs += e.totalHours!;
+          if (e.transactionType != null && e.transactionType!.trim().isNotEmpty) {
+            txTypes.add(e.transactionType!.trim());
+          }
+        }
+
+        final combinedTxType = txTypes.isNotEmpty ? txTypes.join(', ') : existing.transactionType;
+
+        groupedMap[item.requestId] = AdminRequestItem(
+          requestId: existing.requestId,
+          requestTypeCode: existing.requestTypeCode,
+          requestTypeName: existing.requestTypeName,
+          status: existing.status,
+          submittedAt: existing.submittedAt,
+          finalApprovedAt: existing.finalApprovedAt,
+          rejectedAt: existing.rejectedAt,
+          rejectedReason: existing.rejectedReason,
+          employeeId: existing.employeeId,
+          employeeNo: existing.employeeNo,
+          employeeName: existing.employeeName,
+          employeePhoto: existing.employeePhoto,
+          departmentName: existing.departmentName,
+          positionName: existing.positionName,
+          companyName: existing.companyName,
+          storeName: existing.storeName,
+          dateFrom: existing.dateFrom,
+          dateTo: item.dateTo ?? existing.dateTo,
+          timeFrom: existing.timeFrom,
+          timeTo: existing.timeTo,
+          timeSchedule: existing.timeSchedule,
+          dayOff: existing.dayOff,
+          payrollClass: existing.payrollClass,
+          transactionType: combinedTxType,
+          totalHours: totalHrs > 0 ? totalHrs : existing.totalHours,
+          leaveType: existing.leaveType,
+          leaveCategory: existing.leaveCategory,
+          leaveCredits: existing.leaveCredits,
+          startDate: existing.startDate,
+          endDate: existing.endDate,
+          totalDays: existing.totalDays,
+          paidDays: existing.paidDays,
+          unpaidDays: existing.unpaidDays,
+          reason: existing.reason,
+          perkApprovalCode: existing.perkApprovalCode,
+          perkAmount: existing.perkAmount,
+          perkDiscountAmount: existing.perkDiscountAmount,
+          perkFinalAmount: existing.perkFinalAmount,
+          perkBenefit: existing.perkBenefit,
+          perkProductName: existing.perkProductName,
+          perkQuantity: existing.perkQuantity,
+          approvalSummary: existing.approvalSummary,
+          entries: newEntries,
+        );
+      }
+    }
+
+    return groupedMap.values.toList();
   }
 }
 

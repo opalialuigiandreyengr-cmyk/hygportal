@@ -640,6 +640,9 @@ class AdminRequestItem {
     required this.perkProductName,
     required this.perkQuantity,
     required this.approvalSummary,
+    this.entries = const [],
+    this.rawRow = const {},
+    this.remarks,
   });
 
   final String requestId;
@@ -685,6 +688,9 @@ class AdminRequestItem {
   final String? perkProductName;
   final int? perkQuantity;
   final List<Map<String, dynamic>> approvalSummary;
+  List<EsarfEntryItem> entries;
+  final Map<String, dynamic> rawRow;
+  final String? remarks;
 
   AdminRequestCategory get category {
     final code = requestTypeCode.toLowerCase();
@@ -768,6 +774,8 @@ class AdminRequestItem {
           .toList(growable: false);
     }
 
+    final parsedEntries = EsarfEntryItem.parseEsarfEntriesFromReason(row);
+
     return AdminRequestItem(
       requestId: row['request_id']?.toString() ?? '',
       requestTypeCode: row['request_type_code']?.toString() ?? '',
@@ -811,6 +819,9 @@ class AdminRequestItem {
       perkProductName: row['perk_product_name']?.toString(),
       perkQuantity: _parseInt(row['perk_quantity']),
       approvalSummary: approvalList,
+      entries: parsedEntries,
+      rawRow: row,
+      remarks: row['remarks']?.toString() ?? row['reason']?.toString(),
     );
   }
 
@@ -826,3 +837,158 @@ class AdminRequestItem {
     return int.tryParse(value.toString());
   }
 }
+
+class EsarfEntryItem {
+  EsarfEntryItem({
+    this.id,
+    this.requestId,
+    this.dateFrom,
+    this.dateTo,
+    this.timeFrom,
+    this.timeTo,
+    this.timeSchedule,
+    this.dayOff,
+    this.payrollClass,
+    this.transactionType,
+    this.totalHours,
+    this.reason,
+    this.status,
+  });
+
+  final String? id;
+  final String? requestId;
+  final String? dateFrom;
+  final String? dateTo;
+  final String? timeFrom;
+  final String? timeTo;
+  final String? timeSchedule;
+  final String? dayOff;
+  final String? payrollClass;
+  final String? transactionType;
+  final double? totalHours;
+  final String? reason;
+  final String? status;
+
+  String get txAbbr {
+    final t = transactionType ?? '';
+    if (t.toUpperCase().contains('OVERTIME') || t.toUpperCase() == 'OT') return 'OT';
+    if (t.toUpperCase().contains('OFFICIAL BUSINESS') || t.toUpperCase() == 'OB') return 'OB';
+    if (t.toUpperCase().contains('FAILURE TO PUNCH') || t.toUpperCase() == 'FIO') return 'FIO';
+    if (t.toUpperCase().contains('UNDERTIME') || t.toUpperCase() == 'UT') return 'UT';
+    if (t.toUpperCase().contains('REST DAY') || t.toUpperCase() == 'RD') return 'RD';
+    return t.isNotEmpty ? t : 'ESARF';
+  }
+  String get datesText => dateFrom ?? '';
+  String get timesText => (timeFrom != null && timeFrom!.isNotEmpty && timeTo != null && timeTo!.isNotEmpty) ? '$timeFrom - $timeTo' : (timeFrom ?? '');
+  String get dayOffText => dayOff ?? '';
+  String get timeScheduleText => timeSchedule ?? '';
+  String get cleanReasonText => reason ?? '';
+
+  factory EsarfEntryItem.fromRow(Map<String, dynamic> row) {
+    return EsarfEntryItem(
+      id: row['id']?.toString(),
+      requestId: row['request_id']?.toString(),
+      dateFrom: row['date_from']?.toString(),
+      dateTo: row['date_to']?.toString(),
+      timeFrom: row['time_from']?.toString(),
+      timeTo: row['time_to']?.toString(),
+      timeSchedule: row['time_schedule']?.toString(),
+      dayOff: row['day_off']?.toString(),
+      payrollClass: row['payroll_class']?.toString(),
+      transactionType: row['transaction_type']?.toString(),
+      totalHours: AdminRequestItem._parseDouble(row['total_hours']),
+      reason: row['reason']?.toString(),
+      status: row['entry_status']?.toString() ?? row['status']?.toString(),
+    );
+  }
+
+  static List<EsarfEntryItem> parseEsarfEntriesFromReason(Map<String, dynamic> row) {
+    final rawReason = row['reason']?.toString() ?? '';
+    final defaultEntry = EsarfEntryItem.fromRow(row);
+
+    if (!rawReason.contains('[Entry ')) {
+      return [defaultEntry];
+    }
+
+    final blocks = rawReason.split(RegExp(r'\[Entry\s+')).where((b) => b.trim().isNotEmpty).toList();
+    if (blocks.isEmpty) {
+      return [defaultEntry];
+    }
+
+    final parsedEntries = <EsarfEntryItem>[];
+    for (int idx = 0; idx < blocks.length; idx++) {
+      final block = blocks[idx];
+      final fullText = '[Entry ${block.trim()}';
+      final match = RegExp(r'^\[Entry\s+(\d+)\]\s*\(([^)]+)\)\s*(.*?)\s*\(([^)]+)\):\s*([\s\S]*)$').firstMatch(fullText);
+
+      if (match != null) {
+        final entryNum = int.tryParse(match.group(1) ?? '') ?? (idx + 1);
+        final transactionLabel = match.group(2)?.trim();
+        final dateTimeChunk = match.group(3)?.trim() ?? '';
+        final hoursStr = (match.group(4) ?? '').replaceAll(RegExp(r'[^\d.]'), '').trim();
+        final reasonText = match.group(5)?.trim() ?? '';
+
+        String dateStr = '';
+        String timeFromStr = '';
+        String timeToStr = '';
+
+        final chunkParts = dateTimeChunk.split(RegExp(r'\s+'));
+        if (chunkParts.isNotEmpty) {
+          dateStr = chunkParts[0];
+          if (chunkParts.length >= 2) {
+            final timeRest = chunkParts.sublist(1).join(' ');
+            final timeSplit = timeRest.split(RegExp(r'\s*-\s*'));
+            if (timeSplit.length >= 2) {
+              timeFromStr = timeSplit[0].trim();
+              timeToStr = timeSplit[1].trim();
+            } else {
+              timeFromStr = timeRest.trim();
+            }
+          }
+        }
+
+        String formattedDate = dateStr;
+        if (dateStr.contains('/')) {
+          final parts = dateStr.split('/');
+          if (parts.length == 3 && parts[2].length == 4) {
+            formattedDate = '${parts[2]}-${parts[0].padLeft(2, "0")}-${parts[1].padLeft(2, "0")}';
+          }
+        }
+
+        final hrsVal = double.tryParse(hoursStr);
+
+        final isEntryRejected = fullText.contains('[REJECTED]') || fullText.toLowerCase().contains('status: rejected');
+        final isEntryApproved = fullText.contains('[APPROVED]');
+        final cleanReasonText = reasonText
+            .replaceAll('[REJECTED]', '')
+            .replaceAll('[APPROVED]', '')
+            .trim();
+
+        final entryStatus = isEntryRejected
+            ? 'rejected'
+            : (isEntryApproved ? 'approved' : (defaultEntry.status ?? 'pending'));
+
+        parsedEntries.add(
+          EsarfEntryItem(
+            id: '${row['request_id']}_$entryNum',
+            requestId: row['request_id']?.toString(),
+            dateFrom: formattedDate.isNotEmpty ? formattedDate : defaultEntry.dateFrom,
+            dateTo: formattedDate.isNotEmpty ? formattedDate : defaultEntry.dateTo,
+            timeFrom: timeFromStr.isNotEmpty ? timeFromStr : defaultEntry.timeFrom,
+            timeTo: timeToStr.isNotEmpty ? timeToStr : defaultEntry.timeTo,
+            timeSchedule: defaultEntry.timeSchedule,
+            dayOff: defaultEntry.dayOff,
+            payrollClass: defaultEntry.payrollClass,
+            transactionType: transactionLabel ?? defaultEntry.transactionType,
+            totalHours: hrsVal ?? defaultEntry.totalHours,
+            reason: cleanReasonText.isNotEmpty ? cleanReasonText : defaultEntry.reason,
+            status: entryStatus,
+          ),
+        );
+      }
+    }
+
+    return parsedEntries.isNotEmpty ? parsedEntries : [defaultEntry];
+  }
+}
+

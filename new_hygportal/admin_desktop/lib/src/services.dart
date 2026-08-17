@@ -102,10 +102,9 @@ class EmployeeDirectoryService {
         final rows = response.whereType<Map<String, dynamic>>().toList();
         final missingBirthdates = rows
             .where((r) {
-              final bd = r['birth_date'] ?? r['birthdate'];
+              final bd = r['birth_date'] ?? r['birthdate'] ?? r['date_of_birth'];
               return bd == null || bd.toString().trim().isEmpty;
             })
-            .take(15)
             .toList();
 
         if (missingBirthdates.isNotEmpty) {
@@ -320,59 +319,103 @@ class EmployeeDirectoryService {
     required String id,
     required EmployeeProfilePayload payload,
   }) async {
-    final response = await _client.rpc(
-      'hr_update_employee_profile',
-      params: {
-        'p_username': AppConfig.hrUsername,
-        'p_password': AppConfig.hrPassword,
-        'p_employee_id': id,
-        'p_last_name': payload.lastName,
-        'p_first_name': payload.firstName,
-        'p_middle_name': payload.middleName,
-        'p_suffix': payload.suffix,
-        'p_birth_date': payload.birthDate,
-        'p_gender': payload.gender,
-        'p_civil_status': payload.civilStatus,
-        'p_cellphone': payload.phone,
-        'p_email': payload.email,
-        'p_company': payload.company,
-        'p_work_unit': payload.department,
-        'p_position': payload.position,
-        'p_date_hired': payload.dateHired,
-        'p_employee_type': payload.employeeType,
-        'p_time_schedule': payload.schedule,
-        'p_day_off_day': payload.dayOffDay,
-        'p_payroll_class': payload.payrollClass,
-        'p_tin': payload.tin,
-        'p_sss': payload.sss,
-        'p_pagibig': payload.pagibig,
-        'p_philhealth': payload.philhealth,
-        'p_bank_type': payload.bankType,
-        'p_account_no': payload.accountNo,
-        'p_present_address': payload.presentAddress,
-        'p_emergency_contact': payload.emergencyContact,
-      },
-    );
+    final paramsWithStatus = <String, dynamic>{
+      'p_username': AppConfig.hrUsername,
+      'p_password': AppConfig.hrPassword,
+      'p_employee_id': id,
+      'p_last_name': payload.lastName,
+      'p_first_name': payload.firstName,
+      'p_middle_name': payload.middleName,
+      'p_suffix': payload.suffix,
+      'p_birth_date': payload.birthDate,
+      'p_gender': payload.gender,
+      'p_civil_status': payload.civilStatus,
+      'p_cellphone': payload.phone,
+      'p_email': payload.email,
+      'p_company': payload.company,
+      'p_work_unit': payload.department,
+      'p_position': payload.position,
+      'p_date_hired': payload.dateHired,
+      'p_employee_type': payload.employeeType,
+      'p_time_schedule': payload.schedule,
+      'p_day_off_day': payload.dayOffDay,
+      'p_payroll_class': payload.payrollClass,
+      'p_tin': payload.tin,
+      'p_sss': payload.sss,
+      'p_pagibig': payload.pagibig,
+      'p_philhealth': payload.philhealth,
+      'p_bank_type': payload.bankType,
+      'p_account_no': payload.accountNo,
+      'p_present_address': payload.presentAddress,
+      'p_emergency_contact': payload.emergencyContact,
+      'p_employment_status': payload.employmentStatus,
+    };
 
+    bool primaryRpcUpdatedStatus = false;
+    dynamic response;
     try {
-      await _client.rpc(
-        'hr_set_employee_status',
-        params: {
-          'p_username': AppConfig.hrUsername,
-          'p_password': AppConfig.hrPassword,
-          'p_employee_id': id,
-          'p_employment_status': payload.employmentStatus,
-        },
+      response = await _client.rpc(
+        'hr_update_employee_profile',
+        params: paramsWithStatus,
       );
+      primaryRpcUpdatedStatus = true;
     } catch (error) {
-      final message = error.toString();
-      final missingStatusFunction =
-          message.contains('hr_set_employee_status') ||
-          message.contains('PGRST202');
-      if (!missingStatusFunction) {
+      final msg = error.toString();
+      if (msg.contains('p_employment_status') ||
+          msg.contains('PGRST202') ||
+          msg.contains('hr_update_employee_profile')) {
+        final legacyParams = Map<String, dynamic>.from(paramsWithStatus)
+          ..remove('p_employment_status');
+        response = await _client.rpc(
+          'hr_update_employee_profile',
+          params: legacyParams,
+        );
+      } else {
         rethrow;
       }
     }
+
+    if (payload.employmentStatus.trim().isNotEmpty) {
+      final normalizedStatus = payload.employmentStatus.trim().toLowerCase();
+      bool setStatusSucceeded = false;
+      Object? setStatusError;
+      try {
+        await _client.rpc(
+          'hr_set_employee_status',
+          params: {
+            'p_username': AppConfig.hrUsername,
+            'p_password': AppConfig.hrPassword,
+            'p_employee_id': id,
+            'p_employment_status': normalizedStatus,
+          },
+        );
+        setStatusSucceeded = true;
+      } catch (error) {
+        setStatusError = error;
+      }
+
+      if (!primaryRpcUpdatedStatus && !setStatusSucceeded) {
+        throw Exception(
+          'Employee status update failed on database. Please run migration 0158_hr_employee_status_update_fix.sql in your Supabase SQL Editor, then retry. Details: $setStatusError',
+        );
+      }
+    }
+
+    try {
+      final cachedRows = await LocalSyncService.loadCachedRows('employee_cache');
+      bool updatedInCache = false;
+      for (final row in cachedRows) {
+        final rowId = (row['employee_id'] ?? row['id'])?.toString();
+        if (rowId == id) {
+          row['employment_status'] = payload.employmentStatus.trim().toLowerCase();
+          updatedInCache = true;
+          break;
+        }
+      }
+      if (updatedInCache) {
+        await LocalSyncService.cacheRows('employee_cache', cachedRows);
+      }
+    } catch (_) {}
 
     await _updateEmployeeSupplementalDetails(employeeId: id, payload: payload);
     await _setEmployeeStore(employeeId: id, payload: payload);
@@ -415,6 +458,10 @@ class EmployeeDirectoryService {
       final existing =
           await LocalSyncService.loadCachedProfile(employeeId) ?? {};
       final updated = Map<String, dynamic>.of(existing);
+      if (payload.employmentStatus.trim().isNotEmpty) {
+        updated['employment_status'] =
+            payload.employmentStatus.trim().toLowerCase();
+      }
       updated['reason_of_inactivity'] = payload.reasonOfInactivity;
       updated['date_inactive'] = payload.dateInactive;
       await LocalSyncService.cacheProfile(employeeId, updated);

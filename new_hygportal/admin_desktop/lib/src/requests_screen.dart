@@ -1405,36 +1405,38 @@ class _RequestsPanelState extends State<RequestsPanel>
                   ),
                 ],
                 const Spacer(),
-                SizedBox(
-                  height: 34,
-                  child: ElevatedButton.icon(
-                    onPressed: _isRefreshingApprovers ? null : _refreshAssignedApprovers,
-                    icon: _isRefreshingApprovers
-                        ? const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Icon(Icons.sync, size: 16),
-                    label: const Text('Refresh Assigned Approver'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1E40AF),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
-                      textStyle: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
+                if (_tabController.index < _tabs.length && _tabs[_tabController.index] != 'Perks') ...[
+                  SizedBox(
+                    height: 34,
+                    child: ElevatedButton.icon(
+                      onPressed: _isRefreshingApprovers ? null : _refreshAssignedApprovers,
+                      icon: _isRefreshingApprovers
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(Icons.sync, size: 16),
+                      label: const Text('Refresh Assigned Approver'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1E40AF),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        textStyle: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
+                  const SizedBox(width: 8),
+                ],
                 SizedBox(
                   height: 34,
                   child: ElevatedButton.icon(

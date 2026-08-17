@@ -1603,7 +1603,11 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
                             onSetDepartmentLadder: _setDepartmentApprovalLadder,
                           ),
                         ] else if (_activeSection == HrSection.employees) ...[
-                          EmployeesHeader(onAddEmployee: _openAddEmployeeModal),
+                          EmployeesHeader(
+                            onAddEmployee: _openAddEmployeeModal,
+                            onRefresh: _loadEmployees,
+                            isRefreshing: _isLoadingEmployees,
+                          ),
                           const SizedBox(height: 14),
                           EmployeesPanel(
                             employees: _employees,

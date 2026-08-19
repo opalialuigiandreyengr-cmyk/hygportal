@@ -1043,6 +1043,13 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
   String _employeeSaveErrorMessage(Object error) {
     final message = error.toString().replaceFirst('Exception: ', '');
 
+    if (error is StorageException ||
+        message.contains('StorageException') ||
+        message.contains('Bucket not found') ||
+        message.contains('bucket')) {
+      return 'Only employees can update or upload profile picture.';
+    }
+
     if (message.contains('hr_set_employee_status')) {
       return 'Employee status update function is missing. Apply migration 0158_hr_employee_status_update_fix.sql, then retry.';
     }

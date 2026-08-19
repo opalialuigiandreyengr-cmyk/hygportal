@@ -13,10 +13,20 @@ class _HygBirthdaysScreenState extends State<HygBirthdaysScreen> {
   bool _isLoading = true;
   String? _error;
   String _activeFilter = 'All'; // 'All', 'Passed', 'Today', 'Upcoming'
+  late int _selectedMonth;
+  late int _selectedYear;
+
+  static const List<String> _monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
 
   @override
   void initState() {
     super.initState();
+    final now = _phNow();
+    _selectedMonth = now.month;
+    _selectedYear = now.year;
     _loadBirthdays();
   }
 
@@ -54,13 +64,52 @@ class _HygBirthdaysScreenState extends State<HygBirthdaysScreen> {
     return DateTime.now().toUtc().add(const Duration(hours: 8));
   }
 
+  void _previousMonth() {
+    setState(() {
+      if (_selectedMonth == 1) {
+        _selectedMonth = 12;
+        _selectedYear--;
+      } else {
+        _selectedMonth--;
+      }
+    });
+  }
+
+  void _nextMonth() {
+    setState(() {
+      if (_selectedMonth == 12) {
+        _selectedMonth = 1;
+        _selectedYear++;
+      } else {
+        _selectedMonth++;
+      }
+    });
+  }
+
+  void _resetToCurrentMonth() {
+    final now = _phNow();
+    setState(() {
+      _selectedMonth = now.month;
+      _selectedYear = now.year;
+    });
+  }
+
   DateTime? _parseBirthDate(String? raw) {
     if (raw == null || raw.trim().isEmpty) return null;
     final str = raw.trim();
 
     try {
-      return DateTime.parse(str);
+      final parsed = DateTime.parse(str);
+      return DateTime(parsed.year, parsed.month, parsed.day);
     } catch (_) {}
+
+    if (str.length >= 10 && str.contains('-')) {
+      final datePart = str.substring(0, 10);
+      try {
+        final parsed = DateTime.parse(datePart);
+        return DateTime(parsed.year, parsed.month, parsed.day);
+      } catch (_) {}
+    }
 
     final parts = str.split(RegExp(r'[\s\-/,\._]+')).where((p) => p.isNotEmpty).toList();
     if (parts.length >= 2) {
@@ -106,7 +155,7 @@ class _HygBirthdaysScreenState extends State<HygBirthdaysScreen> {
         return DateTime(year, month, day);
       }
 
-      if (nums.length == 3) {
+      if (nums.length >= 3) {
         if (nums[0] > 1000) {
           year = nums[0];
           if (nums[1] <= 12 && nums[2] <= 31) {
@@ -142,6 +191,11 @@ class _HygBirthdaysScreenState extends State<HygBirthdaysScreen> {
           day = nums[1];
           year = DateTime.now().year;
           return DateTime(year, month, day);
+        } else if (nums[1] <= 12 && nums[0] <= 31) {
+          day = nums[0];
+          month = nums[1];
+          year = DateTime.now().year;
+          return DateTime(year, month, day);
         }
       }
     }
@@ -151,16 +205,19 @@ class _HygBirthdaysScreenState extends State<HygBirthdaysScreen> {
 
   List<_BirthdayItem> _getAllMonthBirthdays() {
     final now = _phNow();
-    final currentMonth = now.month;
     final query = _searchController.text.trim().toLowerCase();
+    final isCurrentMonthYear = (now.month == _selectedMonth && now.year == _selectedYear);
+    final isFutureMonth = (_selectedYear > now.year) || (_selectedYear == now.year && _selectedMonth > now.month);
 
     final items = <_BirthdayItem>[];
 
     for (final emp in _allEmployees) {
+      if (emp.status.trim().toLowerCase() == 'inactive') continue;
+
       final bdate = _parseBirthDate(emp.rawBirthDate);
       if (bdate == null) continue;
 
-      if (bdate.month != currentMonth) continue;
+      if (bdate.month != _selectedMonth) continue;
 
       if (query.isNotEmpty) {
         final nameMatch = emp.name.toLowerCase().contains(query);
@@ -169,9 +226,23 @@ class _HygBirthdaysScreenState extends State<HygBirthdaysScreen> {
         if (!nameMatch && !deptMatch && !compMatch) continue;
       }
 
-      final isToday = bdate.day == now.day;
-      final isUpcoming = bdate.day > now.day;
-      final isPassed = bdate.day < now.day;
+      bool isToday = false;
+      bool isUpcoming = false;
+      bool isPassed = false;
+      int daysDifference = 0;
+
+      if (isCurrentMonthYear) {
+        isToday = (bdate.day == now.day);
+        isUpcoming = (bdate.day > now.day);
+        isPassed = (bdate.day < now.day);
+        daysDifference = bdate.day - now.day;
+      } else if (isFutureMonth) {
+        isUpcoming = true;
+        daysDifference = bdate.day;
+      } else {
+        isPassed = true;
+        daysDifference = bdate.day;
+      }
 
       items.add(_BirthdayItem(
         employee: emp,
@@ -180,7 +251,7 @@ class _HygBirthdaysScreenState extends State<HygBirthdaysScreen> {
         isToday: isToday,
         isUpcoming: isUpcoming,
         isPassed: isPassed,
-        daysDifference: bdate.day - now.day,
+        daysDifference: daysDifference,
       ));
     }
 
@@ -200,7 +271,7 @@ class _HygBirthdaysScreenState extends State<HygBirthdaysScreen> {
     } else if (_activeFilter == 'Today') {
       return allItems.where((item) => item.isToday).toList();
     } else if (_activeFilter == 'Upcoming') {
-      return allItems.where((item) => item.isUpcoming || item.isToday).toList();
+      return allItems.where((item) => item.isUpcoming).toList();
     }
     return allItems;
   }
@@ -208,11 +279,8 @@ class _HygBirthdaysScreenState extends State<HygBirthdaysScreen> {
   @override
   Widget build(BuildContext context) {
     final now = _phNow();
-    const monthNames = <String>[
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
-    ];
-    final currentMonthName = monthNames[now.month - 1];
+    final selectedMonthName = _monthNames[_selectedMonth - 1];
+    final isCurrentMonthYear = (now.month == _selectedMonth && now.year == _selectedYear);
 
     final allMonthItems = _getAllMonthBirthdays();
     final filtered = _filterItems(allMonthItems);
@@ -229,7 +297,7 @@ class _HygBirthdaysScreenState extends State<HygBirthdaysScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _buildHeader(context, currentMonthName, now.year),
+              _buildHeader(context, selectedMonthName, _selectedYear, isCurrentMonthYear),
               const SizedBox(height: 14),
               _buildStatsBar(passedCount, todayCount, upcomingCount),
               const SizedBox(height: 14),
@@ -257,12 +325,12 @@ class _HygBirthdaysScreenState extends State<HygBirthdaysScreen> {
                             ),
                           )
                         : filtered.isEmpty
-                            ? _buildEmptyState(currentMonthName)
+                            ? _buildEmptyState(selectedMonthName)
                             : ListView.separated(
                                 itemCount: filtered.length,
-                                separatorBuilder: (_, __) => const SizedBox(height: 10),
+                                separatorBuilder: (_, _) => const SizedBox(height: 10),
                                 itemBuilder: (context, index) {
-                                  return _buildBirthdayCard(filtered[index], currentMonthName);
+                                  return _buildBirthdayCard(filtered[index], selectedMonthName);
                                 },
                               ),
               ),
@@ -273,7 +341,7 @@ class _HygBirthdaysScreenState extends State<HygBirthdaysScreen> {
     );
   }
 
-  Widget _buildHeader(BuildContext context, String monthName, int year) {
+  Widget _buildHeader(BuildContext context, String monthName, int year, bool isCurrentMonthYear) {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -299,14 +367,73 @@ class _HygBirthdaysScreenState extends State<HygBirthdaysScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Upcoming Birthdays',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 21,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0,
-                  ),
+                Row(
+                  children: [
+                    const Text(
+                      'Upcoming Birthdays',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 21,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // Month Navigation Controls
+                    Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E293B),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFF334155)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.chevron_left, color: Colors.white, size: 20),
+                            onPressed: _previousMonth,
+                            padding: const EdgeInsets.all(4),
+                            constraints: const BoxConstraints(),
+                            tooltip: 'Previous Month',
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            child: Text(
+                              '$monthName $year',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.chevron_right, color: Colors.white, size: 20),
+                            onPressed: _nextMonth,
+                            padding: const EdgeInsets.all(4),
+                            constraints: const BoxConstraints(),
+                            tooltip: 'Next Month',
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (!isCurrentMonthYear) ...[
+                      const SizedBox(width: 8),
+                      TextButton.icon(
+                        onPressed: _resetToCurrentMonth,
+                        icon: const Icon(Icons.today, size: 14, color: Color(0xFF38BDF8)),
+                        label: const Text(
+                          'Current Month',
+                          style: TextStyle(color: Color(0xFF38BDF8), fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 2),
                 Text(
@@ -321,6 +448,12 @@ class _HygBirthdaysScreenState extends State<HygBirthdaysScreen> {
               ],
             ),
           ),
+          IconButton(
+            icon: const Icon(Icons.refresh, color: Colors.white),
+            onPressed: _loadBirthdays,
+            tooltip: 'Refresh Employee Birthdays',
+          ),
+          const SizedBox(width: 8),
           OutlinedButton.icon(
             onPressed: () => Navigator.of(context).pop(),
             style: OutlinedButton.styleFrom(
@@ -367,7 +500,7 @@ class _HygBirthdaysScreenState extends State<HygBirthdaysScreen> {
           child: _buildStatChip(
             icon: Icons.auto_awesome,
             iconColor: const Color(0xFF8B5CF6),
-            label: 'Upcoming Later',
+            label: 'Upcoming Birthdays',
             count: '$upcoming',
             bgColor: const Color(0xFFF5F3FF),
             filterKey: 'Upcoming',

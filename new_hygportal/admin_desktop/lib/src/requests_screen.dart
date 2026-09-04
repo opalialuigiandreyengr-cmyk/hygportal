@@ -60,37 +60,59 @@ String _formatDaysNum(double? d) {
 // Ã¢â€â‚¬Ã¢â€â‚¬ Header Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 class RequestsHeader extends StatelessWidget {
-  const RequestsHeader({required this.onRefresh, super.key});
-  final VoidCallback onRefresh;
+  const RequestsHeader({this.onRefresh, super.key});
+  final VoidCallback? onRefresh;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Kicker('Admin Control Center'),
-              const SizedBox(height: 4),
-              Text(
-                'All Employee Requests',
-                style: HygTypography.pageTitle,
-              ),
-              const SizedBox(height: 2),
-              Text(
-                'View and monitor ESARF, Leave, and Perk requests across the organisation.',
-                style: HygTypography.body,
-              ),
-            ],
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.inbox_outlined,
+            color: HygColors.goldStrong,
+            size: 42,
           ),
-        ),
-        IconButton(
-          tooltip: 'Refresh',
-          onPressed: onRefresh,
-          icon: const Icon(Icons.refresh, color: Color(0xFF475569)),
-        ),
-      ],
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Kicker('Admin Control Center'),
+                const SizedBox(height: 4),
+                Text(
+                  'All Employee Requests',
+                  style: HygTypography.pageTitle,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'View and monitor ESARF, Leave, and Perk requests across the organisation.',
+                  style: HygTypography.body,
+                ),
+              ],
+            ),
+          ),
+          if (onRefresh != null) ...[
+            const SizedBox(width: 14),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: HygColors.gold,
+                foregroundColor: HygColors.ink,
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: onRefresh,
+              icon: const Icon(Icons.refresh, size: 19, color: HygColors.ink),
+              label: const Text('Refresh', style: TextStyle(fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -160,7 +182,10 @@ class _RequestsPanelState extends State<RequestsPanel>
 
     if (_statusFilter != 'all') {
       items = items
-          .where((r) => r.status.toLowerCase() == _statusFilter)
+          .where((r) {
+            final effectiveStatus = r.isAutoApprovedBirthdayGrant ? 'approved' : r.status.toLowerCase();
+            return effectiveStatus == _statusFilter;
+          })
           .toList(growable: false);
     }
 
@@ -1924,7 +1949,7 @@ class _RequestsTableState extends State<_RequestsTable> {
           final rawName = (entry['approver_name'] ?? entry['name'] ?? 'Unknown').toString().trim();
           final name = rawName.isEmpty ? 'Unknown' : rawName;
           final status = (entry['status'] ?? 'pending').toString().toLowerCase();
-          final level = entry['level']?.toString();
+          final level = (entry['required_level'] ?? entry['approver_level'] ?? entry['level'])?.toString();
           final stepId = (entry['step_id'] ?? entry['id'])?.toString();
           return _ApproverEntry(name: name, status: status, level: level, stepId: stepId);
         }).toList(growable: false);
@@ -2370,11 +2395,12 @@ class _RequestsTableState extends State<_RequestsTable> {
   }
 
   DataCell _actionsCell(AdminRequestItem item) {
+    final isAutoApproved = item.isAutoApprovedBirthdayGrant;
     return DataCell(
       Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (widget.category == AdminRequestCategory.leave && widget.onValidate != null) ...[
+          if (!isAutoApproved && widget.category == AdminRequestCategory.leave && widget.onValidate != null) ...[
             Tooltip(
               message: 'Validate request',
               child: InkWell(
@@ -3099,7 +3125,7 @@ class _RequestDetailModal extends StatelessWidget {
                     ],
 
                     // Global Workflow Timeline (Only for Non-ESARF)
-                    if (!isEsarf && item.approvalSummary.isNotEmpty) ...[
+                    if (!isEsarf && (item.approvalSummary.isNotEmpty || item.isAutoApprovedBirthdayGrant)) ...[
                       const SizedBox(height: 14),
                       const Text(
                         'Approval Workflow Timeline',
@@ -3315,6 +3341,7 @@ class _RequestDetailModal extends StatelessWidget {
           if (item.approvalSummary.isNotEmpty) ...[
             const SizedBox(height: 8),
             Container(
+              width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -3322,7 +3349,7 @@ class _RequestDetailModal extends StatelessWidget {
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Row(
                     children: [
@@ -3443,6 +3470,52 @@ class _RequestDetailModal extends StatelessWidget {
     );
   }
 
+  String _formatApprovalLevel(Map<String, dynamic> raw, int fallbackIdx) {
+    final rawLevel = raw['required_level'] ??
+        raw['approver_level'] ??
+        raw['level'] ??
+        raw['route_level'];
+
+    if (rawLevel != null) {
+      String s = rawLevel.toString().trim();
+      if (s.isNotEmpty) {
+        if (s.toLowerCase().startsWith('level')) {
+          s = s.substring(5).trim();
+        } else if (s.toUpperCase().startsWith('L')) {
+          s = s.substring(1).trim();
+        }
+        if (s.isNotEmpty) {
+          return 'L$s';
+        }
+      }
+    }
+    return 'L${fallbackIdx + 1}';
+  }
+
+  String? _formatApprovalTimestamp(dynamic rawTs) {
+    if (rawTs == null) return null;
+    final str = rawTs.toString().trim();
+    if (str.isEmpty) return null;
+
+    try {
+      final dt = DateTime.parse(str);
+      final ph = dt.toUtc().add(const Duration(hours: 8));
+      final months = const [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      ];
+      final month = months[ph.month - 1];
+      final day = ph.day.toString().padLeft(2, '0');
+      final year = ph.year;
+      final hour12 = ph.hour == 0 ? 12 : (ph.hour > 12 ? ph.hour - 12 : ph.hour);
+      final minute = ph.minute.toString().padLeft(2, '0');
+      final ampm = ph.hour >= 12 ? 'PM' : 'AM';
+      return '$month $day, $year • $hour12:$minute $ampm';
+    } catch (_) {
+      return str;
+    }
+  }
+
   Widget _buildApprovalTimelineForEntry(BuildContext context, AdminRequestItem item, EsarfEntryItem? entry) {
     final summary = item.approvalSummary;
     if (summary.isEmpty) return const SizedBox.shrink();
@@ -3450,12 +3523,13 @@ class _RequestDetailModal extends StatelessWidget {
     final isEntryRejected = entry != null && entry.status == 'rejected';
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: summary.asMap().entries.map((mapEntry) {
         final idx = mapEntry.key;
         final raw = mapEntry.value;
         final rawStatus = (raw['status'] ?? 'pending').toString().toLowerCase();
         final name = (raw['approver_name'] ?? raw['name'] ?? 'Approver ${idx + 1}').toString();
-        final level = raw['level']?.toString() ?? 'L${idx + 1}';
+        final level = _formatApprovalLevel(raw, idx);
 
         String displayStatus = rawStatus;
         if (isEntryRejected) {
@@ -3468,15 +3542,53 @@ class _RequestDetailModal extends StatelessWidget {
 
         final (icon, color) = _timelineIconAndColor(displayStatus);
 
+        String? rawTs = raw['acted_at']?.toString() ?? raw['approved_at']?.toString();
+        if ((rawTs == null || rawTs.isEmpty) && (displayStatus == 'approved' || displayStatus == 'success')) {
+          if (summary.length == 1 || idx == summary.length - 1) {
+            rawTs = item.finalApprovedAt;
+          }
+        } else if ((rawTs == null || rawTs.isEmpty) && displayStatus == 'rejected') {
+          if (summary.length == 1 || idx == summary.length - 1) {
+            rawTs = item.rejectedAt;
+          }
+        }
+        final formattedTs = _formatApprovalTimestamp(rawTs);
+
         return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 2),
+          padding: const EdgeInsets.symmetric(vertical: 3),
           child: Row(
             children: [
               Icon(icon, size: 15, color: color),
               const SizedBox(width: 6),
-              Text('$level • $name', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color)),
-              const Spacer(),
+              Expanded(
+                child: Text(
+                  '$level • $name',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 12),
+              if (formattedTs != null && formattedTs.isNotEmpty) ...[
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.access_time, size: 12, color: Color(0xFF64748B)),
+                    const SizedBox(width: 4),
+                    Text(
+                      formattedTs,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        color: Color(0xFF64748B),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(width: 8),
+              ],
               Container(
+                alignment: Alignment.center,
+                constraints: const BoxConstraints(minWidth: 72),
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
                 child: Text(
@@ -3492,14 +3604,81 @@ class _RequestDetailModal extends StatelessWidget {
   }
 
   Widget _buildGlobalApprovalTimeline(BuildContext context, AdminRequestItem item) {
+    if (item.isAutoApprovedBirthdayGrant) {
+      const color = Color(0xFF15803D);
+      final formattedTs = _formatApprovalTimestamp(item.finalApprovedAt ?? item.submittedAt);
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(
+          children: [
+            const Icon(Icons.check_circle, size: 16, color: color),
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Text(
+                'HYG Portal System',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 12),
+            if (formattedTs != null && formattedTs.isNotEmpty) ...[
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.access_time, size: 12, color: Color(0xFF64748B)),
+                  const SizedBox(width: 4),
+                  Text(
+                    formattedTs,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF64748B),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 8),
+            ],
+            Container(
+              alignment: Alignment.center,
+              constraints: const BoxConstraints(minWidth: 72),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Text(
+                'APPROVED',
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final summary = item.approvalSummary;
     return Column(
-      children: item.approvalSummary.asMap().entries.map((mapEntry) {
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: summary.asMap().entries.map((mapEntry) {
         final idx = mapEntry.key;
         final raw = mapEntry.value;
         final rawStatus = (raw['status'] ?? 'pending').toString().toLowerCase();
         final name = (raw['approver_name'] ?? raw['name'] ?? 'Approver ${idx + 1}').toString();
-        final level = raw['level']?.toString() ?? 'L${idx + 1}';
+        final level = _formatApprovalLevel(raw, idx);
         final (icon, color) = _timelineIconAndColor(rawStatus);
+
+        String? rawTs = raw['acted_at']?.toString() ?? raw['approved_at']?.toString();
+        if ((rawTs == null || rawTs.isEmpty) && (rawStatus == 'approved' || rawStatus == 'success')) {
+          if (summary.length == 1 || idx == summary.length - 1) {
+            rawTs = item.finalApprovedAt;
+          }
+        } else if ((rawTs == null || rawTs.isEmpty) && rawStatus == 'rejected') {
+          if (summary.length == 1 || idx == summary.length - 1) {
+            rawTs = item.rejectedAt;
+          }
+        }
+        final formattedTs = _formatApprovalTimestamp(rawTs);
 
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 3),
@@ -3507,9 +3686,35 @@ class _RequestDetailModal extends StatelessWidget {
             children: [
               Icon(icon, size: 16, color: color),
               const SizedBox(width: 8),
-              Text('$level • $name', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color)),
-              const Spacer(),
+              Expanded(
+                child: Text(
+                  '$level • $name',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 12),
+              if (formattedTs != null && formattedTs.isNotEmpty) ...[
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.access_time, size: 12, color: Color(0xFF64748B)),
+                    const SizedBox(width: 4),
+                    Text(
+                      formattedTs,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        color: Color(0xFF64748B),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(width: 8),
+              ],
               Container(
+                alignment: Alignment.center,
+                constraints: const BoxConstraints(minWidth: 72),
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(4)),
                 child: Text(rawStatus.toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color)),

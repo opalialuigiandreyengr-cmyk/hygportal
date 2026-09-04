@@ -357,7 +357,7 @@ class _AddClusterDialogState extends State<AddClusterDialog> {
   }
 }
 
-class ClustersPanel extends StatelessWidget {
+class ClustersPanel extends StatefulWidget {
   const ClustersPanel({
     required this.clusters,
     required this.isLoading,
@@ -378,7 +378,35 @@ class ClustersPanel extends StatelessWidget {
   final bool canEditAndDelete;
 
   @override
+  State<ClustersPanel> createState() => _ClustersPanelState();
+}
+
+class _ClustersPanelState extends State<ClustersPanel> {
+  final _searchController = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<ClusterPreview> get _filteredClusters {
+    final q = _query.trim().toLowerCase();
+    if (q.isEmpty) {
+      return widget.clusters;
+    }
+    return widget.clusters.where((cluster) {
+      return cluster.name.toLowerCase().contains(q) ||
+          cluster.storeNames.toLowerCase().contains(q) ||
+          cluster.companyName.toLowerCase().contains(q);
+    }).toList();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final filtered = _filteredClusters;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -387,48 +415,70 @@ class ClustersPanel extends StatelessWidget {
       ),
       child: Column(
         children: [
-          const Row(
+          Row(
             children: [
               Expanded(
-                child: FilterBox(
-                  icon: Icons.search,
-                  label: 'Search cluster or store',
+                child: TableSearchField(
+                  controller: _searchController,
+                  hint: 'Search cluster or store',
+                  onChanged: (val) => setState(() => _query = val),
+                  onClear: () {
+                    _searchController.clear();
+                    setState(() => _query = '');
+                  },
                 ),
+              ),
+              const SizedBox(width: 10),
+              IconButton(
+                tooltip: 'Refresh',
+                onPressed: widget.onRefresh,
+                icon: const Icon(Icons.refresh, color: Color(0xFF475569)),
               ),
             ],
           ),
           const SizedBox(height: 18),
           const _ClusterTableHeader(),
           const SizedBox(height: 8),
-          if (isLoading)
+          if (widget.isLoading)
             const EmployeesStateMessage(
               icon: Icons.sync,
               title: 'Loading clusters',
               message: 'Getting cluster records from Supabase.',
             )
-          else if (error != null)
+          else if (widget.error != null)
             EmployeesStateMessage(
               icon: Icons.warning_amber_rounded,
               title: 'Could not load clusters',
-              message: error!,
+              message: widget.error!,
               actionLabel: 'Retry',
-              onAction: onRefresh,
+              onAction: widget.onRefresh,
             )
-          else if (clusters.isEmpty)
+          else if (widget.clusters.isEmpty)
             EmployeesStateMessage(
               icon: Icons.hub_outlined,
               title: 'No clusters found',
               message: 'No cluster records are available yet.',
               actionLabel: 'Refresh',
-              onAction: onRefresh,
+              onAction: widget.onRefresh,
+            )
+          else if (filtered.isEmpty)
+            EmployeesStateMessage(
+              icon: Icons.search_off,
+              title: 'No matching clusters',
+              message: 'Try another cluster or store name.',
+              actionLabel: 'Clear',
+              onAction: () {
+                _searchController.clear();
+                setState(() => _query = '');
+              },
             )
           else
-            ...clusters.map(
+            ...filtered.map(
               (cluster) => _ClusterRow(
                 cluster: cluster,
-                onEdit: () => onEditCluster(cluster),
-                onDelete: () => onDeleteCluster(cluster),
-                canEditAndDelete: canEditAndDelete,
+                onEdit: () => widget.onEditCluster(cluster),
+                onDelete: () => widget.onDeleteCluster(cluster),
+                canEditAndDelete: widget.canEditAndDelete,
               ),
             ),
         ],
@@ -510,7 +560,7 @@ class _ClusterRow extends StatelessWidget {
   );
 }
 
-class AreasPanel extends StatelessWidget {
+class AreasPanel extends StatefulWidget {
   const AreasPanel({
     required this.areas,
     required this.isLoading,
@@ -531,7 +581,34 @@ class AreasPanel extends StatelessWidget {
   final bool canEditAndDelete;
 
   @override
+  State<AreasPanel> createState() => _AreasPanelState();
+}
+
+class _AreasPanelState extends State<AreasPanel> {
+  final _searchController = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<AreaPreview> get _filteredAreas {
+    final q = _query.trim().toLowerCase();
+    if (q.isEmpty) {
+      return widget.areas;
+    }
+    return widget.areas.where((area) {
+      return area.name.toLowerCase().contains(q) ||
+          area.clusterNames.toLowerCase().contains(q);
+    }).toList();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final filtered = _filteredAreas;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -540,48 +617,70 @@ class AreasPanel extends StatelessWidget {
       ),
       child: Column(
         children: [
-          const Row(
+          Row(
             children: [
               Expanded(
-                child: FilterBox(
-                  icon: Icons.search,
-                  label: 'Search area or cluster',
+                child: TableSearchField(
+                  controller: _searchController,
+                  hint: 'Search area or cluster',
+                  onChanged: (val) => setState(() => _query = val),
+                  onClear: () {
+                    _searchController.clear();
+                    setState(() => _query = '');
+                  },
                 ),
+              ),
+              const SizedBox(width: 10),
+              IconButton(
+                tooltip: 'Refresh',
+                onPressed: widget.onRefresh,
+                icon: const Icon(Icons.refresh, color: Color(0xFF475569)),
               ),
             ],
           ),
           const SizedBox(height: 18),
           const _AreaTableHeader(),
           const SizedBox(height: 8),
-          if (isLoading)
+          if (widget.isLoading)
             const EmployeesStateMessage(
               icon: Icons.sync,
               title: 'Loading areas',
               message: 'Getting area records from Supabase.',
             )
-          else if (error != null)
+          else if (widget.error != null)
             EmployeesStateMessage(
               icon: Icons.warning_amber_rounded,
               title: 'Could not load areas',
-              message: error!,
+              message: widget.error!,
               actionLabel: 'Retry',
-              onAction: onRefresh,
+              onAction: widget.onRefresh,
             )
-          else if (areas.isEmpty)
+          else if (widget.areas.isEmpty)
             EmployeesStateMessage(
               icon: Icons.account_tree_outlined,
               title: 'No areas found',
               message: 'No area records are available yet.',
               actionLabel: 'Refresh',
-              onAction: onRefresh,
+              onAction: widget.onRefresh,
+            )
+          else if (filtered.isEmpty)
+            EmployeesStateMessage(
+              icon: Icons.search_off,
+              title: 'No matching areas',
+              message: 'Try another area or cluster name.',
+              actionLabel: 'Clear',
+              onAction: () {
+                _searchController.clear();
+                setState(() => _query = '');
+              },
             )
           else
-            ...areas.map(
+            ...filtered.map(
               (area) => _AreaRow(
                 area: area,
-                onEdit: () => onEditArea(area),
-                onDelete: () => onDeleteArea(area),
-                canEditAndDelete: canEditAndDelete,
+                onEdit: () => widget.onEditArea(area),
+                onDelete: () => widget.onDeleteArea(area),
+                canEditAndDelete: widget.canEditAndDelete,
               ),
             ),
         ],

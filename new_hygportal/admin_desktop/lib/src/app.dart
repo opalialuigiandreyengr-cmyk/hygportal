@@ -190,10 +190,39 @@ class _LoginScreenState extends State<LoginScreen> {
         _isSignedIn = true;
         _isSigningIn = false;
       });
-    } catch (error) {
+    } on AuthException {
       if (!mounted) return;
       setState(() {
-        _error = error.toString().replaceFirst('Exception: ', '');
+        _error = 'Invalid username or password. Please try again.';
+        _isSigningIn = false;
+      });
+    } on PostgrestException catch (e) {
+      if (!mounted) return;
+      final msg = e.message.toLowerCase();
+      final isCredentialError = msg.contains('not found') ||
+          msg.contains('not registered') ||
+          msg.contains('invalid') ||
+          msg.contains('no login account');
+      setState(() {
+        _error = isCredentialError
+            ? 'Invalid username or password. Please try again.'
+            : e.message;
+        _isSigningIn = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      final rawError = error.toString().replaceFirst('Exception: ', '').trim();
+      final lowerError = rawError.toLowerCase();
+      final displayError =
+          lowerError.contains('invalid login credentials') ||
+                  lowerError.contains('username was not found') ||
+                  lowerError.contains('authapiexception') ||
+                  lowerError.contains('postgrestexception') ||
+                  lowerError.contains('no login account')
+              ? 'Invalid username or password. Please try again.'
+              : rawError;
+      setState(() {
+        _error = displayError;
         _isSigningIn = false;
       });
     }
@@ -397,7 +426,7 @@ class FeaturePill extends StatelessWidget {
   }
 }
 
-class LoginCard extends StatelessWidget {
+class LoginCard extends StatefulWidget {
   const LoginCard({
     required this.usernameController,
     required this.passwordController,
@@ -414,6 +443,13 @@ class LoginCard extends StatelessWidget {
   final String error;
   final Future<void> Function() onSubmit;
   final bool isSubmitting;
+
+  @override
+  State<LoginCard> createState() => _LoginCardState();
+}
+
+class _LoginCardState extends State<LoginCard> {
+  bool _obscurePassword = true;
 
   @override
   Widget build(BuildContext context) {
@@ -438,35 +474,53 @@ class LoginCard extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             HygTextField(
-              controller: usernameController,
-              focusNode: usernameFocus,
+              controller: widget.usernameController,
+              focusNode: widget.usernameFocus,
               label: 'USERNAME',
               hint: 'Enter your username',
               icon: Icons.person,
               onSubmitted: (_) {
-                if (!isSubmitting) {
-                  unawaited(onSubmit());
+                if (!widget.isSubmitting) {
+                  unawaited(widget.onSubmit());
                 }
               },
             ),
             const SizedBox(height: 14),
             HygTextField(
-              controller: passwordController,
+              controller: widget.passwordController,
               label: 'PASSWORD',
               hint: 'Enter your password',
               icon: Icons.lock,
-              obscureText: true,
+              obscureText: _obscurePassword,
+              suffixIcon: IconButton(
+                focusNode: FocusNode(skipTraversal: true),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                icon: Icon(
+                  _obscurePassword
+                      ? Icons.visibility_off_outlined
+                      : Icons.visibility_outlined,
+                  color: const Color(0xFF64748B),
+                  size: 20,
+                ),
+                tooltip: _obscurePassword ? 'Show password' : 'Hide password',
+                onPressed: () {
+                  setState(() {
+                    _obscurePassword = !_obscurePassword;
+                  });
+                },
+              ),
               onSubmitted: (_) {
-                if (!isSubmitting) {
-                  unawaited(onSubmit());
+                if (!widget.isSubmitting) {
+                  unawaited(widget.onSubmit());
                 }
               },
             ),
             const SizedBox(height: 8),
-            SizedBox(
-              height: 20,
+            ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 20),
               child: Text(
-                error,
+                widget.error,
                 style: const TextStyle(
                   color: Color(0xFFDC2626),
                   fontSize: 13,
@@ -492,8 +546,8 @@ class LoginCard extends StatelessWidget {
                   letterSpacing: 0,
                 ),
               ),
-              onPressed: isSubmitting ? null : () => unawaited(onSubmit()),
-              child: Text(isSubmitting ? 'SIGNING IN...' : 'SIGN IN'),
+              onPressed: widget.isSubmitting ? null : () => unawaited(widget.onSubmit()),
+              child: Text(widget.isSubmitting ? 'SIGNING IN...' : 'SIGN IN'),
             ),
           ],
         ),
@@ -510,6 +564,7 @@ class HygTextField extends StatelessWidget {
     required this.icon,
     this.focusNode,
     this.obscureText = false,
+    this.suffixIcon,
     this.onSubmitted,
     super.key,
   });
@@ -520,6 +575,7 @@ class HygTextField extends StatelessWidget {
   final String hint;
   final IconData icon;
   final bool obscureText;
+  final Widget? suffixIcon;
   final ValueChanged<String>? onSubmitted;
 
   @override
@@ -539,12 +595,14 @@ class HygTextField extends StatelessWidget {
             style: HygTypography.input,
             decoration: InputDecoration(
               hintText: hint,
-              hintStyle: HygTypography.input.copyWith(color: Color(0xFF94A3B8)),
+              hintStyle: HygTypography.input.copyWith(color: const Color(0xFF94A3B8)),
               prefixIcon: Padding(
                 padding: const EdgeInsets.only(left: 12, right: 8),
-                child: Icon(icon, color: Color(0xFF64748B), size: 19),
+                child: Icon(icon, color: const Color(0xFF64748B), size: 19),
               ),
               prefixIconConstraints: const BoxConstraints(minWidth: 48),
+              suffixIcon: suffixIcon,
+              suffixIconConstraints: const BoxConstraints(minWidth: 40, minHeight: 40),
               filled: true,
               fillColor: Colors.white,
               contentPadding: const EdgeInsets.symmetric(

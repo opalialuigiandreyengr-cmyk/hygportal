@@ -50,7 +50,10 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
   bool _isLoadingPositions = false;
   bool _isLoadingUsers = false;
   final _rewardsSearchController = TextEditingController();
+  final _pointsSearchController = TextEditingController();
   final List<RewardItem> _rewardsList = [];
+  List<InventoryProductItem> _storeInventoryProducts = [];
+  String _selectedRewardCategory = 'All Categories';
   Timer? _directoryRefreshTimer;
   StreamSubscription<void>? _connectionRestoredSubscription;
 
@@ -86,6 +89,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
   @override
   void dispose() {
     _rewardsSearchController.dispose();
+    _pointsSearchController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _directoryRefreshTimer?.cancel();
     unawaited(_connectionRestoredSubscription?.cancel());
@@ -126,6 +130,10 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
       case HrSection.approverAssignments:
         unawaited(_loadAdminWorkflow());
       case HrSection.rewards:
+      case HrSection.pointsManagement:
+      case HrSection.redemptionRequests:
+      case HrSection.badges:
+      case HrSection.rewardsReports:
         break;
     }
   }
@@ -403,6 +411,44 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
             reimburseDays: amount,
           );
           _showDepartmentMessage('Leave credits reimbursed successfully.');
+          break;
+      }
+      await _loadUsers();
+    } catch (error) {
+      _showDepartmentMessage(
+        error.toString().replaceFirst('Exception: ', ''),
+        isError: true,
+      );
+    }
+  }
+
+  Future<void> _setUserOffsetBalance(
+    RegisteredUserPreview user,
+    double amount, [
+    OffsetBalanceMode mode = OffsetBalanceMode.set,
+  ]) async {
+    try {
+      switch (mode) {
+        case OffsetBalanceMode.set:
+          await RegisteredUsersService.setOffsetBalance(
+            userProfileId: user.userProfileId,
+            balanceHours: amount,
+          );
+          _showDepartmentMessage('Offset balance updated successfully.');
+          break;
+        case OffsetBalanceMode.add:
+          await RegisteredUsersService.addOffsetBalance(
+            userProfileId: user.userProfileId,
+            addHours: amount,
+          );
+          _showDepartmentMessage('Offset balance added successfully.');
+          break;
+        case OffsetBalanceMode.deduct:
+          await RegisteredUsersService.deductOffsetBalance(
+            userProfileId: user.userProfileId,
+            deductHours: amount,
+          );
+          _showDepartmentMessage('Offset balance deducted successfully.');
           break;
       }
       await _loadUsers();
@@ -911,13 +957,164 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _loadRewards() async {
-    final list = await RewardService.fetchRewards();
+  Future<void> _openAddPointsModal({PointsMemberRecord? record, bool isDeduct = false}) async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => GrantPointsDialog(
+        record: record,
+        isDeduct: isDeduct,
+        onSaved: (addedPoints, reason) async {
+          if (record == null) return;
+          final client = Supabase.instance.client;
+          final newBalance = (record.pointsBalance + addedPoints).clamp(0, 9999999);
+          try {
+            await client.rpc('admin_adjust_points', params: {
+              'p_account_id': record.id,
+              'p_points_delta': addedPoints,
+              'p_reason': reason,
+            });
+          } catch (_) {
+            try {
+              if (record.id.length > 10 && record.id.contains('-')) {
+                await client
+                    .from('user_hyg_point_accounts')
+                    .update({
+                      'balance': newBalance,
+                      'updated_at': DateTime.now().toIso8601String(),
+                    })
+                    .eq('id', record.id);
+              } else {
+                final insertData = <String, dynamic>{'balance': newBalance};
+                if (record.employeeId.isNotEmpty) insertData['employee_id'] = record.employeeId;
+                if (record.userProfileId.isNotEmpty) insertData['user_profile_id'] = record.userProfileId;
+                if (record.authUserId.isNotEmpty) insertData['auth_user_id'] = record.authUserId;
+
+                final newAcc = await client.from('user_hyg_point_accounts').insert(insertData).select('id').maybeSingle();
+                if (newAcc != null && newAcc['id'] != null) record.id = newAcc['id'].toString();
+              }
+
+              try {
+                await client.from('user_hyg_point_transactions').insert({
+                  'account_id': record.id,
+                  'source': addedPoints >= 0 ? 'Admin Award' : 'Admin Deduction',
+                  'points': addedPoints,
+                  'status': 'released',
+                  'note': reason,
+                  if (record.userProfileId.isNotEmpty) 'user_profile_id': record.userProfileId,
+                  if (record.authUserId.isNotEmpty) 'auth_user_id': record.authUserId,
+                  if (record.employeeId.isNotEmpty) 'employee_id': record.employeeId,
+                });
+              } catch (_) {}
+            } catch (_) {}
+          }
+          record.pointsBalance = newBalance;
+        },
+      ),
+    );
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _openAwardAllPointsModal() async {
+    var emps = _employees;
+    if (emps.isEmpty) {
+      try {
+        emps = await EmployeeDirectoryService.loadEmployees();
+        if (mounted) {
+          setState(() {
+            _employees = emps;
+          });
+        }
+      } catch (_) {}
+    }
+
     if (!mounted) return;
-    setState(() {
-      _rewardsList.clear();
-      _rewardsList.addAll(list);
-    });
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AwardAllPointsDialog(
+        employeeCount: emps.length,
+        onConfirmed: (pts, reason) async {
+          final client = Supabase.instance.client;
+          try {
+            await client.rpc('admin_bulk_award_points', params: {
+              'p_points_delta': pts,
+              'p_reason': reason,
+            });
+          } catch (_) {
+            for (final emp in emps) {
+              try {
+                final accResponse = await client
+                    .from('user_hyg_point_accounts')
+                    .select('id, balance')
+                    .eq('employee_id', emp.id)
+                    .maybeSingle();
+
+                final curBal = accResponse != null && accResponse['balance'] != null
+                    ? (num.tryParse(accResponse['balance'].toString()) ?? 0).toInt()
+                    : 0;
+                final newBal = curBal + pts;
+
+                String? accId = accResponse != null ? accResponse['id']?.toString() : null;
+
+                if (accId != null && accId.isNotEmpty) {
+                  await client
+                      .from('user_hyg_point_accounts')
+                      .update({
+                        'balance': newBal,
+                        'updated_at': DateTime.now().toIso8601String(),
+                      })
+                      .eq('id', accId);
+                } else {
+                  await client
+                      .from('user_hyg_point_accounts')
+                      .insert({
+                        'employee_id': emp.id,
+                        'balance': newBal,
+                      });
+                }
+              } catch (_) {}
+            }
+
+            // Insert single summary transaction row for the bulk award action
+            try {
+              await client.from('user_hyg_point_transactions').insert({
+                'source': 'Bulk HR Award',
+                'points': pts,
+                'status': 'released',
+                'note': '$reason (${emps.length} Accounts)',
+              });
+            } catch (_) {}
+          }
+        },
+      ),
+    );
+    setState(() {});
+  }
+
+  Future<void> _loadRewards() async {
+    try {
+      final results = await Future.wait([
+        RewardService.fetchRewards(),
+        InventoryProductsService.fetchStoreInventory(),
+      ]);
+      if (!mounted) return;
+      final list = results[0] as List<RewardItem>;
+      final inventory = results[1] as List<InventoryProductItem>;
+      setState(() {
+        _rewardsList.clear();
+        _rewardsList.addAll(list);
+        _storeInventoryProducts = inventory;
+      });
+    } catch (_) {
+      final list = await RewardService.fetchRewards();
+      if (!mounted) return;
+      setState(() {
+        _rewardsList.clear();
+        _rewardsList.addAll(list);
+      });
+    }
   }
 
   void _confirmDeleteReward(RewardItem item) {
@@ -1494,6 +1691,91 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
     ).push(MaterialPageRoute<void>(builder: (_) => const HygBirthdaysScreen()));
   }
 
+  void _openPhotoProofs() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const HygPhotoProofsScreen()));
+  }
+
+  Future<void> _confirmSignOut() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+        contentPadding: const EdgeInsets.fromLTRB(24, 14, 24, 0),
+        actionsPadding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+        title: Row(
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEE2E2),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.logout_rounded,
+                color: Color(0xFFEF4444),
+                size: 22,
+              ),
+            ),
+            const SizedBox(width: 14),
+            const Text(
+              'Sign Out',
+              style: TextStyle(
+                color: Color(0xFF0F172A),
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        content: const Text(
+          'Are you sure you want to sign out of your account?',
+          style: TextStyle(
+            color: Color(0xFF64748B),
+            fontSize: 14,
+            height: 1.4,
+          ),
+        ),
+        actions: [
+          OutlinedButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFF475569),
+              side: const BorderSide(color: Color(0xFFCBD5E1)),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.w600)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: const Text('Sign Out', style: TextStyle(fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      widget.onSignOut();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1504,7 +1786,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
             activeSection: _activeSection,
             session: widget.session,
             onSelectSection: _selectSection,
-            onSignOut: widget.onSignOut,
+            onSignOut: _confirmSignOut,
           ),
           Expanded(
             child: Column(
@@ -1512,6 +1794,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
                 HrTopBar(
                   onOpenAssist: _openHygAssistScreen,
                   onOpenBirthdays: _openHygBirthdaysScreen,
+                  onOpenPhotoProofs: _openPhotoProofs,
                 ),
                 Expanded(
                   child: SingleChildScrollView(
@@ -1650,6 +1933,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
                             onSetRole: _setUserRole,
                             onResetPassword: _resetUserPassword,
                             onSetLeaveCredits: _setUserLeaveCredits,
+                            onSetOffsetBalance: _setUserOffsetBalance,
                             onCreateUser: _createUnlinkedUser,
                             onDeleteUser: _deleteUser,
                           ),
@@ -1726,17 +2010,50 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
                           const SizedBox(height: 14),
                           RewardsSearchBar(
                             controller: _rewardsSearchController,
+                            selectedCategory: _selectedRewardCategory,
+                            categories: [
+                              'All Categories',
+                              ...{
+                                for (final item in _storeInventoryProducts)
+                                  if (item.category.isNotEmpty) item.category
+                              }.toList()
+                                ..sort(),
+                            ],
                             onChanged: (query) {
                               setState(() {});
+                            },
+                            onCategoryChanged: (cat) {
+                              if (cat != null) {
+                                setState(() {
+                                  _selectedRewardCategory = cat;
+                                });
+                              }
                             },
                           ),
                           const SizedBox(height: 14),
                           RewardsPanel(
                             rewards: _rewardsList,
                             searchQuery: _rewardsSearchController.text,
+                            selectedCategory: _selectedRewardCategory,
+                            inventoryProducts: _storeInventoryProducts,
                             onEditReward: (item) => _openAddRewardModal(item),
                             onDeleteReward: _confirmDeleteReward,
                           ),
+                        ] else if (_activeSection == HrSection.pointsManagement) ...[
+                          PointsManagementHeader(
+                            onAwardPointsAll: () => _openAwardAllPointsModal(),
+                          ),
+                          const SizedBox(height: 14),
+                          PointsManagementPanel(
+                            employees: _employees,
+                            onAdjustPoints: (item) => _openAddPointsModal(record: item),
+                          ),
+                        ] else if (_activeSection == HrSection.redemptionRequests) ...[
+                          RedemptionRequestsScreen(employees: _employees),
+                        ] else if (_activeSection == HrSection.badges) ...[
+                          BadgesScreen(employees: _employees),
+                        ] else if (_activeSection == HrSection.rewardsReports) ...[
+                          const RewardsReportsScreen(),
                         ],
                       ],
                     ),
@@ -1896,13 +2213,45 @@ class HrSidebar extends StatelessWidget {
                   HrNavDropdown(
                     icon: Icons.redeem_outlined,
                     label: 'Rewards System',
-                    active: activeSection == HrSection.rewards,
+                    enabled: false,
+                    tooltip: 'Coming Soon.',
+                    active: {
+                      HrSection.rewards,
+                      HrSection.pointsManagement,
+                      HrSection.redemptionRequests,
+                      HrSection.badges,
+                      HrSection.rewardsReports,
+                    }.contains(activeSection),
                     items: [
                       HrDropdownItem(
                         icon: Icons.emoji_events_outlined,
                         label: 'Rewards',
                         active: activeSection == HrSection.rewards,
                         onTap: () => onSelectSection(HrSection.rewards),
+                      ),
+                      HrDropdownItem(
+                        icon: Icons.toll_outlined,
+                        label: 'Points Management',
+                        active: activeSection == HrSection.pointsManagement,
+                        onTap: () => onSelectSection(HrSection.pointsManagement),
+                      ),
+                      HrDropdownItem(
+                        icon: Icons.card_giftcard_outlined,
+                        label: 'Redemption Request',
+                        active: activeSection == HrSection.redemptionRequests,
+                        onTap: () => onSelectSection(HrSection.redemptionRequests),
+                      ),
+                      HrDropdownItem(
+                        icon: Icons.verified_outlined,
+                        label: 'Badges',
+                        active: activeSection == HrSection.badges,
+                        onTap: () => onSelectSection(HrSection.badges),
+                      ),
+                      HrDropdownItem(
+                        icon: Icons.bar_chart_outlined,
+                        label: 'Reports',
+                        active: activeSection == HrSection.rewardsReports,
+                        onTap: () => onSelectSection(HrSection.rewardsReports),
                       ),
                     ],
                   ),
@@ -1975,6 +2324,8 @@ class HrNavItem extends StatelessWidget {
     required this.label,
     required this.onTap,
     this.active = false,
+    this.enabled = true,
+    this.tooltip,
     super.key,
   });
 
@@ -1982,6 +2333,8 @@ class HrNavItem extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
   final bool active;
+  final bool enabled;
+  final String? tooltip;
 
   @override
   Widget build(BuildContext context) {
@@ -1989,7 +2342,9 @@ class HrNavItem extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 9),
       child: _SidebarHoverItem(
         active: active,
-        onTap: onTap,
+        enabled: enabled,
+        tooltip: tooltip,
+        onTap: enabled ? onTap : null,
         child: Row(
           children: [
             Icon(icon, color: active ? HygColors.ink : Colors.white, size: 19),
@@ -2018,12 +2373,16 @@ class HrDropdownItem {
     required this.label,
     required this.onTap,
     required this.active,
+    this.enabled = true,
+    this.tooltip,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
   final bool active;
+  final bool enabled;
+  final String? tooltip;
 }
 
 class HrNavDropdown extends StatefulWidget {
@@ -2032,6 +2391,8 @@ class HrNavDropdown extends StatefulWidget {
     required this.label,
     required this.items,
     this.active = false,
+    this.enabled = true,
+    this.tooltip,
     super.key,
   });
 
@@ -2039,36 +2400,43 @@ class HrNavDropdown extends StatefulWidget {
   final String label;
   final List<HrDropdownItem> items;
   final bool active;
+  final bool enabled;
+  final String? tooltip;
 
   @override
   State<HrNavDropdown> createState() => _HrNavDropdownState();
 }
 
 class _HrNavDropdownState extends State<HrNavDropdown> {
-  late bool _expanded = widget.active;
+  late bool _expanded = widget.enabled && widget.active;
 
   @override
   void didUpdateWidget(covariant HrNavDropdown oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.active && !oldWidget.active) {
+    if (widget.enabled && widget.active && !oldWidget.active) {
       _expanded = true;
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final isEnabled = widget.enabled;
     return Padding(
       padding: const EdgeInsets.only(bottom: 9),
       child: Column(
         children: [
           _SidebarHoverItem(
             active: widget.active,
-            onTap: () => setState(() => _expanded = !_expanded),
+            enabled: isEnabled,
+            tooltip: widget.tooltip,
+            onTap: isEnabled ? () => setState(() => _expanded = !_expanded) : null,
             child: Row(
               children: [
                 Icon(
                   widget.icon,
-                  color: widget.active ? HygColors.ink : Colors.white,
+                  color: widget.active
+                      ? HygColors.ink
+                      : (isEnabled ? Colors.white : const Color(0xFF94A3B8)),
                   size: 19,
                 ),
                 const SizedBox(width: 14),
@@ -2076,7 +2444,9 @@ class _HrNavDropdownState extends State<HrNavDropdown> {
                   child: Text(
                     widget.label,
                     style: HygTypography.nav.copyWith(
-                      color: widget.active ? HygColors.ink : Colors.white,
+                      color: widget.active
+                          ? HygColors.ink
+                          : (isEnabled ? Colors.white : const Color(0xFF94A3B8)),
                       fontWeight: widget.active
                           ? FontWeight.w700
                           : FontWeight.w500,
@@ -2087,62 +2457,67 @@ class _HrNavDropdownState extends State<HrNavDropdown> {
                   _expanded
                       ? Icons.keyboard_arrow_up
                       : Icons.keyboard_arrow_down,
-                  color: widget.active ? HygColors.ink : Colors.white,
+                  color: widget.active
+                      ? HygColors.ink
+                      : (isEnabled ? Colors.white : const Color(0xFF94A3B8)),
                   size: 18,
                 ),
               ],
             ),
           ),
-          AnimatedCrossFade(
-            firstChild: const SizedBox.shrink(),
-            secondChild: Padding(
-              padding: const EdgeInsets.only(top: 8, left: 12),
-              child: Column(
-                children: widget.items
-                    .map(
-                      (item) => Padding(
-                        padding: const EdgeInsets.only(bottom: 7),
-                        child: _SidebarHoverItem(
-                          active: item.active,
-                          onTap: item.onTap,
-                          child: Row(
-                            children: [
-                              Icon(
-                                item.icon,
-                                color: item.active
-                                    ? HygColors.ink
-                                    : const Color(0xFFCBD5E1),
-                                size: 17,
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  item.label,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: HygTypography.nav.copyWith(
-                                    color: item.active
-                                        ? HygColors.ink
-                                        : const Color(0xFFCBD5E1),
-                                    fontSize: 12,
-                                    fontWeight: item.active
-                                        ? FontWeight.w700
-                                        : FontWeight.w500,
+          if (isEnabled)
+            AnimatedCrossFade(
+              firstChild: const SizedBox.shrink(),
+              secondChild: Padding(
+                padding: const EdgeInsets.only(top: 8, left: 12),
+                child: Column(
+                  children: widget.items
+                      .map(
+                        (item) => Padding(
+                          padding: const EdgeInsets.only(bottom: 7),
+                          child: _SidebarHoverItem(
+                            active: item.active,
+                            enabled: item.enabled,
+                            tooltip: item.tooltip,
+                            onTap: item.enabled ? item.onTap : null,
+                            child: Row(
+                              children: [
+                                Icon(
+                                  item.icon,
+                                  color: item.active
+                                      ? HygColors.ink
+                                      : const Color(0xFFCBD5E1),
+                                  size: 17,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    item.label,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: HygTypography.nav.copyWith(
+                                      color: item.active
+                                          ? HygColors.ink
+                                          : const Color(0xFFCBD5E1),
+                                      fontSize: 12,
+                                      fontWeight: item.active
+                                          ? FontWeight.w700
+                                          : FontWeight.w500,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                    )
-                    .toList(),
+                      )
+                      .toList(),
+                ),
               ),
+              crossFadeState: _expanded
+                  ? CrossFadeState.showSecond
+                  : CrossFadeState.showFirst,
+              duration: const Duration(milliseconds: 140),
             ),
-            crossFadeState: _expanded
-                ? CrossFadeState.showSecond
-                : CrossFadeState.showFirst,
-            duration: const Duration(milliseconds: 140),
-          ),
         ],
       ),
     );
@@ -2154,11 +2529,15 @@ class _SidebarHoverItem extends StatefulWidget {
     required this.active,
     required this.onTap,
     required this.child,
+    this.enabled = true,
+    this.tooltip,
   });
 
   final bool active;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final Widget child;
+  final bool enabled;
+  final String? tooltip;
 
   @override
   State<_SidebarHoverItem> createState() => _SidebarHoverItemState();
@@ -2169,14 +2548,15 @@ class _SidebarHoverItemState extends State<_SidebarHoverItem> {
 
   @override
   Widget build(BuildContext context) {
+    final isInteractive = widget.enabled && widget.onTap != null;
     final backgroundColor = widget.active
         ? HygColors.gold
-        : _hovered
+        : (_hovered && isInteractive)
         ? const Color(0xFF1E293B)
         : Colors.transparent;
 
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
+    Widget item = MouseRegion(
+      cursor: isInteractive ? SystemMouseCursors.click : SystemMouseCursors.basic,
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: AnimatedContainer(
@@ -2187,7 +2567,7 @@ class _SidebarHoverItemState extends State<_SidebarHoverItem> {
           color: backgroundColor,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: !widget.active && _hovered
+            color: !widget.active && _hovered && isInteractive
                 ? const Color(0xFF334155)
                 : Colors.transparent,
           ),
@@ -2199,21 +2579,33 @@ class _SidebarHoverItemState extends State<_SidebarHoverItem> {
             hoverColor: Colors.transparent,
             splashColor: widget.active ? Colors.black12 : Colors.white10,
             highlightColor: Colors.transparent,
-            onTap: widget.onTap,
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: AnimatedPadding(
-                duration: const Duration(milliseconds: 130),
-                padding: EdgeInsets.only(
-                  left: !widget.active && _hovered ? 3 : 0,
+            onTap: isInteractive ? widget.onTap : null,
+            child: Opacity(
+              opacity: widget.enabled ? 1.0 : 0.45,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: AnimatedPadding(
+                  duration: const Duration(milliseconds: 130),
+                  padding: EdgeInsets.only(
+                    left: !widget.active && _hovered && isInteractive ? 3 : 0,
+                  ),
+                  child: widget.child,
                 ),
-                child: widget.child,
               ),
             ),
           ),
         ),
       ),
     );
+
+    if (widget.tooltip != null && widget.tooltip!.isNotEmpty) {
+      item = Tooltip(
+        message: widget.tooltip!,
+        child: item,
+      );
+    }
+
+    return item;
   }
 }
 
@@ -2230,17 +2622,23 @@ enum HrSection {
   clusters,
   stores,
   rewards,
+  pointsManagement,
+  redemptionRequests,
+  badges,
+  rewardsReports,
 }
 
 class HrTopBar extends StatelessWidget {
   const HrTopBar({
     required this.onOpenAssist,
     this.onOpenBirthdays,
+    this.onOpenPhotoProofs,
     super.key,
   });
 
   final VoidCallback onOpenAssist;
   final VoidCallback? onOpenBirthdays;
+  final VoidCallback? onOpenPhotoProofs;
 
   String _philippineDateLabel() {
     const monthNames = <String>[
@@ -2295,6 +2693,12 @@ class HrTopBar extends StatelessWidget {
             ),
           ),
           const Spacer(),
+          TopIconButton(
+            icon: Icons.photo_library_outlined,
+            tooltip: 'Photo Proofs',
+            onTap: onOpenPhotoProofs,
+          ),
+          const SizedBox(width: 10),
           TopIconButton(
             icon: Icons.cake_outlined,
             tooltip: 'Upcoming Birthdays',
@@ -2376,6 +2780,10 @@ class _TopIconButtonState extends State<TopIconButton> {
   Widget build(BuildContext context) {
     final isFilled = widget.filled;
     final isCake = widget.icon == Icons.cake_outlined || widget.icon == Icons.cake;
+    final isPhotoProof = widget.icon == Icons.photo_library_outlined ||
+        widget.icon == Icons.photo_library ||
+        widget.icon == Icons.photo_camera_outlined ||
+        widget.tooltip == 'Photo Proofs';
 
     Color bgColor;
     Color borderColor;
@@ -2389,6 +2797,10 @@ class _TopIconButtonState extends State<TopIconButton> {
       bgColor = _isHovered ? const Color(0xFFFCE7F3) : Colors.white;
       borderColor = _isHovered ? const Color(0xFFF472B6) : const Color(0xFFCBD5E1);
       iconColor = _isHovered ? const Color(0xFFDB2777) : HygColors.ink;
+    } else if (isPhotoProof) {
+      bgColor = _isHovered ? const Color(0xFFE0F2FE) : Colors.white;
+      borderColor = _isHovered ? const Color(0xFF38BDF8) : const Color(0xFFCBD5E1);
+      iconColor = _isHovered ? const Color(0xFF0284C7) : HygColors.ink;
     } else {
       bgColor = _isHovered ? const Color(0xFFF1F5F9) : Colors.white;
       borderColor = _isHovered ? const Color(0xFF94A3B8) : const Color(0xFFCBD5E1);
@@ -2418,10 +2830,12 @@ class _TopIconButtonState extends State<TopIconButton> {
                       BoxShadow(
                         color: (isCake
                                 ? const Color(0xFFEC4899)
-                                : isFilled
-                                    ? const Color(0xFFEAB308)
-                                    : Colors.black)
-                            .withOpacity(0.18),
+                                : isPhotoProof
+                                    ? const Color(0xFF0284C7)
+                                    : isFilled
+                                        ? const Color(0xFFEAB308)
+                                        : Colors.black)
+                            .withValues(alpha: 0.18),
                         blurRadius: 8,
                         offset: const Offset(0, 3),
                       ),

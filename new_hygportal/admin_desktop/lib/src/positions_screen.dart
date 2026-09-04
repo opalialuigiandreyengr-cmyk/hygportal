@@ -62,7 +62,7 @@ class PositionsHeader extends StatelessWidget {
   }
 }
 
-class PositionsPanel extends StatelessWidget {
+class PositionsPanel extends StatefulWidget {
   const PositionsPanel({
     required this.positions,
     required this.isLoading,
@@ -83,7 +83,34 @@ class PositionsPanel extends StatelessWidget {
   final bool canEditAndDelete;
 
   @override
+  State<PositionsPanel> createState() => _PositionsPanelState();
+}
+
+class _PositionsPanelState extends State<PositionsPanel> {
+  final _searchController = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<PositionPreview> get _filteredPositions {
+    final q = _query.trim().toLowerCase();
+    if (q.isEmpty) {
+      return widget.positions;
+    }
+    return widget.positions.where((pos) {
+      return pos.name.toLowerCase().contains(q) ||
+          pos.authorityLevel.toString().contains(q);
+    }).toList();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final filtered = _filteredPositions;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -94,17 +121,21 @@ class PositionsPanel extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Expanded(
-                flex: 4,
-                child: FilterBox(
-                  icon: Icons.search,
-                  label: 'Search position name',
+              Expanded(
+                child: TableSearchField(
+                  controller: _searchController,
+                  hint: 'Search position name',
+                  onChanged: (val) => setState(() => _query = val),
+                  onClear: () {
+                    _searchController.clear();
+                    setState(() => _query = '');
+                  },
                 ),
               ),
               const SizedBox(width: 10),
               IconButton(
                 tooltip: 'Refresh',
-                onPressed: onRefresh,
+                onPressed: widget.onRefresh,
                 icon: const Icon(Icons.refresh, color: Color(0xFF475569)),
               ),
             ],
@@ -112,35 +143,46 @@ class PositionsPanel extends StatelessWidget {
           const SizedBox(height: 18),
           const PositionTableHeader(),
           const SizedBox(height: 8),
-          if (isLoading)
+          if (widget.isLoading)
             const EmployeesStateMessage(
               icon: Icons.sync,
               title: 'Loading positions',
               message: 'Getting position records from Supabase.',
             )
-          else if (error != null)
+          else if (widget.error != null)
             EmployeesStateMessage(
               icon: Icons.warning_amber_rounded,
               title: 'Could not load positions',
-              message: error!,
+              message: widget.error!,
               actionLabel: 'Retry',
-              onAction: onRefresh,
+              onAction: widget.onRefresh,
             )
-          else if (positions.isEmpty)
+          else if (widget.positions.isEmpty)
             EmployeesStateMessage(
               icon: Icons.badge_outlined,
               title: 'No positions found',
               message: 'No position records are available yet.',
               actionLabel: 'Refresh',
-              onAction: onRefresh,
+              onAction: widget.onRefresh,
+            )
+          else if (filtered.isEmpty)
+            EmployeesStateMessage(
+              icon: Icons.search_off,
+              title: 'No matching positions',
+              message: 'Try another position name.',
+              actionLabel: 'Clear',
+              onAction: () {
+                _searchController.clear();
+                setState(() => _query = '');
+              },
             )
           else
-            ...positions.map(
+            ...filtered.map(
               (position) => PositionRow(
                 position: position,
-                onEdit: () => onEditPosition(position),
-                onDelete: () => onDeletePosition(position),
-                canEditAndDelete: canEditAndDelete,
+                onEdit: () => widget.onEditPosition(position),
+                onDelete: () => widget.onDeletePosition(position),
+                canEditAndDelete: widget.canEditAndDelete,
               ),
             ),
         ],

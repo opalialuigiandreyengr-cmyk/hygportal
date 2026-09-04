@@ -90,54 +90,119 @@ class RewardsSearchBar extends StatelessWidget {
   const RewardsSearchBar({
     required this.controller,
     this.onChanged,
+    this.selectedCategory = 'All Categories',
+    this.categories = const [],
+    this.onCategoryChanged,
     super.key,
   });
 
   final TextEditingController controller;
   final ValueChanged<String>? onChanged;
+  final String selectedCategory;
+  final List<String> categories;
+  final ValueChanged<String?>? onCategoryChanged;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
-      ),
-      child: TextField(
-        controller: controller,
-        onChanged: onChanged,
-        style: const TextStyle(
-          fontFamily: HygTypography.bodyFontFamily,
-          fontSize: 14,
-          color: Color(0xFF1E293B),
-        ),
-        decoration: const InputDecoration(
-          hintText: 'Search reward or product name',
-          hintStyle: TextStyle(
-            fontFamily: HygTypography.bodyFontFamily,
-            fontSize: 14,
-            color: Color(0xFF94A3B8),
-            fontWeight: FontWeight.w400,
-          ),
-          prefixIcon: Padding(
-            padding: EdgeInsets.only(left: 14, right: 10),
-            child: Icon(
-              Icons.search,
-              color: Color(0xFF94A3B8),
-              size: 20,
+    final catOptions = categories.isEmpty
+        ? ['All Categories']
+        : (categories.contains('All Categories')
+            ? categories
+            : ['All Categories', ...categories]);
+
+    return Row(
+      children: [
+        Expanded(
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
+            ),
+            child: TextField(
+              controller: controller,
+              onChanged: onChanged,
+              style: const TextStyle(
+                fontFamily: HygTypography.bodyFontFamily,
+                fontSize: 14,
+                color: Color(0xFF1E293B),
+              ),
+              decoration: const InputDecoration(
+                hintText: 'Search reward or product name...',
+                hintStyle: TextStyle(
+                  fontFamily: HygTypography.bodyFontFamily,
+                  fontSize: 14,
+                  color: Color(0xFF94A3B8),
+                  fontWeight: FontWeight.w400,
+                ),
+                prefixIcon: Padding(
+                  padding: EdgeInsets.only(left: 14, right: 10),
+                  child: Icon(
+                    Icons.search,
+                    color: Color(0xFF94A3B8),
+                    size: 20,
+                  ),
+                ),
+                prefixIconConstraints: BoxConstraints(
+                  minWidth: 44,
+                  minHeight: 44,
+                ),
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              ),
             ),
           ),
-          prefixIconConstraints: BoxConstraints(
-            minWidth: 44,
-            minHeight: 44,
-          ),
-          border: InputBorder.none,
-          enabledBorder: InputBorder.none,
-          focusedBorder: InputBorder.none,
-          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         ),
-      ),
+        if (categories.isNotEmpty) ...[
+          const SizedBox(width: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.filter_list,
+                  size: 18,
+                  color: Color(0xFF64748B),
+                ),
+                const SizedBox(width: 8),
+                DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: catOptions.contains(selectedCategory)
+                        ? selectedCategory
+                        : catOptions.first,
+                    style: const TextStyle(
+                      fontFamily: HygTypography.bodyFontFamily,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1E293B),
+                    ),
+                    icon: const Icon(
+                      Icons.keyboard_arrow_down,
+                      color: Color(0xFF64748B),
+                      size: 20,
+                    ),
+                    items: catOptions.map((cat) {
+                      return DropdownMenuItem<String>(
+                        value: cat,
+                        child: Text(cat),
+                      );
+                    }).toList(),
+                    onChanged: onCategoryChanged,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -166,6 +231,8 @@ class RewardsPanel extends StatelessWidget {
     required this.searchQuery,
     required this.onEditReward,
     required this.onDeleteReward,
+    this.selectedCategory = 'All Categories',
+    this.inventoryProducts = const [],
     super.key,
   });
 
@@ -173,12 +240,33 @@ class RewardsPanel extends StatelessWidget {
   final String searchQuery;
   final ValueChanged<RewardItem> onEditReward;
   final ValueChanged<RewardItem> onDeleteReward;
+  final String selectedCategory;
+  final List<InventoryProductItem> inventoryProducts;
+
+  String _getCategoryForProduct(String productName) {
+    final match = inventoryProducts.firstWhere(
+      (p) => p.itemName.trim().toLowerCase() == productName.trim().toLowerCase(),
+      orElse: () => const InventoryProductItem(id: 0, itemName: '', price: 0.0, category: 'Uncategorized'),
+    );
+    return match.category.isNotEmpty ? match.category : 'Uncategorized';
+  }
 
   @override
   Widget build(BuildContext context) {
     final filtered = rewards.where((r) {
-      if (searchQuery.trim().isEmpty) return true;
-      return r.productName.toLowerCase().contains(searchQuery.toLowerCase().trim());
+      final cat = _getCategoryForProduct(r.productName);
+      if (searchQuery.trim().isNotEmpty) {
+        final q = searchQuery.toLowerCase().trim();
+        final matchesSearch = r.productName.toLowerCase().contains(q) ||
+            cat.toLowerCase().contains(q);
+        if (!matchesSearch) return false;
+      }
+      if (selectedCategory != 'All Categories' && selectedCategory.isNotEmpty) {
+        if (cat.toLowerCase().trim() != selectedCategory.toLowerCase().trim()) {
+          return false;
+        }
+      }
+      return true;
     }).toList();
 
     if (rewards.isEmpty) {
@@ -263,7 +351,7 @@ class RewardsPanel extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 36),
               child: Center(
                 child: Text(
-                  'No rewards matching "$searchQuery"',
+                  'No rewards matching criteria',
                   style: const TextStyle(
                     fontFamily: HygTypography.bodyFontFamily,
                     color: Color(0xFF64748B),
@@ -276,6 +364,7 @@ class RewardsPanel extends StatelessWidget {
             ...filtered.map(
               (item) => _RewardRow(
                 reward: item,
+                category: _getCategoryForProduct(item.productName),
                 onEdit: () => onEditReward(item),
                 onDelete: () => onDeleteReward(item),
               ),
@@ -301,6 +390,7 @@ class _RewardsTableHeader extends StatelessWidget {
       child: const Row(
         children: [
           Expanded(flex: 4, child: HeaderLabel('PRODUCT / ITEM NAME')),
+          Expanded(flex: 2, child: HeaderLabel('CATEGORY')),
           Expanded(flex: 2, child: HeaderLabel('STOCKS')),
           Expanded(flex: 2, child: HeaderLabel('POINTS VALUE')),
           Expanded(flex: 2, child: HeaderLabel('STATUS')),
@@ -320,11 +410,13 @@ class _RewardsTableHeader extends StatelessWidget {
 class _RewardRow extends StatelessWidget {
   const _RewardRow({
     required this.reward,
+    required this.category,
     required this.onEdit,
     required this.onDelete,
   });
 
   final RewardItem reward;
+  final String category;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
@@ -371,6 +463,31 @@ class _RewardRow extends StatelessWidget {
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
                       color: Color(0xFF0F172A),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: const Color(0xFFBFDBFE)),
+                  ),
+                  child: Text(
+                    category,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontFamily: HygTypography.bodyFontFamily,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1D4ED8),
                     ),
                   ),
                 ),
@@ -1023,7 +1140,9 @@ class _DropdownListContentState extends State<_DropdownListContent> {
   Widget build(BuildContext context) {
     final filtered = widget.products.where((p) {
       if (_query.trim().isEmpty) return true;
-      return p.itemName.toLowerCase().contains(_query.toLowerCase().trim());
+      final q = _query.toLowerCase().trim();
+      return p.itemName.toLowerCase().contains(q) ||
+          p.category.toLowerCase().contains(q);
     }).toList();
 
     return Column(
@@ -1042,7 +1161,7 @@ class _DropdownListContentState extends State<_DropdownListContent> {
                 fontSize: 13,
               ),
               decoration: InputDecoration(
-                hintText: 'Search product...',
+                hintText: 'Search product or category...',
                 hintStyle: const TextStyle(
                   fontFamily: HygTypography.bodyFontFamily,
                   fontSize: 13,
@@ -1089,25 +1208,48 @@ class _DropdownListContentState extends State<_DropdownListContent> {
                     final item = filtered[index];
                     return InkWell(
                       onTap: () => widget.onSelect(item),
-                      hoverColor: const Color(0xFFFEF3C7).withOpacity(0.5),
+                      hoverColor: const Color(0xFFFEF3C7).withValues(alpha: 0.5),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 14,
                           vertical: 10,
                         ),
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            item.itemName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontFamily: HygTypography.bodyFontFamily,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                              color: Color(0xFF1E293B),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                item.itemName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontFamily: HygTypography.bodyFontFamily,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: Color(0xFF1E293B),
+                                ),
+                              ),
                             ),
-                          ),
+                            if (item.category.isNotEmpty) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFEFF6FF),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(color: const Color(0xFFBFDBFE)),
+                                ),
+                                child: Text(
+                                  item.category,
+                                  style: const TextStyle(
+                                    fontFamily: HygTypography.bodyFontFamily,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF1D4ED8),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                     );

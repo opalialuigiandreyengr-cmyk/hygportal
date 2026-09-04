@@ -50,6 +50,7 @@ class UsersPanel extends StatefulWidget {
     required this.onSetRole,
     required this.onResetPassword,
     required this.onSetLeaveCredits,
+    required this.onSetOffsetBalance,
     required this.onCreateUser,
     required this.onDeleteUser,
     super.key,
@@ -76,6 +77,12 @@ class UsersPanel extends StatefulWidget {
     LeaveCreditMode mode,
   ])
   onSetLeaveCredits;
+  final Future<void> Function(
+    RegisteredUserPreview user,
+    double balanceHours, [
+    OffsetBalanceMode mode,
+  ])
+  onSetOffsetBalance;
   final Future<void> Function(AddUserRequest request) onCreateUser;
   final Future<void> Function(RegisteredUserPreview user) onDeleteUser;
 
@@ -254,6 +261,7 @@ class _UsersPanelState extends State<UsersPanel> {
                 onSetRole: widget.onSetRole,
                 onResetPassword: widget.onResetPassword,
                 onSetLeaveCredits: widget.onSetLeaveCredits,
+                onSetOffsetBalance: widget.onSetOffsetBalance,
                 onDeleteUser: widget.onDeleteUser,
               ),
             ),
@@ -370,6 +378,7 @@ class UserRow extends StatefulWidget {
     required this.onSetRole,
     required this.onResetPassword,
     required this.onSetLeaveCredits,
+    required this.onSetOffsetBalance,
     required this.onDeleteUser,
     super.key,
   });
@@ -391,6 +400,12 @@ class UserRow extends StatefulWidget {
     LeaveCreditMode mode,
   ])
   onSetLeaveCredits;
+  final Future<void> Function(
+    RegisteredUserPreview user,
+    double balanceHours, [
+    OffsetBalanceMode mode,
+  ])
+  onSetOffsetBalance;
   final Future<void> Function(RegisteredUserPreview user) onDeleteUser;
 
   @override
@@ -498,6 +513,7 @@ class _UserRowState extends State<UserRow> {
                 onSetRole: widget.onSetRole,
                 onResetPassword: widget.onResetPassword,
                 onSetLeaveCredits: widget.onSetLeaveCredits,
+                onSetOffsetBalance: widget.onSetOffsetBalance,
                 onDeleteUser: widget.onDeleteUser,
               ),
             ),
@@ -588,6 +604,7 @@ class UserActionsMenu extends StatefulWidget {
     required this.onSetRole,
     required this.onResetPassword,
     required this.onSetLeaveCredits,
+    required this.onSetOffsetBalance,
     required this.onDeleteUser,
     super.key,
   });
@@ -611,6 +628,12 @@ class UserActionsMenu extends StatefulWidget {
     LeaveCreditMode mode,
   ])
   onSetLeaveCredits;
+  final Future<void> Function(
+    RegisteredUserPreview user,
+    double balanceHours, [
+    OffsetBalanceMode mode,
+  ])
+  onSetOffsetBalance;
   final Future<void> Function(RegisteredUserPreview user) onDeleteUser;
 
   @override
@@ -675,6 +698,17 @@ class _UserActionsMenuState extends State<UserActionsMenu> {
                 : 'Allocate leave credits',
           ),
         ),
+        PopupMenuItem(
+          value: 'offset',
+          height: 52,
+          enabled: widget.user.employeeId != null,
+          child: _UserActionMenuItem(
+            icon: Icons.timelapse_outlined,
+            label: widget.user.employeeId == null
+                ? 'Allocate offset balance (link employee first)'
+                : 'Allocate offset balance',
+          ),
+        ),
         const PopupMenuDivider(height: 1),
         const PopupMenuItem(
           value: 'delete',
@@ -729,6 +763,14 @@ class _UserActionsMenuState extends State<UserActionsMenu> {
       );
       if (result != null) {
         await widget.onSetLeaveCredits(widget.user, result.amount, result.mode);
+      }
+    } else if (action == 'offset') {
+      final result = await showDialog<UserOffsetBalanceResult>(
+        context: context,
+        builder: (context) => UserOffsetBalanceDialog(user: widget.user),
+      );
+      if (result != null) {
+        await widget.onSetOffsetBalance(widget.user, result.amount, result.mode);
       }
     } else if (action == 'delete') {
       final confirmed = await showDialog<bool>(
@@ -2899,5 +2941,479 @@ class _UserLeaveCreditsDialogState extends State<UserLeaveCreditsDialog> {
 
   static String _formatDays(double value) {
     return '${value.toStringAsFixed(value.truncateToDouble() == value ? 0 : 2)}d';
+  }
+}
+
+enum OffsetBalanceMode { set, add, deduct }
+
+class UserOffsetBalanceResult {
+  const UserOffsetBalanceResult({
+    required this.amount,
+    required this.mode,
+  });
+
+  final double amount;
+  final OffsetBalanceMode mode;
+}
+
+class UserOffsetBalanceDialog extends StatefulWidget {
+  const UserOffsetBalanceDialog({
+    required this.user,
+    super.key,
+  });
+
+  final RegisteredUserPreview user;
+
+  @override
+  State<UserOffsetBalanceDialog> createState() =>
+      _UserOffsetBalanceDialogState();
+}
+
+class _UserOffsetBalanceDialogState extends State<UserOffsetBalanceDialog> {
+  final _addController = TextEditingController();
+  final _deductController = TextEditingController();
+
+  int _selectedAdjustmentTab = 0;
+  String? _addError;
+  String? _deductError;
+
+  @override
+  void dispose() {
+    _addController.dispose();
+    _deductController.dispose();
+    super.dispose();
+  }
+
+  Future<bool> _confirmAction({
+    required String title,
+    required String message,
+    required String confirmLabel,
+    required Color accentColor,
+    required IconData icon,
+  }) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+        ),
+        titlePadding: const EdgeInsets.fromLTRB(22, 20, 22, 0),
+        contentPadding: const EdgeInsets.fromLTRB(22, 14, 22, 20),
+        actionsPadding: const EdgeInsets.fromLTRB(22, 0, 22, 16),
+        title: Row(
+          children: [
+            Icon(icon, color: accentColor, size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                title,
+                style: HygTypography.pageTitle.copyWith(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          message,
+          style: HygTypography.body.copyWith(
+            color: HygColors.ink,
+            fontSize: 14,
+            height: 1.5,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: accentColor,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(confirmLabel),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
+  Future<void> _submitAdd() async {
+    final addHours = double.tryParse(_addController.text.trim());
+    if (addHours == null || addHours <= 0) {
+      setState(() => _addError = 'Enter a number greater than zero.');
+      return;
+    }
+    final currentBalance = widget.user.offsetBalanceHours ?? 0;
+    final newBalance = currentBalance + addHours;
+    final confirmed = await _confirmAction(
+      title: 'Confirm Add Offset Hours',
+      message:
+          'Are you sure you want to add ${_formatHours(addHours)} to ${widget.user.fullName}?\n\n'
+          'Current balance: ${_formatHours(currentBalance)}\n'
+          'New balance: ${_formatHours(newBalance)}',
+      confirmLabel: 'Confirm & Add',
+      accentColor: const Color(0xFF16A34A),
+      icon: Icons.add_circle_outline,
+    );
+    if (!confirmed || !mounted) return;
+    Navigator.of(context).pop(
+      UserOffsetBalanceResult(
+        amount: addHours,
+        mode: OffsetBalanceMode.add,
+      ),
+    );
+  }
+
+  Future<void> _submitDeduct() async {
+    final deductHours = double.tryParse(_deductController.text.trim());
+    final currentBalance = widget.user.offsetBalanceHours ?? 0;
+    if (deductHours == null || deductHours <= 0) {
+      setState(() => _deductError = 'Enter a number greater than zero.');
+      return;
+    }
+    if (deductHours > currentBalance) {
+      setState(
+        () => _deductError =
+            'Cannot deduct more than available offset balance (${_formatHours(currentBalance)}).',
+      );
+      return;
+    }
+    final newBalance = currentBalance - deductHours;
+    final confirmed = await _confirmAction(
+      title: 'Confirm Offset Deduction',
+      message:
+          'Are you sure you want to deduct ${_formatHours(deductHours)} from ${widget.user.fullName}?\n\n'
+          'Current balance: ${_formatHours(currentBalance)}\n'
+          'New balance: ${_formatHours(newBalance)}',
+      confirmLabel: 'Confirm & Deduct',
+      accentColor: const Color(0xFFDC2626),
+      icon: Icons.remove_circle_outline,
+    );
+    if (!confirmed || !mounted) return;
+    Navigator.of(context).pop(
+      UserOffsetBalanceResult(
+        amount: deductHours,
+        mode: OffsetBalanceMode.deduct,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final currentBalance = widget.user.offsetBalanceHours ?? 0;
+    return Dialog(
+      insetPadding: const EdgeInsets.all(28),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      backgroundColor: Colors.white,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 580),
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 22, 24, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.timelapse_outlined,
+                      color: HygColors.goldStrong,
+                      size: 24,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Allocate Offset Balance',
+                        style: HygTypography.pageTitle.copyWith(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Close',
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(
+                        Icons.close,
+                        color: Color(0xFF64748B),
+                        size: 20,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  widget.user.fullName,
+                  style: HygTypography.tableBody.copyWith(
+                    color: HygColors.ink,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  widget.user.employeeNo.isNotEmpty &&
+                          widget.user.employeeNo != '-'
+                      ? 'Employee No: ${widget.user.employeeNo}'
+                      : widget.user.email,
+                  style: HygTypography.tableBody.copyWith(
+                    color: HygColors.muted,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                InputDecorator(
+                  decoration: InputDecoration(
+                    labelText: 'Offset balance',
+                    suffixText: 'hrs',
+                    filled: true,
+                    fillColor: const Color(0xFFF8FAFC),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                  ),
+                  child: Text(
+                    _formatInitialValue(currentBalance),
+                    style: HygTypography.body.copyWith(
+                      color: HygColors.ink,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Container(
+                  height: 1,
+                  color: const Color(0xFFE2E8F0),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  padding: const EdgeInsets.all(4),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => setState(() => _selectedAdjustmentTab = 0),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 9),
+                            decoration: BoxDecoration(
+                              color: _selectedAdjustmentTab == 0
+                                  ? Colors.white
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(8),
+                              boxShadow: _selectedAdjustmentTab == 0
+                                  ? [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(alpha: 0.06),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 1),
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.add_circle_outline,
+                                  size: 17,
+                                  color: _selectedAdjustmentTab == 0
+                                      ? const Color(0xFF16A34A)
+                                      : const Color(0xFF64748B),
+                                ),
+                                const SizedBox(width: 7),
+                                Text(
+                                  'Add Offset Hours',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: _selectedAdjustmentTab == 0
+                                        ? FontWeight.w700
+                                        : FontWeight.w500,
+                                    color: _selectedAdjustmentTab == 0
+                                        ? const Color(0xFF0F172A)
+                                        : const Color(0xFF64748B),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => setState(() => _selectedAdjustmentTab = 1),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 9),
+                            decoration: BoxDecoration(
+                              color: _selectedAdjustmentTab == 1
+                                  ? Colors.white
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(8),
+                              boxShadow: _selectedAdjustmentTab == 1
+                                  ? [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(alpha: 0.06),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 1),
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.remove_circle_outline,
+                                  size: 17,
+                                  color: _selectedAdjustmentTab == 1
+                                      ? const Color(0xFFDC2626)
+                                      : const Color(0xFF64748B),
+                                ),
+                                const SizedBox(width: 7),
+                                Text(
+                                  'Manual Deduction',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: _selectedAdjustmentTab == 1
+                                        ? FontWeight.w700
+                                        : FontWeight.w500,
+                                    color: _selectedAdjustmentTab == 1
+                                        ? const Color(0xFF0F172A)
+                                        : const Color(0xFF64748B),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                if (_selectedAdjustmentTab == 0) ...[
+                  Text(
+                    'Add hours to current offset balance.',
+                    style: HygTypography.tableBody.copyWith(
+                      color: HygColors.muted,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _addController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: InputDecoration(
+                      labelText: 'Hours to add',
+                      hintText: 'Enter hours',
+                      errorText: _addError,
+                      suffixText: 'hrs',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    onSubmitted: (_) => _submitAdd(),
+                  ),
+                ] else ...[
+                  Text(
+                    'Deduct hours from available offset balance.',
+                    style: HygTypography.tableBody.copyWith(
+                      color: HygColors.muted,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _deductController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: InputDecoration(
+                      labelText: 'Hours to deduct',
+                      hintText: 'Enter hours',
+                      errorText: _deductError,
+                      suffixText: 'hrs',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    onSubmitted: (_) => _submitDeduct(),
+                  ),
+                ],
+                const SizedBox(height: 22),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 18,
+                          vertical: 12,
+                        ),
+                      ),
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Cancel'),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: HygColors.gold,
+                        foregroundColor: HygColors.ink,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 14,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      onPressed: _selectedAdjustmentTab == 0
+                          ? _submitAdd
+                          : _submitDeduct,
+                      icon: const Icon(Icons.save_outlined, size: 18),
+                      label: const Text('Save'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  static String _formatInitialValue(double value) {
+    return value.toStringAsFixed(value.truncateToDouble() == value ? 0 : 2);
+  }
+
+  static String _formatHours(double value) {
+    return '${value.toStringAsFixed(value.truncateToDouble() == value ? 0 : 2)} hrs';
   }
 }

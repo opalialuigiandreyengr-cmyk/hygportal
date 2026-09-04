@@ -98,6 +98,140 @@ class FilterBox extends StatelessWidget {
   }
 }
 
+class TableSearchField extends StatelessWidget {
+  const TableSearchField({
+    required this.controller,
+    required this.hint,
+    required this.onChanged,
+    required this.onClear,
+    super.key,
+  });
+
+  final TextEditingController controller;
+  final String hint;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 44,
+      child: TextField(
+        controller: controller,
+        onChanged: onChanged,
+        style: HygTypography.body.copyWith(color: HygColors.ink),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: const TextStyle(
+            color: Color(0xFF94A3B8),
+            fontSize: 13,
+          ),
+          prefixIcon: const Icon(
+            Icons.search,
+            color: Color(0xFF64748B),
+            size: 18,
+          ),
+          suffixIcon: controller.text.isEmpty
+              ? null
+              : IconButton(
+                  tooltip: 'Clear search',
+                  onPressed: onClear,
+                  icon: const Icon(
+                    Icons.close,
+                    color: Color(0xFF64748B),
+                    size: 17,
+                  ),
+                ),
+          filled: true,
+          fillColor: Colors.white,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: HygColors.border),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: HygColors.border),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(
+              color: HygColors.goldStrong,
+              width: 1.8,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class TableFilterDropdown extends StatelessWidget {
+  const TableFilterDropdown({
+    required this.value,
+    required this.options,
+    required this.onChanged,
+    this.prefixIcon,
+    super.key,
+  });
+
+  final String value;
+  final List<String> options;
+  final ValueChanged<String?> onChanged;
+  final IconData? prefixIcon;
+
+  @override
+  Widget build(BuildContext context) {
+    final effectiveValue = options.contains(value)
+        ? value
+        : (options.isNotEmpty ? options.first : null);
+
+    return SizedBox(
+      height: 44,
+      child: DropdownButtonFormField<String>(
+        key: ValueKey(effectiveValue),
+        initialValue: effectiveValue,
+        isExpanded: true,
+        dropdownColor: Colors.white,
+        icon: const Icon(Icons.keyboard_arrow_down, color: Color(0xFF334155)),
+        style: HygTypography.body.copyWith(color: Colors.black),
+        decoration: InputDecoration(
+          prefixIcon: prefixIcon != null
+              ? Icon(prefixIcon, color: const Color(0xFF64748B), size: 18)
+              : null,
+          filled: true,
+          fillColor: Colors.white,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: HygColors.border),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: HygColors.border),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(
+              color: HygColors.goldStrong,
+              width: 1.8,
+            ),
+          ),
+        ),
+        items: options
+            .map(
+              (option) => DropdownMenuItem<String>(
+                value: option,
+                child: Text(option, overflow: TextOverflow.ellipsis),
+              ),
+            )
+            .toList(),
+        onChanged: onChanged,
+      ),
+    );
+  }
+}
+
 class YellowActionButton extends StatelessWidget {
   const YellowActionButton({required this.label, this.onPressed, super.key});
 

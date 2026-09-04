@@ -12,22 +12,38 @@ class AdminAuthService {
       throw Exception('Enter username and password.');
     }
 
-    final resolvedEmail = await _client.rpc(
-      'resolve_login_email',
-      params: {'p_username': loginName},
-    );
-    final email = resolvedEmail?.toString().trim() ?? '';
-    if (email.isEmpty) {
-      throw Exception('No login account found for this username.');
+    String email = '';
+    try {
+      final resolvedEmail = await _client.rpc(
+        'resolve_login_email',
+        params: {'p_username': loginName},
+      );
+      email = resolvedEmail?.toString().trim() ?? '';
+    } on PostgrestException catch (e) {
+      final msg = e.message.toLowerCase();
+      if (msg.contains('not found') ||
+          msg.contains('not registered') ||
+          msg.contains('no login account')) {
+        throw Exception('Invalid username or password. Please try again.');
+      }
+      rethrow;
     }
 
-    final authResponse = await _client.auth.signInWithPassword(
-      email: email,
-      password: password,
-    );
-    final userId = authResponse.user?.id;
-    if (userId == null) {
-      throw Exception('Invalid admin credential.');
+    if (email.isEmpty) {
+      throw Exception('Invalid username or password. Please try again.');
+    }
+
+    try {
+      final authResponse = await _client.auth.signInWithPassword(
+        email: email,
+        password: password,
+      );
+      final userId = authResponse.user?.id;
+      if (userId == null) {
+        throw Exception('Invalid username or password. Please try again.');
+      }
+    } on AuthException {
+      throw Exception('Invalid username or password. Please try again.');
     }
 
     final checkResponse = await _client.rpc('admin_desktop_login_check');
@@ -1611,6 +1627,136 @@ class RegisteredUsersService {
     }
   }
 
+  static Future<String> setOffsetBalance({
+    required String userProfileId,
+    required double balanceHours,
+  }) async {
+    try {
+      final response = await _client.rpc(
+        'admin_set_employee_offset_balance',
+        params: {
+          'p_user_profile_id': userProfileId,
+          'p_balance_hours': balanceHours,
+        },
+      );
+      return response.toString();
+    } catch (_) {
+      final user = await _client
+          .from('user_profiles')
+          .select('employee_id')
+          .eq('id', userProfileId)
+          .maybeSingle();
+      final empId = user?['employee_id']?.toString();
+      if (empId != null && empId.isNotEmpty) {
+        await _client.from('offset_balances').upsert({
+          'employee_id': empId,
+          'balance_hours': balanceHours,
+          'updated_at': DateTime.now().toIso8601String(),
+        }, onConflict: 'employee_id');
+
+        await _client.from('offset_transactions').insert({
+          'employee_id': empId,
+          'transaction_type': 'adjustment',
+          'hours': balanceHours,
+          'balance_after': balanceHours,
+        });
+      }
+      return userProfileId;
+    }
+  }
+
+  static Future<String> addOffsetBalance({
+    required String userProfileId,
+    required double addHours,
+  }) async {
+    try {
+      final response = await _client.rpc(
+        'admin_add_employee_offset_balance',
+        params: {
+          'p_user_profile_id': userProfileId,
+          'p_add_hours': addHours,
+        },
+      );
+      return response.toString();
+    } catch (_) {
+      final user = await _client
+          .from('user_profiles')
+          .select('employee_id')
+          .eq('id', userProfileId)
+          .maybeSingle();
+      final empId = user?['employee_id']?.toString();
+      if (empId != null && empId.isNotEmpty) {
+        final bal = await _client
+            .from('offset_balances')
+            .select('balance_hours')
+            .eq('employee_id', empId)
+            .maybeSingle();
+        final current = (bal?['balance_hours'] as num?)?.toDouble() ?? 0.0;
+        final newBal = current + addHours;
+
+        await _client.from('offset_balances').upsert({
+          'employee_id': empId,
+          'balance_hours': newBal,
+          'updated_at': DateTime.now().toIso8601String(),
+        }, onConflict: 'employee_id');
+
+        await _client.from('offset_transactions').insert({
+          'employee_id': empId,
+          'transaction_type': 'adjustment',
+          'hours': addHours,
+          'balance_after': newBal,
+        });
+      }
+      return userProfileId;
+    }
+  }
+
+  static Future<String> deductOffsetBalance({
+    required String userProfileId,
+    required double deductHours,
+  }) async {
+    try {
+      final response = await _client.rpc(
+        'admin_deduct_employee_offset_balance',
+        params: {
+          'p_user_profile_id': userProfileId,
+          'p_deduct_hours': deductHours,
+        },
+      );
+      return response.toString();
+    } catch (_) {
+      final user = await _client
+          .from('user_profiles')
+          .select('employee_id')
+          .eq('id', userProfileId)
+          .maybeSingle();
+      final empId = user?['employee_id']?.toString();
+      if (empId != null && empId.isNotEmpty) {
+        final bal = await _client
+            .from('offset_balances')
+            .select('balance_hours')
+            .eq('employee_id', empId)
+            .maybeSingle();
+        final current = (bal?['balance_hours'] as num?)?.toDouble() ?? 0.0;
+        final newBal = current >= deductHours ? current - deductHours : 0.0;
+
+        await _client.from('offset_balances').upsert({
+          'employee_id': empId,
+          'balance_hours': newBal,
+          'updated_at': DateTime.now().toIso8601String(),
+        }, onConflict: 'employee_id');
+
+        await _client.from('offset_transactions').insert({
+          'employee_id': empId,
+          'transaction_type': 'adjustment',
+          'hours': -deductHours,
+          'balance_after': newBal,
+        });
+      }
+      return userProfileId;
+    }
+  }
+
   static Future<void> deleteUser({
     required String userProfileId,
   }) async {
@@ -1694,6 +1840,7 @@ class RegisteredUsersService {
       leaveCreditDays: _nullableDouble(row['leave_credit_days']),
       leaveUsedDays: _nullableDouble(row['leave_used_days']),
       leaveRemainingDays: _nullableDouble(row['leave_remaining_days']),
+      offsetBalanceHours: _nullableDouble(row['offset_balance_hours']),
       registeredAt: DepartmentDirectoryService._formatDate(registeredAt),
       emailConfirmedAt: DepartmentDirectoryService._formatDate(
         emailConfirmedAt,
@@ -3194,17 +3341,20 @@ class InventoryProductItem {
     required this.id,
     required this.itemName,
     required this.price,
+    this.category = '',
   });
 
   final int id;
   final String itemName;
   final double price;
+  final String category;
 
   factory InventoryProductItem.fromJson(Map<String, dynamic> json) {
     return InventoryProductItem(
       id: (json['id'] as num?)?.toInt() ?? 0,
       itemName: json['item_name']?.toString().trim() ?? '',
       price: (json['price'] as num?)?.toDouble() ?? 0.0,
+      category: json['category']?.toString().trim() ?? '',
     );
   }
 }
@@ -3346,6 +3496,288 @@ class RewardService {
       return response == true;
     } catch (_) {
       return false;
+    }
+  }
+}
+
+// ==========================================
+// BADGES DATABASE SERVICE (SUPABASE)
+// ==========================================
+class BadgesDatabaseService {
+  static final _client = Supabase.instance.client;
+
+  // ICON UTILS
+  static IconData parseIcon(String iconName) {
+    switch (iconName) {
+      case 'emoji_events':
+        return Icons.emoji_events;
+      case 'rocket_launch':
+        return Icons.rocket_launch;
+      case 'menu_book':
+        return Icons.menu_book;
+      case 'workspace_premium':
+        return Icons.workspace_premium;
+      case 'favorite':
+        return Icons.favorite;
+      case 'verified':
+        return Icons.verified;
+      case 'lightbulb_outline':
+        return Icons.lightbulb_outline;
+      case 'star':
+        return Icons.star;
+      default:
+        return Icons.stars;
+    }
+  }
+
+  static String iconToString(IconData icon) {
+    if (icon == Icons.emoji_events) return 'emoji_events';
+    if (icon == Icons.rocket_launch) return 'rocket_launch';
+    if (icon == Icons.menu_book) return 'menu_book';
+    if (icon == Icons.workspace_premium) return 'workspace_premium';
+    if (icon == Icons.favorite) return 'favorite';
+    if (icon == Icons.verified) return 'verified';
+    if (icon == Icons.lightbulb_outline) return 'lightbulb_outline';
+    if (icon == Icons.star) return 'star';
+    return 'star';
+  }
+
+  // COLOR UTILS
+  static Color parseColor(String colorHex, Color defaultColor) {
+    try {
+      final hex = colorHex.replaceAll('#', '');
+      if (hex.length == 6) {
+        return Color(int.parse('0xFF$hex'));
+      } else if (hex.length == 8) {
+        return Color(int.parse('0x$hex'));
+      }
+    } catch (_) {}
+    return defaultColor;
+  }
+
+  static String colorToHex(Color color) {
+    return '#${color.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
+  }
+
+  // 1. FETCH BADGES CATALOG FROM SUPABASE
+  static Future<List<BadgeItem>> loadBadges() async {
+    try {
+      final List<dynamic> response = await _client
+          .from('badges')
+          .select()
+          .order('created_at', ascending: false);
+
+      return response.map((map) {
+        final m = map as Map<String, dynamic>;
+        return BadgeItem(
+          id: m['id']?.toString() ?? '',
+          title: m['title']?.toString() ?? '',
+          description: m['description']?.toString() ?? '',
+          category: m['category']?.toString() ?? 'Milestones',
+          iconData: parseIcon(m['icon_data']?.toString() ?? 'star'),
+          customImagePath: m['custom_image_path']?.toString(),
+          iconBgColor: parseColor(m['icon_bg_color']?.toString() ?? '', const Color(0xFFFEF3C7)),
+          iconColor: parseColor(m['icon_color']?.toString() ?? '', const Color(0xFFD97706)),
+          points: (m['points'] as num?)?.toInt() ?? 100,
+          awardedCount: (m['awarded_count'] as num?)?.toInt() ?? 0,
+          status: m['status']?.toString() ?? 'Active',
+          createdAt: m['created_at'] != null ? DateTime.tryParse(m['created_at'].toString()) : null,
+        );
+      }).toList();
+    } catch (e) {
+      debugPrint('Error loading badges from Supabase: $e');
+      return [];
+    }
+  }
+
+  // 2. FETCH AWARDED HISTORY FROM SUPABASE
+  static Future<List<AwardedBadgeRecord>> loadAwardedHistory() async {
+    try {
+      final List<dynamic> response = await _client
+          .from('awarded_badges')
+          .select()
+          .order('awarded_at', ascending: false);
+
+      return response.map((map) {
+        final m = map as Map<String, dynamic>;
+        return AwardedBadgeRecord(
+          id: m['id']?.toString() ?? '',
+          badgeId: m['badge_id']?.toString() ?? '',
+          badgeTitle: m['badge_title']?.toString() ?? '',
+          badgeDescription: m['badge_description']?.toString() ?? '',
+          badgeIcon: parseIcon(m['badge_icon']?.toString() ?? 'star'),
+          customImagePath: m['custom_image_path']?.toString(),
+          badgeIconBgColor: parseColor(m['badge_icon_bg_color']?.toString() ?? '', const Color(0xFFFEF3C7)),
+          badgeIconColor: parseColor(m['badge_icon_color']?.toString() ?? '', const Color(0xFFD97706)),
+          employeeId: m['employee_id']?.toString() ?? '',
+          employeeName: m['employee_name']?.toString() ?? '',
+          employeeDepartment: m['employee_department']?.toString() ?? 'General',
+          employeeAvatarColor: parseColor(m['employee_avatar_color']?.toString() ?? '', const Color(0xFF2563EB)),
+          employeePhotoUrl: m['employee_photo_url']?.toString(),
+          awardedBy: m['awarded_by']?.toString() ?? 'Super Admin',
+          awardedAt: DateTime.tryParse(m['awarded_at']?.toString() ?? '') ?? DateTime.now(),
+          note: m['note']?.toString() ?? '',
+          pointsAwarded: (m['points_awarded'] as num?)?.toInt() ?? 0,
+        );
+      }).toList();
+    } catch (e) {
+      debugPrint('Error loading awarded badges from Supabase: $e');
+      return [];
+    }
+  }
+
+  // 3. SAVE / UPDATE BADGE TEMPLATE IN SUPABASE
+  static Future<void> saveBadge(BadgeItem badge) async {
+    try {
+      final payload = {
+        'id': badge.id,
+        'title': badge.title,
+        'description': badge.description,
+        'category': badge.category,
+        'icon_data': iconToString(badge.iconData),
+        'custom_image_path': badge.customImagePath,
+        'icon_bg_color': colorToHex(badge.iconBgColor),
+        'icon_color': colorToHex(badge.iconColor),
+        'points': badge.points,
+        'awarded_count': badge.awardedCount,
+        'status': badge.status,
+      };
+
+      await _client.from('badges').upsert(payload);
+    } catch (e) {
+      debugPrint('Error saving badge to Supabase: $e');
+    }
+  }
+
+  // 4. SAVE AWARDED BADGE RECORD & INCREMENT BADGE COUNT
+  static Future<void> saveAwardedRecord(AwardedBadgeRecord record) async {
+    try {
+      final payload = <String, dynamic>{
+        'id': record.id,
+        'badge_id': record.badgeId,
+        'badge_title': record.badgeTitle,
+        'badge_icon': iconToString(record.badgeIcon),
+        'custom_image_path': record.customImagePath,
+        'badge_icon_bg_color': colorToHex(record.badgeIconBgColor),
+        'badge_icon_color': colorToHex(record.badgeIconColor),
+        'employee_id': record.employeeId,
+        'employee_name': record.employeeName,
+        'employee_department': record.employeeDepartment,
+        'employee_avatar_color': colorToHex(record.employeeAvatarColor),
+        'awarded_by': record.awardedBy,
+        'awarded_at': record.awardedAt.toIso8601String(),
+        'note': record.note,
+        'points_awarded': record.pointsAwarded,
+      };
+
+      if (record.employeePhotoUrl != null && record.employeePhotoUrl!.isNotEmpty) {
+        payload['employee_photo_url'] = record.employeePhotoUrl;
+      }
+
+      try {
+        await _client.from('awarded_badges').insert(payload);
+      } catch (insertErr) {
+        // Fallback: If employee_photo_url column doesn't exist on remote schema yet, retry without it
+        if (payload.containsKey('employee_photo_url')) {
+          payload.remove('employee_photo_url');
+          await _client.from('awarded_badges').insert(payload);
+        } else {
+          rethrow;
+        }
+      }
+
+      // Increment badge awarded_count
+      try {
+        await _client.rpc('increment_badge_awarded_count', params: {'p_badge_id': record.badgeId});
+      } catch (_) {
+        final current = await _client.from('badges').select('awarded_count').eq('id', record.badgeId).maybeSingle();
+        if (current != null) {
+          final count = (current['awarded_count'] as num?)?.toInt() ?? 0;
+          await _client.from('badges').update({'awarded_count': count + 1}).eq('id', record.badgeId);
+        }
+      }
+    } catch (e) {
+      debugPrint('Error saving awarded badge record to Supabase: $e');
+    }
+  }
+
+  // 5. SAVE MULTIPLE AWARDED BADGE RECORDS (RPC / FALLBACK)
+  static Future<void> saveMultipleAwardedRecords({
+    required String employeeId,
+    required String employeeName,
+    required String employeeDepartment,
+    required Color employeeAvatarColor,
+    String? employeePhotoUrl,
+    required String awardedBy,
+    required String note,
+    required List<BadgeItem> selectedBadges,
+  }) async {
+    try {
+      final badgeIds = selectedBadges.map((b) => b.id).toList();
+
+      // Try RPC first
+      try {
+        await _client.rpc(
+          'award_multiple_badges_to_employee',
+          params: {
+            'p_employee_id': employeeId,
+            'p_employee_name': employeeName,
+            'p_employee_department': employeeDepartment,
+            'p_employee_avatar_color': colorToHex(employeeAvatarColor),
+            'p_employee_photo_url': employeePhotoUrl,
+            'p_awarded_by': awardedBy,
+            'p_note': note,
+            'p_badge_ids': badgeIds,
+          },
+        );
+        return;
+      } catch (rpcErr) {
+        debugPrint('RPC award_multiple_badges_to_employee fallback: $rpcErr');
+      }
+
+      // Fallback: Individual inserts
+      for (final badge in selectedBadges) {
+        final record = AwardedBadgeRecord(
+          id: 'awd_${DateTime.now().millisecondsSinceEpoch}_${badge.id}',
+          badgeId: badge.id,
+          badgeTitle: badge.title,
+          badgeDescription: badge.description,
+          badgeIcon: badge.iconData,
+          customImagePath: badge.customImagePath,
+          badgeIconBgColor: badge.iconBgColor,
+          badgeIconColor: badge.iconColor,
+          employeeId: employeeId,
+          employeeName: employeeName,
+          employeeDepartment: employeeDepartment,
+          employeeAvatarColor: employeeAvatarColor,
+          employeePhotoUrl: employeePhotoUrl,
+          awardedBy: awardedBy,
+          awardedAt: DateTime.now(),
+          note: note,
+          pointsAwarded: badge.points,
+        );
+        await saveAwardedRecord(record);
+      }
+    } catch (e) {
+      debugPrint('Error saving multiple awarded records to Supabase: $e');
+    }
+  }
+
+  // 6. DELETE BADGE TEMPLATE FROM SUPABASE
+  static Future<void> deleteBadge(String badgeId) async {
+    try {
+      await _client.from('badges').delete().eq('id', badgeId);
+    } catch (e) {
+      debugPrint('Error deleting badge from Supabase: $e');
+    }
+  }
+
+  // 7. DELETE AWARDED BADGE RECORD FROM SUPABASE
+  static Future<void> deleteAwardedRecord(String recordId) async {
+    try {
+      await _client.from('awarded_badges').delete().eq('id', recordId);
+    } catch (e) {
+      debugPrint('Error deleting awarded badge record from Supabase: $e');
     }
   }
 }

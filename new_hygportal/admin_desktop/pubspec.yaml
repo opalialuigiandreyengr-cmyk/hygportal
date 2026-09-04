@@ -67,6 +67,8 @@ flutter:
   assets:
     - assets/hyg_icon.png
     - assets/hyg_logo.png
+    - assets/hygcoins.png
+    - assets/awardpoints.png
 
   fonts:
     - family: Poppins

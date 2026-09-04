@@ -214,7 +214,7 @@ class _AddStoreDialogState extends State<AddStoreDialog> {
   }
 }
 
-class StoresPanel extends StatelessWidget {
+class StoresPanel extends StatefulWidget {
   const StoresPanel({
     required this.stores,
     required this.isLoading,
@@ -235,7 +235,82 @@ class StoresPanel extends StatelessWidget {
   final bool canEditAndDelete;
 
   @override
+  State<StoresPanel> createState() => _StoresPanelState();
+}
+
+class _StoresPanelState extends State<StoresPanel> {
+  static const _allCompanies = 'All Companies';
+
+  final _searchController = TextEditingController();
+  String _query = '';
+  String _selectedCompany = _allCompanies;
+  List<String> _dbCompanies = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCompanies();
+  }
+
+  Future<void> _loadCompanies() async {
+    try {
+      final rows = await CompanyDirectoryService.loadCompanies();
+      if (!mounted) return;
+      setState(() {
+        _dbCompanies = rows
+            .where((c) => c.status == 'active')
+            .map((c) => c.name.trim())
+            .where((n) => n.isNotEmpty)
+            .toList();
+      });
+    } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<String> get _companyOptions {
+    final set = <String>{};
+    for (final c in _dbCompanies) {
+      set.add(c);
+    }
+    for (final s in widget.stores) {
+      final name = s.companyName.trim();
+      if (name.isNotEmpty && name != '-') {
+        set.add(name);
+      }
+    }
+    final sorted = set.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return [_allCompanies, ...sorted];
+  }
+
+  List<StorePreview> get _filteredStores {
+    final q = _query.trim().toLowerCase();
+    return widget.stores.where((store) {
+      if (_selectedCompany != _allCompanies) {
+        if (store.companyName.trim().toLowerCase() !=
+            _selectedCompany.trim().toLowerCase()) {
+          return false;
+        }
+      }
+      if (q.isNotEmpty) {
+        final matches = store.name.toLowerCase().contains(q) ||
+            store.companyName.toLowerCase().contains(q) ||
+            store.clusterName.toLowerCase().contains(q);
+        if (!matches) return false;
+      }
+      return true;
+    }).toList();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final filtered = _filteredStores;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -244,48 +319,91 @@ class StoresPanel extends StatelessWidget {
       ),
       child: Column(
         children: [
-          const Row(
+          Row(
             children: [
               Expanded(
-                child: FilterBox(
-                  icon: Icons.search,
-                  label: 'Search store name or company',
+                flex: 5,
+                child: TableSearchField(
+                  controller: _searchController,
+                  hint: 'Search store name or cluster',
+                  onChanged: (val) => setState(() => _query = val),
+                  onClear: () {
+                    _searchController.clear();
+                    setState(() => _query = '');
+                  },
                 ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 3,
+                child: TableFilterDropdown(
+                  value: _selectedCompany,
+                  options: _companyOptions,
+                  prefixIcon: Icons.business_outlined,
+                  onChanged: (val) => setState(() {
+                    _selectedCompany = val ?? _allCompanies;
+                  }),
+                ),
+              ),
+              const SizedBox(width: 10),
+              IconButton(
+                tooltip: 'Refresh',
+                onPressed: () {
+                  _loadCompanies();
+                  widget.onRefresh();
+                },
+                icon: const Icon(Icons.refresh, color: Color(0xFF475569)),
               ),
             ],
           ),
           const SizedBox(height: 18),
           const _StoreTableHeader(),
           const SizedBox(height: 8),
-          if (isLoading)
+          if (widget.isLoading)
             const EmployeesStateMessage(
               icon: Icons.sync,
               title: 'Loading stores',
               message: 'Getting store records from Supabase.',
             )
-          else if (error != null)
+          else if (widget.error != null)
             EmployeesStateMessage(
               icon: Icons.warning_amber_rounded,
               title: 'Could not load stores',
-              message: error!,
+              message: widget.error!,
               actionLabel: 'Retry',
-              onAction: onRefresh,
+              onAction: widget.onRefresh,
             )
-          else if (stores.isEmpty)
+          else if (widget.stores.isEmpty)
             EmployeesStateMessage(
               icon: Icons.storefront_outlined,
               title: 'No stores found',
               message: 'No store records are available yet.',
               actionLabel: 'Refresh',
-              onAction: onRefresh,
+              onAction: widget.onRefresh,
+            )
+          else if (filtered.isEmpty)
+            EmployeesStateMessage(
+              icon: Icons.search_off,
+              title: 'No matching stores',
+              message: _selectedCompany != _allCompanies
+                  ? 'No stores found for "$_selectedCompany"${_query.isNotEmpty ? ' matching "$_query"' : ''}.'
+                  : 'Try another store name or filter.',
+              actionLabel: 'Reset filters',
+              onAction: () {
+                _searchController.clear();
+                setState(() {
+                  _query = '';
+                  _selectedCompany = _allCompanies;
+                });
+              },
             )
           else
-            ...stores.map(
+            ...filtered.map(
               (store) => _StoreRow(
                 store: store,
-                onEdit: () => onEditStore(store),
-                onDelete: () => onDeleteStore(store),
-                canEditAndDelete: canEditAndDelete,
+                onEdit: () => widget.onEditStore(store),
+                onDelete: () => widget.onDeleteStore(store),
+                canEditAndDelete: widget.canEditAndDelete,
               ),
             ),
         ],

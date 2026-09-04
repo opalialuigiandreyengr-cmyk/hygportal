@@ -389,6 +389,7 @@ class RegisteredUserPreview {
     required this.leaveCreditDays,
     required this.leaveUsedDays,
     required this.leaveRemainingDays,
+    this.offsetBalanceHours,
     required this.registeredAt,
     required this.emailConfirmedAt,
     required this.lastSignInAt,
@@ -409,6 +410,7 @@ class RegisteredUserPreview {
   final double? leaveCreditDays;
   final double? leaveUsedDays;
   final double? leaveRemainingDays;
+  final double? offsetBalanceHours;
   final String registeredAt;
   final String emailConfirmedAt;
   final String lastSignInAt;
@@ -711,12 +713,21 @@ class AdminRequestItem {
   }
 
   bool get isAutoApprovedBirthdayGrant {
-    return requestId.startsWith('bday_leave_') ||
-        reason == 'Auto-approved Birthday Leave Grant' ||
-        leaveCategory == 'Birthday Leave Grant' ||
+    final cat = (leaveCategory ?? '').trim().toLowerCase();
+    final r = (reason ?? '').trim().toLowerCase();
+    final rm = (remarks ?? '').trim().toLowerCase();
+    final reqId = requestId.trim();
+
+    return reqId.startsWith('bday_leave_') ||
+        cat == 'birthday leave grant' ||
+        r == 'auto-approved birthday leave grant' ||
+        r.contains('birthday leave grant') ||
+        rm.contains('birthday leave grant') ||
         (approvalSummary.isNotEmpty &&
-            (approvalSummary.first['approver_name'] == 'HYG Portal System' ||
-                approvalSummary.first['name'] == 'HYG Portal System'));
+            ((approvalSummary.first['approver_name'] ?? '').toString().trim() ==
+                    'HYG Portal System' ||
+                (approvalSummary.first['name'] ?? '').toString().trim() ==
+                    'HYG Portal System'));
   }
 
   String get statusLabel {
@@ -755,7 +766,22 @@ class AdminRequestItem {
     if (approvalSummary.isEmpty) return 'No approvals recorded.';
     return approvalSummary
         .map((entry) {
-          final level = entry['level']?.toString() ?? '?';
+          final rawLevel = entry['required_level'] ??
+              entry['approver_level'] ??
+              entry['level'] ??
+              entry['route_level'];
+          String level = '?';
+          if (rawLevel != null) {
+            String s = rawLevel.toString().trim();
+            if (s.toLowerCase().startsWith('level')) {
+              s = s.substring(5).trim();
+            } else if (s.toUpperCase().startsWith('L')) {
+              s = s.substring(1).trim();
+            }
+            if (s.isNotEmpty) {
+              level = s;
+            }
+          }
           final name = (entry['approver_name'] ?? entry['name'] ?? 'Unknown')
               .toString()
               .trim();
@@ -990,5 +1016,78 @@ class EsarfEntryItem {
 
     return parsedEntries.isNotEmpty ? parsedEntries : [defaultEntry];
   }
+}
+
+// ==========================================
+// BADGE & ACHIEVEMENT MODELS
+// ==========================================
+class BadgeItem {
+  BadgeItem({
+    required this.id,
+    required this.title,
+    required this.description,
+    required this.category,
+    required this.iconData,
+    this.customImagePath,
+    this.iconBgColor = const Color(0xFFFEF3C7), // Default warm amber tint
+    this.iconColor = const Color(0xFFD97706),
+    required this.points,
+    this.awardedCount = 0,
+    this.status = 'Active',
+    DateTime? createdAt,
+  }) : createdAt = createdAt ?? DateTime.now();
+
+  final String id;
+  String title;
+  String description;
+  String category;
+  IconData iconData;
+  String? customImagePath;
+  Color iconBgColor;
+  Color iconColor;
+  int points;
+  int awardedCount;
+  String status; // 'Active', 'Archived', 'Draft'
+  final DateTime createdAt;
+}
+
+class AwardedBadgeRecord {
+  AwardedBadgeRecord({
+    required this.id,
+    required this.badgeId,
+    required this.badgeTitle,
+    this.badgeDescription = '',
+    required this.badgeIcon,
+    this.customImagePath,
+    required this.badgeIconBgColor,
+    required this.badgeIconColor,
+    required this.employeeId,
+    required this.employeeName,
+    required this.employeeDepartment,
+    this.employeeAvatarColor = const Color(0xFF2563EB),
+    this.employeePhotoUrl,
+    required this.awardedBy,
+    required this.awardedAt,
+    this.note = '',
+    required this.pointsAwarded,
+  });
+
+  final String id;
+  final String badgeId;
+  final String badgeTitle;
+  final String badgeDescription;
+  final IconData badgeIcon;
+  final String? customImagePath;
+  final Color badgeIconBgColor;
+  final Color badgeIconColor;
+  final String employeeId;
+  final String employeeName;
+  final String employeeDepartment;
+  final Color employeeAvatarColor;
+  final String? employeePhotoUrl;
+  final String awardedBy;
+  final DateTime awardedAt;
+  final String note;
+  final int pointsAwarded;
 }
 

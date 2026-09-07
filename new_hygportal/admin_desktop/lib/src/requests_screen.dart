@@ -1395,6 +1395,16 @@ class _RequestsPanelState extends State<RequestsPanel>
                       builder: (context, child) {
                         return Theme(
                           data: Theme.of(context).copyWith(
+                            dialogTheme: DialogThemeData(
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                            datePickerTheme: DatePickerThemeData(
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
                             colorScheme: const ColorScheme.light(
                               primary: Color(0xFF1E40AF),
                               onPrimary: Colors.white,
@@ -1403,11 +1413,24 @@ class _RequestsPanelState extends State<RequestsPanel>
                             ),
                           ),
                           child: UnconstrainedBox(
-                            clipBehavior: Clip.hardEdge,
-                            child: SizedBox(
+                            child: Container(
                               width: 400,
                               height: 520,
-                              child: child,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(16),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.18),
+                                    blurRadius: 20,
+                                    offset: const Offset(0, 8),
+                                  ),
+                                ],
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(16),
+                                child: child ?? const SizedBox.shrink(),
+                              ),
                             ),
                           ),
                         );
@@ -1535,58 +1558,14 @@ class _RequestsPanelState extends State<RequestsPanel>
 
             // Pagination Footer Bar
             Padding(
-              padding: const EdgeInsets.fromLTRB(18, 12, 18, 18),
-              child: Row(
-                children: [
-                  Text(
-                    'Showing ${totalItems == 0 ? 0 : startIndex + 1} to $endIndex of $totalItems requests',
-                    style: HygTypography.body.copyWith(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF64748B),
-                    ),
-                  ),
-                  const Spacer(),
-                  Row(
-                    children: [
-                      IconButton(
-                        tooltip: 'First Page',
-                        onPressed: safePage > 1 ? () => setState(() => _currentPage = 1) : null,
-                        icon: const Icon(Icons.first_page, size: 18),
-                      ),
-                      IconButton(
-                        tooltip: 'Previous Page',
-                        onPressed: safePage > 1 ? () => setState(() => _currentPage = safePage - 1) : null,
-                        icon: const Icon(Icons.chevron_left, size: 18),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: HygColors.ink,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          'Page $safePage of $effectiveTotalPages',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                      IconButton(
-                        tooltip: 'Next Page',
-                        onPressed: safePage < effectiveTotalPages ? () => setState(() => _currentPage = safePage + 1) : null,
-                        icon: const Icon(Icons.chevron_right, size: 18),
-                      ),
-                      IconButton(
-                        tooltip: 'Last Page',
-                        onPressed: safePage < effectiveTotalPages ? () => setState(() => _currentPage = effectiveTotalPages) : null,
-                        icon: const Icon(Icons.last_page, size: 18),
-                      ),
-                    ],
-                  ),
-                ],
+              padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+              child: EmployeePagination(
+                currentPage: safePage - 1,
+                pageCount: effectiveTotalPages,
+                totalEmployees: totalItems,
+                employeesPerPage: _pageSize,
+                itemLabel: 'requests',
+                onPageSelected: (page) => setState(() => _currentPage = page + 1),
               ),
             ),
           ],
@@ -1717,6 +1696,20 @@ class _ApproverEntry {
 
 // Ã¢â€â‚¬Ã¢â€â‚¬ Table Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
+// ── Table (Employee-Style Cards & Rounded Header) ──────────────────────────
+
+class _RequestColDef {
+  const _RequestColDef({
+    required this.title,
+    required this.width,
+    this.alignment = Alignment.centerLeft,
+  });
+
+  final String title;
+  final double width;
+  final Alignment alignment;
+}
+
 class _RequestsTable extends StatefulWidget {
   const _RequestsTable({
     required this.items,
@@ -1757,9 +1750,194 @@ class _RequestsTableState extends State<_RequestsTable> {
     }
   }
 
-  static const double _storeWidth = 92;
-  static const double _reasonWidth = 180;
-  static const double _productWidth = 160;
+  List<_RequestColDef> _getBaseColumns() {
+    switch (widget.category) {
+      case AdminRequestCategory.esarf:
+        return [
+          const _RequestColDef(title: 'Employee', width: 200),
+          const _RequestColDef(title: 'Department', width: 140),
+          const _RequestColDef(title: 'Store', width: 110),
+          const _RequestColDef(title: 'Type', width: 130),
+          const _RequestColDef(title: 'Approver', width: 240),
+          const _RequestColDef(title: 'Status', width: 120),
+          const _RequestColDef(title: 'Submitted', width: 140),
+          if (widget.showDelete) const _RequestColDef(title: 'Actions', width: 90),
+        ];
+      case AdminRequestCategory.leave:
+        return [
+          const _RequestColDef(title: 'Employee', width: 190),
+          const _RequestColDef(title: 'Department', width: 130),
+          const _RequestColDef(title: 'Store', width: 100),
+          const _RequestColDef(title: 'Leave Category', width: 130),
+          const _RequestColDef(title: 'Leave Credits', width: 100),
+          const _RequestColDef(title: 'Start', width: 100),
+          const _RequestColDef(title: 'End', width: 100),
+          const _RequestColDef(title: 'Days', width: 70),
+          const _RequestColDef(title: 'Type', width: 140),
+          const _RequestColDef(title: 'Reason', width: 180),
+          const _RequestColDef(title: 'Approver', width: 240),
+          const _RequestColDef(title: 'Status', width: 120),
+          const _RequestColDef(title: 'Submitted', width: 140),
+          if (widget.showDelete) const _RequestColDef(title: 'Actions', width: 90),
+        ];
+      case AdminRequestCategory.perk:
+        return [
+          const _RequestColDef(title: 'Employee', width: 190),
+          const _RequestColDef(title: 'Department', width: 130),
+          const _RequestColDef(title: 'Store', width: 100),
+          const _RequestColDef(title: 'Type', width: 100),
+          const _RequestColDef(title: 'Product', width: 160),
+          const _RequestColDef(title: 'Qty', width: 60),
+          const _RequestColDef(title: 'Amount', width: 100),
+          const _RequestColDef(title: 'Final', width: 100),
+          const _RequestColDef(title: 'Txn Date', width: 100),
+          const _RequestColDef(title: 'Approver', width: 240),
+          const _RequestColDef(title: 'Status', width: 120),
+          const _RequestColDef(title: 'Submitted', width: 140),
+          if (widget.showDelete) const _RequestColDef(title: 'Actions', width: 90),
+        ];
+    }
+  }
+
+  static const double _rowHorizontalInset = 32.0; // 14 padding + 1 border each side + safety buffer
+
+  List<_RequestColDef> _computeScaledColumns(
+    List<_RequestColDef> baseColumns,
+    double availableWidth,
+  ) {
+    final double contentAvailable = math.max(0.0, availableWidth - _rowHorizontalInset);
+    final double totalBaseWidth = baseColumns.fold(0.0, (sum, col) => sum + col.width);
+
+    if (contentAvailable <= totalBaseWidth || totalBaseWidth == 0) {
+      return baseColumns;
+    }
+
+    final double scale = contentAvailable / totalBaseWidth;
+    return baseColumns.map((col) {
+      return _RequestColDef(
+        title: col.title,
+        width: col.width * scale,
+        alignment: col.alignment,
+      );
+    }).toList();
+  }
+
+  Widget _buildHeader(List<_RequestColDef> columns, double rowWidth) {
+    return Container(
+      width: rowWidth,
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 15),
+      decoration: BoxDecoration(
+        color: HygColors.background,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: columns.map((col) {
+          return Container(
+            width: col.width,
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            alignment: col.alignment,
+            child: Text(
+              col.title,
+              style: HygTypography.tableHeader,
+              overflow: TextOverflow.ellipsis,
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final baseColumns = _getBaseColumns();
+    final double totalBaseWidth = baseColumns.fold(0.0, (sum, col) => sum + col.width) + _rowHorizontalInset;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 0, 18, 0),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final availableWidth = constraints.maxWidth;
+          final columns = _computeScaledColumns(baseColumns, availableWidth);
+          final double rowWidth = math.max(availableWidth, totalBaseWidth);
+
+          return ScrollConfiguration(
+            behavior: ScrollConfiguration.of(context).copyWith(
+              dragDevices: {
+                PointerDeviceKind.touch,
+                PointerDeviceKind.mouse,
+                PointerDeviceKind.trackpad,
+                PointerDeviceKind.stylus,
+              },
+            ),
+            child: Scrollbar(
+              controller: _scrollController,
+              thumbVisibility: true,
+              trackVisibility: true,
+              child: SingleChildScrollView(
+                controller: _scrollController,
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.only(bottom: 12),
+                child: SizedBox(
+                  width: rowWidth,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildHeader(columns, rowWidth),
+                      const SizedBox(height: 8),
+                      ...widget.items.map(
+                        (item) => _RequestCardRow(
+                          key: ValueKey(item.requestId),
+                          item: item,
+                          columns: columns,
+                          rowWidth: rowWidth,
+                          category: widget.category,
+                          showDelete: widget.showDelete,
+                          onDelete: widget.onDelete,
+                          onReassign: widget.onReassign,
+                          onValidate: widget.onValidate,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _RequestCardRow extends StatefulWidget {
+  const _RequestCardRow({
+    required this.item,
+    required this.columns,
+    required this.rowWidth,
+    required this.category,
+    required this.showDelete,
+    required this.onDelete,
+    required this.onReassign,
+    this.onValidate,
+    super.key,
+  });
+
+  final AdminRequestItem item;
+  final List<_RequestColDef> columns;
+  final double rowWidth;
+  final AdminRequestCategory category;
+  final bool showDelete;
+  final void Function(AdminRequestItem) onDelete;
+  final void Function(AdminRequestItem item, String? stepId) onReassign;
+  final void Function(AdminRequestItem)? onValidate;
+
+  @override
+  State<_RequestCardRow> createState() => _RequestCardRowState();
+}
+
+class _RequestCardRowState extends State<_RequestCardRow> {
+  bool _isHovered = false;
 
   String _storeLabel(String? storeName) {
     final value = storeName?.trim();
@@ -1767,56 +1945,48 @@ class _RequestsTableState extends State<_RequestsTable> {
     return value;
   }
 
-  Widget _limitedText(
-    String value, {
-    double width = 120,
-    int maxLines = 1,
-    bool wrap = false,
-  }) {
-    return SizedBox(
-      width: width,
+  Widget _buildStoreCell(AdminRequestItem item) {
+    final store = _storeLabel(item.storeName);
+    return Tooltip(
+      message: store,
+      child: Text(
+        store,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: HygTypography.tableBody,
+      ),
+    );
+  }
+
+  Widget _buildReasonCell(String value) {
+    return Tooltip(
+      message: value,
       child: Text(
         value,
-        maxLines: maxLines,
+        maxLines: 2,
         overflow: TextOverflow.ellipsis,
-        softWrap: wrap,
+        style: HygTypography.tableBody,
       ),
     );
   }
 
-  DataCell _storeCell(AdminRequestItem item) {
-    final store = _storeLabel(item.storeName);
-
-    return DataCell(
-      Tooltip(
-        message: store,
-        child: _limitedText(
-          store,
-          width: _storeWidth,
-          maxLines: 2,
-          wrap: true,
-        ),
-      ),
-    );
-  }
-  
-  DataCell _reasonCell(String value) {
-    return DataCell(
-      Tooltip(
-        message: value,
-        child: _limitedText(
-          value,
-          width: _reasonWidth,
-          maxLines: 2,
-        ),
+  Widget _buildProductCell(AdminRequestItem item) {
+    final product = item.perkProductName ?? '—';
+    return Tooltip(
+      message: product,
+      child: Text(
+        product,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: HygTypography.tableBody,
       ),
     );
   }
 
-  DataCell _leaveTypeCell(AdminRequestItem item) {
+  Widget _buildLeaveTypeCell(AdminRequestItem item) {
     final leaveType = item.leaveType?.trim() ?? '';
     if (leaveType.isEmpty) {
-      return const DataCell(Text('Ã¢â‚¬â€'));
+      return const Text('—', style: HygTypography.tableBody);
     }
 
     if (leaveType.toLowerCase() == 'both' || leaveType.toLowerCase() == 'with and without pay') {
@@ -1824,68 +1994,240 @@ class _RequestsTableState extends State<_RequestsTable> {
       final unpaidStr = _formatDaysNum(item.unpaidDays);
       final detail = '$paidStr Paid, $unpaidStr Unpaid';
 
-      return DataCell(
-        Tooltip(
-          message: 'Both ($detail)',
+      return Tooltip(
+        message: 'Both ($detail)',
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Both',
+              style: HygTypography.tableBody.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              '$paidStr Paid • $unpaidStr Unpaid',
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF64748B),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Text(leaveType, style: HygTypography.tableBody);
+  }
+
+  Widget _buildEsarfTypeCell(AdminRequestItem item) {
+    final txAbbr = _formatEsarfTransactionAbbr(
+      (item.transactionType != null && item.transactionType!.isNotEmpty)
+          ? item.transactionType!
+          : item.requestTypeName,
+    );
+    final entryCount = item.entries.length;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(txAbbr, style: HygTypography.tableBody),
+        if (entryCount > 1) ...[
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: const Color(0xFFDCFCE7),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              '$entryCount entries',
+              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF15803D)),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildEmployeeCell(AdminRequestItem item) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        CircleAvatar(
+          radius: 15,
+          backgroundColor: const Color(0xFFE2E8F0),
+          child: Text(
+            (item.employeeName ?? '?').substring(0, 1).toUpperCase(),
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: HygColors.ink,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Both',
-                style: HygTypography.tableBody.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+                item.employeeName ?? 'Unknown',
+                style: HygTypography.tablePrimary,
+                overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: 2),
-              Text(
-                '$paidStr Paid • $unpaidStr Unpaid',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFF64748B),
+              if (item.employeeNo != null)
+                Text(
+                  item.employeeNo!,
+                  style: HygTypography.tableMuted,
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
             ],
           ),
         ),
-      );
-    }
-
-    return DataCell(Text(leaveType));
+      ],
+    );
   }
 
-  DataCell _approverCell(AdminRequestItem item) {
+  Widget _buildStatusCell(AdminRequestItem item) {
+    final isBirthdayLeave = item.isAutoApprovedBirthdayGrant;
+    final statusKey = isBirthdayLeave ? 'approved' : item.status.toLowerCase();
+
+    final color = switch (statusKey) {
+      'approved' => const Color(0xFF166534),
+      'rejected' => const Color(0xFFB91C1C),
+      'cancelled' => const Color(0xFF64748B),
+      'needs_admin_review' => const Color(0xFFB45309),
+      _ => const Color(0xFF1E40AF),
+    };
+
+    final bgColor = switch (statusKey) {
+      'approved' => const Color(0xFFDCFCE7),
+      'rejected' => const Color(0xFFFEE2E2),
+      'cancelled' => const Color(0xFFF1F5F9),
+      'needs_admin_review' => const Color(0xFFFEF3C7),
+      _ => const Color(0xFFDBEAFE),
+    };
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(99),
+      ),
+      child: Text(
+        item.statusLabel,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: color,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSubmittedCell(AdminRequestItem item) {
+    final raw = item.submittedAt;
+
+    if (raw == null || raw.isEmpty) {
+      return const Text('—', style: HygTypography.tableMuted);
+    }
+
+    try {
+      final dt = DateTime.parse(raw);
+      final ph = dt.toUtc().add(const Duration(hours: 8));
+      final label =
+          '${ph.month}/${ph.day}/${ph.year} ${ph.hour.toString().padLeft(2, '0')}:${ph.minute.toString().padLeft(2, '0')}';
+
+      return Text(label, style: HygTypography.tableMuted);
+    } catch (_) {
+      return Text(raw, style: HygTypography.tableMuted);
+    }
+  }
+
+  Widget _buildActionsCell(BuildContext context, AdminRequestItem item) {
+    final isAutoApproved = item.isAutoApprovedBirthdayGrant;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (!isAutoApproved && widget.category == AdminRequestCategory.leave && widget.onValidate != null) ...[
+          Tooltip(
+            message: 'Validate request',
+            child: InkWell(
+              borderRadius: BorderRadius.circular(6),
+              onTap: () => widget.onValidate!(item),
+              child: Container(
+                padding: const EdgeInsets.all(5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFD1FAE5),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Icon(
+                  Icons.check_circle_outline,
+                  size: 16,
+                  color: Color(0xFF059669),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
+        Tooltip(
+          message: 'Delete request',
+          child: InkWell(
+            borderRadius: BorderRadius.circular(6),
+            onTap: () => widget.onDelete(item),
+            child: Container(
+              padding: const EdgeInsets.all(5),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEE2E2),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Icon(
+                Icons.delete_outline,
+                size: 16,
+                color: Color(0xFFB91C1C),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildApproverCell(AdminRequestItem item) {
     final isBirthdayLeave = item.isAutoApprovedBirthdayGrant;
 
     if (isBirthdayLeave) {
-      return DataCell(
-        Tooltip(
-          message: 'HYG Portal System (Auto-Approved)',
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-            decoration: BoxDecoration(
-              color: const Color(0xFF166534).withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: const [
-                Icon(Icons.check, size: 16, color: Color(0xFF166534)),
-                SizedBox(width: 5),
-                Flexible(
-                  child: Text(
-                    'HYG Portal System',
-                    style: TextStyle(
-                      color: Color(0xFF166534),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                    ),
-                    overflow: TextOverflow.ellipsis,
+      return Tooltip(
+        message: 'HYG Portal System (Auto-Approved)',
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+          decoration: BoxDecoration(
+            color: const Color(0xFF166534).withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              Icon(Icons.check, size: 16, color: Color(0xFF166534)),
+              SizedBox(width: 5),
+              Flexible(
+                child: Text(
+                  'HYG Portal System',
+                  style: TextStyle(
+                    color: Color(0xFF166534),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
                   ),
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       );
@@ -1899,49 +2241,45 @@ class _RequestsTableState extends State<_RequestsTable> {
           item.approverNames.toLowerCase().contains('unknown'));
 
       if (isUnknownOrFallback) {
-        return DataCell(
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _limitedText('Ã¢â‚¬â€', width: 20, maxLines: 1),
-              const SizedBox(width: 6),
-              InkWell(
-                onTap: () => widget.onReassign(item, null),
-                borderRadius: BorderRadius.circular(4),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1E40AF).withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: const Color(0xFF1E40AF).withValues(alpha: 0.3)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: const [
-                      Icon(Icons.swap_horiz, size: 12, color: Color(0xFF1E40AF)),
-                      SizedBox(width: 3),
-                      Text(
-                        'Reassign',
-                        style: TextStyle(
-                          color: Color(0xFF1E40AF),
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                        ),
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('—', style: HygTypography.tableBody),
+            const SizedBox(width: 6),
+            InkWell(
+              onTap: () => widget.onReassign(item, null),
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E40AF).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: const Color(0xFF1E40AF).withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.swap_horiz, size: 12, color: Color(0xFF1E40AF)),
+                    SizedBox(width: 3),
+                    Text(
+                      'Reassign',
+                      style: TextStyle(
+                        color: Color(0xFF1E40AF),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         );
       }
 
-      return DataCell(
-        Tooltip(
-          message: 'Ã¢â‚¬â€',
-          child: _limitedText('Ã¢â‚¬â€', width: 140, maxLines: 2),
-        ),
+      return Tooltip(
+        message: '—',
+        child: const Text('—', style: HygTypography.tableBody),
       );
     }
 
@@ -1955,93 +2293,84 @@ class _RequestsTableState extends State<_RequestsTable> {
         }).toList(growable: false);
     final highlights = _resolveHighlights(entries);
 
-    return DataCell(
-      Tooltip(
-        message: item.approverDetail,
-        child: SizedBox(
-          width: 220,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: entries.map((entry) {
-              final (icon, color) = _iconForStatus(entry.status);
-              final isHighlighted = highlights.contains(entry);
-              final isPerk = item.category == AdminRequestCategory.perk;
-              final isEditableStatus = !isPerk &&
-                  entry.status != 'approved' &&
-                  entry.status != 'rejected' &&
-                  entry.status != 'cancelled' &&
-                  item.status.toLowerCase() != 'approved' &&
-                  item.status.toLowerCase() != 'rejected' &&
-                  item.status.toLowerCase() != 'cancelled';
+    return Tooltip(
+      message: item.approverDetail,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: entries.map((entry) {
+          final (icon, color) = _iconForStatus(entry.status);
+          final isHighlighted = highlights.contains(entry);
+          final isPerk = item.category == AdminRequestCategory.perk;
+          final isEditableStatus = !isPerk &&
+              entry.status != 'approved' &&
+              entry.status != 'rejected' &&
+              entry.status != 'cancelled' &&
+              item.status.toLowerCase() != 'approved' &&
+              item.status.toLowerCase() != 'rejected' &&
+              item.status.toLowerCase() != 'cancelled';
 
-
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                margin: const EdgeInsets.only(bottom: 2),
-                decoration: BoxDecoration(
-                  color: isHighlighted ? color.withValues(alpha: 0.12) : null,
-                  borderRadius: BorderRadius.circular(6),
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+            margin: const EdgeInsets.only(bottom: 2),
+            decoration: BoxDecoration(
+              color: isHighlighted ? color.withValues(alpha: 0.12) : null,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 16, color: color),
+                const SizedBox(width: 5),
+                Flexible(
+                  child: Text(
+                    entry.name,
+                    style: HygTypography.tableBody.copyWith(
+                      color: color,
+                      fontSize: 11,
+                      fontWeight: isHighlighted ? FontWeight.w800 : FontWeight.w600,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(icon, size: 16, color: color),
-                    const SizedBox(width: 5),
-                    Flexible(
-                      child: Text(
-                        entry.name,
-                        style: HygTypography.tableBody.copyWith(
-                          color: color,
-                          fontSize: 11,
-                          fontWeight: isHighlighted ? FontWeight.w800 : FontWeight.w600,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
+                if (isEditableStatus) ...[
+                  const SizedBox(width: 6),
+                  InkWell(
+                    onTap: () => widget.onReassign(item, entry.stepId),
+                    borderRadius: BorderRadius.circular(4),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E40AF).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: const Color(0xFF1E40AF).withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Icon(Icons.swap_horiz, size: 12, color: Color(0xFF1E40AF)),
+                          SizedBox(width: 3),
+                          Text(
+                            'Reassign',
+                            style: TextStyle(
+                              color: Color(0xFF1E40AF),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    if (isEditableStatus) ...[
-
-
-                      const SizedBox(width: 6),
-                      InkWell(
-                        onTap: () => widget.onReassign(item, entry.stepId),
-                        borderRadius: BorderRadius.circular(4),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1E40AF).withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: const Color(0xFF1E40AF).withValues(alpha: 0.3)),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: const [
-                              Icon(Icons.swap_horiz, size: 12, color: Color(0xFF1E40AF)),
-                              SizedBox(width: 3),
-                              Text(
-                                'Reassign',
-                                style: TextStyle(
-                                  color: Color(0xFF1E40AF),
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              );
-            }).toList(),
-          ),
-        ),
+                  ),
+                ],
+              ],
+            ),
+          );
+        }).toList(),
       ),
     );
   }
-
 
   (IconData icon, Color color) _iconForStatus(String status) {
     switch (status) {
@@ -2060,7 +2389,6 @@ class _RequestsTableState extends State<_RequestsTable> {
         return (Icons.warning_amber_rounded, const Color(0xFF1E40AF));
     }
   }
-
 
   Set<_ApproverEntry> _resolveHighlights(List<_ApproverEntry> entries) {
     if (entries.isEmpty) return const {};
@@ -2097,355 +2425,151 @@ class _RequestsTableState extends State<_RequestsTable> {
     return -normalized;
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
-      child: ScrollConfiguration(
-        behavior: ScrollConfiguration.of(context).copyWith(
-          dragDevices: {
-            PointerDeviceKind.touch,
-            PointerDeviceKind.mouse,
-            PointerDeviceKind.trackpad,
-            PointerDeviceKind.stylus,
-          },
-        ),
-        child: Scrollbar(
-          controller: _scrollController,
-          thumbVisibility: true,
-          trackVisibility: true,
-          child: SingleChildScrollView(
-            controller: _scrollController,
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.only(bottom: 12),
-            child: DataTable(
-              showCheckboxColumn: false,
-              headingRowHeight: 42,
-              dataRowMinHeight: 52,
-              dataRowMaxHeight: 72,
-              horizontalMargin: 12,
-              columnSpacing: 12,
-              headingTextStyle: HygTypography.tableHeader,
-              dataTextStyle: HygTypography.tableBody,
-              border: TableBorder.all(color: const Color(0xFFE2E8F0)),
-              columns: _buildColumns(),
-              rows: widget.items.map((item) => _buildRow(context, item)).toList(),
-            ),
+  List<Widget> _buildRowCells(BuildContext context, AdminRequestItem item) {
+    switch (widget.category) {
+      case AdminRequestCategory.esarf:
+        return [
+          _buildEmployeeCell(item),
+          Text(
+            item.departmentName ?? '-',
+            style: HygTypography.tableBody,
+            overflow: TextOverflow.ellipsis,
           ),
-        ),
-      ),
-    );
-  }
-
-  List<DataColumn> _buildColumns() {
-    switch (widget.category) {
-      case AdminRequestCategory.esarf:
-        return [
-          const DataColumn(label: Text('Employee')),
-          const DataColumn(label: Text('Department')),
-          const DataColumn(label: Text('Store')),
-          const DataColumn(label: Text('Type')),
-          const DataColumn(label: Text('Approver')),
-          const DataColumn(label: Text('Status')),
-          const DataColumn(label: Text('Submitted')),
-          if (widget.showDelete) const DataColumn(label: Text('Actions')),
+          _buildStoreCell(item),
+          _buildEsarfTypeCell(item),
+          _buildApproverCell(item),
+          _buildStatusCell(item),
+          _buildSubmittedCell(item),
+          if (widget.showDelete) _buildActionsCell(context, item),
         ];
+
       case AdminRequestCategory.leave:
         return [
-          const DataColumn(label: Text('Employee')),
-          const DataColumn(label: Text('Department')),
-          const DataColumn(label: Text('Store')),
-          const DataColumn(label: Text('Leave Category')),
-          const DataColumn(label: Text('Leave Credits')),
-          const DataColumn(label: Text('Start')),
-          const DataColumn(label: Text('End')),
-          const DataColumn(label: Text('Days')),
-          const DataColumn(label: Text('Type')),
-          const DataColumn(label: Text('Reason')),
-          const DataColumn(label: Text('Approver')),
-          const DataColumn(label: Text('Status')),
-          const DataColumn(label: Text('Submitted')),
-          if (widget.showDelete) const DataColumn(label: Text('Actions')),
+          _buildEmployeeCell(item),
+          Text(
+            item.departmentName ?? '—',
+            style: HygTypography.tableBody,
+            overflow: TextOverflow.ellipsis,
+          ),
+          _buildStoreCell(item),
+          Text(
+            item.leaveCategory ?? '—',
+            style: HygTypography.tableBody,
+            overflow: TextOverflow.ellipsis,
+          ),
+          Text(
+            item.leaveCredits != null ? _formatDaysNum(item.leaveCredits) : '—',
+            style: HygTypography.tableBody,
+          ),
+          Text(
+            item.startDate ?? '—',
+            style: HygTypography.tableBody,
+          ),
+          Text(
+            item.endDate ?? '—',
+            style: HygTypography.tableBody,
+          ),
+          Text(
+            item.totalDays != null ? _formatDaysNum(item.totalDays) : '—',
+            style: HygTypography.tableBody,
+          ),
+          _buildLeaveTypeCell(item),
+          _buildReasonCell(item.reason ?? '—'),
+          _buildApproverCell(item),
+          _buildStatusCell(item),
+          _buildSubmittedCell(item),
+          if (widget.showDelete) _buildActionsCell(context, item),
         ];
+
       case AdminRequestCategory.perk:
         return [
-          const DataColumn(label: Text('Employee')),
-          const DataColumn(label: Text('Department')),
-          const DataColumn(label: Text('Store')),
-          const DataColumn(label: Text('Type')),
-          const DataColumn(label: Text('Product')),
-          const DataColumn(label: Text('Qty')),
-          const DataColumn(label: Text('Amount')),
-          const DataColumn(label: Text('Final')),
-          const DataColumn(label: Text('Txn Date')),
-          const DataColumn(label: Text('Approver')),
-          const DataColumn(label: Text('Status')),
-          const DataColumn(label: Text('Submitted')),
-          if (widget.showDelete) const DataColumn(label: Text('Actions')),
-        ];
-    }
-  }
-
-  DataRow _buildRow(BuildContext context, AdminRequestItem item) {
-    switch (widget.category) {
-      case AdminRequestCategory.esarf:
-        final txAbbr = _formatEsarfTransactionAbbr(
-          (item.transactionType != null && item.transactionType!.isNotEmpty)
-              ? item.transactionType!
-              : item.requestTypeName,
-        );
-        final entryCount = item.entries.length;
-
-        return DataRow(
-          onSelectChanged: (_) => _showDetailModal(context, item),
-          cells: [
-            _employeeCell(item),
-            DataCell(Text(item.departmentName ?? '-')),
-            _storeCell(item),
-            DataCell(
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(txAbbr),
-                  if (entryCount > 1) ...[
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFDCFCE7),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        '$entryCount entries',
-                        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF15803D)),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            _approverCell(item),
-            _statusCell(item),
-            _submittedCell(item),
-            if (widget.showDelete) _actionsCell(item),
-          ],
-        );
-
-      case AdminRequestCategory.leave:
-        return DataRow(
-          onSelectChanged: (_) => _showDetailModal(context, item),
-          cells: [
-          _employeeCell(item),
-          DataCell(Text(item.departmentName ?? 'Ã¢â‚¬â€')),
-          _storeCell(item),
-          DataCell(Text(item.leaveCategory ?? 'Ã¢â‚¬â€')),
-          DataCell(Text(item.leaveCredits != null ? _formatDaysNum(item.leaveCredits) : 'Ã¢â‚¬â€')),
-          DataCell(Text(item.startDate ?? 'Ã¢â‚¬â€')),
-          DataCell(Text(item.endDate ?? 'Ã¢â‚¬â€')),
-          DataCell(Text(item.totalDays != null ? _formatDaysNum(item.totalDays) : 'Ã¢â‚¬â€')),
-          _leaveTypeCell(item),
-          _reasonCell(item.reason ?? 'Ã¢â‚¬â€'),
-          _approverCell(item),
-          _statusCell(item),
-          _submittedCell(item),
-          if (widget.showDelete) _actionsCell(item),
-        ]);
-
-      case AdminRequestCategory.perk:
-        return DataRow(
-          onSelectChanged: (_) => _showDetailModal(context, item),
-          cells: [
-          _employeeCell(item),
-          DataCell(Text(item.departmentName ?? 'Ã¢â‚¬â€')),
-          _storeCell(item),
-          DataCell(Text(
+          _buildEmployeeCell(item),
+          Text(
+            item.departmentName ?? '—',
+            style: HygTypography.tableBody,
+            overflow: TextOverflow.ellipsis,
+          ),
+          _buildStoreCell(item),
+          Text(
             item.requestTypeCode == 'discount' ? 'Discount' : 'Charge',
-          )),
-          DataCell(
-            Tooltip(
-              message: item.perkProductName ?? 'Ã¢â‚¬â€',
-              child: _limitedText(
-                item.perkProductName ?? 'Ã¢â‚¬â€',
-                width: _productWidth,
-                maxLines: 2,
-              ),
-            ),
+            style: HygTypography.tableBody,
           ),
-          DataCell(Text('${item.perkQuantity ?? 0}')),
-          DataCell(Text(
+          _buildProductCell(item),
+          Text(
+            '${item.perkQuantity ?? 0}',
+            style: HygTypography.tableBody,
+          ),
+          Text(
             item.perkAmount != null
                 ? '₱${item.perkAmount!.toStringAsFixed(2)}'
-                : 'Ã¢â‚¬â€',
-          )),
-          DataCell(Text(
+                : '—',
+            style: HygTypography.tableBody,
+          ),
+          Text(
             item.perkFinalAmount != null
                 ? '₱${item.perkFinalAmount!.toStringAsFixed(2)}'
-                : 'Ã¢â‚¬â€',
-          )),
-          DataCell(Text(item.dateFrom ?? 'Ã¢â‚¬â€')),
-          _approverCell(item),
-          _statusCell(item),
-          _submittedCell(item),
-          if (widget.showDelete) _actionsCell(item),
-        ]);
+                : '—',
+            style: HygTypography.tableBody,
+          ),
+          Text(
+            item.dateFrom ?? '—',
+            style: HygTypography.tableBody,
+          ),
+          _buildApproverCell(item),
+          _buildStatusCell(item),
+          _buildSubmittedCell(item),
+          if (widget.showDelete) _buildActionsCell(context, item),
+        ];
     }
   }
 
-  DataCell _employeeCell(AdminRequestItem item) {
-    return DataCell(
-      SizedBox(
-        width: 180,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircleAvatar(
-              radius: 15,
-              backgroundColor: const Color(0xFFE2E8F0),
-              child: Text(
-                (item.employeeName ?? '?').substring(0, 1).toUpperCase(),
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: HygColors.ink,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.employeeName ?? 'Unknown',
-                    style: HygTypography.tablePrimary,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (item.employeeNo != null)
-                    Text(
-                      item.employeeNo!,
-                      style: HygTypography.tableMuted,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  @override
+  Widget build(BuildContext context) {
+    final item = widget.item;
+    final cells = _buildRowCells(context, item);
 
-  DataCell _statusCell(AdminRequestItem item) {
-    final isBirthdayLeave = item.isAutoApprovedBirthdayGrant;
-    final statusKey = isBirthdayLeave ? 'approved' : item.status.toLowerCase();
-
-    final color = switch (statusKey) {
-      'approved' => const Color(0xFF166534),
-      'rejected' => const Color(0xFFB91C1C),
-      'cancelled' => const Color(0xFF64748B),
-      'needs_admin_review' => const Color(0xFFB45309),
-      _ => const Color(0xFF1E40AF),
-    };
-
-    final bgColor = switch (statusKey) {
-      'approved' => const Color(0xFFDCFCE7),
-      'rejected' => const Color(0xFFFEE2E2),
-      'cancelled' => const Color(0xFFF1F5F9),
-      'needs_admin_review' => const Color(0xFFFEF3C7),
-      _ => const Color(0xFFDBEAFE),
-    };
-
-    return DataCell(
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: Container(
+        width: widget.rowWidth,
+        margin: const EdgeInsets.only(bottom: 8),
+        constraints: const BoxConstraints(minHeight: 64),
         decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: BorderRadius.circular(99),
+          color: _isHovered ? const Color(0xFFF8FAFC) : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: _isHovered ? const Color(0xFFCBD5E1) : HygColors.border,
+          ),
         ),
-        child: Text(
-          item.statusLabel,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: color,
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => _showDetailModal(context, item),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              child: ClipRect(
+                child: Row(
+                  children: List.generate(widget.columns.length, (index) {
+                    final col = widget.columns[index];
+                    final cellContent = index < cells.length ? cells[index] : const SizedBox.shrink();
+                    return Container(
+                      width: col.width,
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      alignment: col.alignment,
+                      child: cellContent,
+                    );
+                  }),
+                ),
+              ),
+            ),
           ),
         ),
       ),
     );
   }
-
-  DataCell _submittedCell(AdminRequestItem item) {
-    final raw = item.submittedAt;
-
-    if (raw == null || raw.isEmpty) {
-      return const DataCell(Text('Ã¢â‚¬â€'));
-    }
-
-    try {
-      final dt = DateTime.parse(raw);
-      final ph = dt.toUtc().add(const Duration(hours: 8));
-      final label =
-          '${ph.month}/${ph.day}/${ph.year} ${ph.hour.toString().padLeft(2, '0')}:${ph.minute.toString().padLeft(2, '0')}';
-
-      return DataCell(Text(label, style: HygTypography.tableMuted));
-    } catch (_) {
-      return DataCell(Text(raw, style: HygTypography.tableMuted));
-    }
-  }
-
-  DataCell _actionsCell(AdminRequestItem item) {
-    final isAutoApproved = item.isAutoApprovedBirthdayGrant;
-    return DataCell(
-      Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (!isAutoApproved && widget.category == AdminRequestCategory.leave && widget.onValidate != null) ...[
-            Tooltip(
-              message: 'Validate request',
-              child: InkWell(
-                borderRadius: BorderRadius.circular(6),
-                onTap: () => widget.onValidate!(item),
-                child: Container(
-                  padding: const EdgeInsets.all(5),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFD1FAE5),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: const Icon(
-                    Icons.check_circle_outline,
-                    size: 16,
-                    color: Color(0xFF059669),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-          ],
-          Tooltip(
-            message: 'Delete request',
-            child: InkWell(
-              borderRadius: BorderRadius.circular(6),
-              onTap: () => widget.onDelete(item),
-              child: Container(
-                padding: const EdgeInsets.all(5),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFEE2E2),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: const Icon(
-                  Icons.delete_outline,
-                  size: 16,
-                  color: Color(0xFFB91C1C),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
 }
 
 class _DeleteBullet extends StatelessWidget {

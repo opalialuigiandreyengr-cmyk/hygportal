@@ -38,8 +38,15 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
 
   // Filters
   String _selectedStore = 'All Stores';
-  String _dateFilter = 'All'; // 'All', 'Today', 'Past 7 Days'
+  String _selectedDepartmentFilter = 'All Departments';
+  String _dateFilter = 'All'; // 'All', 'Today', 'Custom'
+  DateTime? _selectedCustomDate;
   bool _isGridView = true;
+
+  // Pagination (20 items per page)
+  static const int _proofsPerPage = 20;
+  int _recentlyCapturedCurrentPage = 0;
+  int _employeeProofsCurrentPage = 0;
 
   static const List<String> _defaultDepartments = [
     'IT',
@@ -76,12 +83,12 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
     try {
       final client = Supabase.instance.client;
 
-      // 1. Load photo proofs
+      // 1. Load photo proofs (500 most recent submissions)
       final response = await client
           .from('photo_proofs')
           .select('*')
           .order('timestamp', ascending: false)
-          .limit(200);
+          .limit(500);
 
       final List<dynamic> rows = response as List<dynamic>;
       final proofItems = rows
@@ -254,6 +261,64 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
     return DateTime.now().toUtc().add(const Duration(hours: 8));
   }
 
+  String _formatDateForFilter(DateTime date) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final m = months[date.month - 1];
+    return '$m ${date.day}, ${date.year}';
+  }
+
+  bool _matchesDate(_PhotoProofRecord item, String yyyyMmDd) {
+    if (item.isoDate.isNotEmpty && item.isoDate.startsWith(yyyyMmDd)) {
+      return true;
+    }
+    final dt = item.parsedDateTime;
+    if (dt != null) {
+      final ph = dt.toUtc().add(const Duration(hours: 8));
+      final phStr = '${ph.year}-${ph.month.toString().padLeft(2, '0')}-${ph.day.toString().padLeft(2, '0')}';
+      return phStr == yyyyMmDd;
+    }
+    return false;
+  }
+
+  Future<void> _pickCustomDate({bool disabled = false}) async {
+    if (disabled) return;
+    final now = _phNow();
+    final initialDate = _selectedCustomDate ?? now;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate.isAfter(DateTime(2035))
+          ? DateTime(2035)
+          : (initialDate.isBefore(DateTime(2020)) ? DateTime(2020) : initialDate),
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2035),
+      helpText: 'Select Photo Proof Date',
+      confirmText: 'Filter',
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF0284C7),
+              onPrimary: Colors.white,
+              surface: Colors.white,
+              onSurface: Color(0xFF0F172A),
+            ),
+            dialogBackgroundColor: Colors.white,
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      setState(() {
+        _selectedCustomDate = picked;
+        _dateFilter = 'Custom';
+        _recentlyCapturedCurrentPage = 0;
+        _employeeProofsCurrentPage = 0;
+      });
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // CANONICAL DEPARTMENT DEDUPLICATION
   // ---------------------------------------------------------------------------
@@ -339,6 +404,11 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
     final remaining = deptMap.values.toList()..sort();
     result.addAll(remaining);
 
+    if (_selectedDepartmentFilter != 'All Departments') {
+      final filterCanon = _canonicalDepartmentName(_selectedDepartmentFilter).toLowerCase();
+      result.retainWhere((d) => _canonicalDepartmentName(d).toLowerCase() == filterCanon);
+    }
+
     final query = _searchController.text.trim().toLowerCase();
     if (query.isEmpty || _selectedDepartment != null) {
       return result;
@@ -390,6 +460,12 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
       }
       return false;
     });
+
+    // Store dropdown filter
+    if (_selectedStore != 'All Stores') {
+      final filterLower = _selectedStore.trim().toLowerCase();
+      storeSet.removeWhere((s) => s.trim().toLowerCase() != filterLower);
+    }
 
     final query = _searchController.text.trim().toLowerCase();
     final list = storeSet.toList()..sort();
@@ -622,16 +698,26 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
 
     return _allProofs.where((item) {
       // Store filter
-      if (_selectedStore != 'All Stores' && item.storeName != _selectedStore) {
+      if (_selectedStore != 'All Stores' &&
+          item.storeName.trim().toLowerCase() != _selectedStore.trim().toLowerCase()) {
         return false;
+      }
+
+      // Department filter
+      if (_selectedDepartmentFilter != 'All Departments') {
+        final dept = _resolveEmployeeDepartment(item);
+        if (_canonicalDepartmentName(dept).toLowerCase() !=
+            _canonicalDepartmentName(_selectedDepartmentFilter).toLowerCase()) {
+          return false;
+        }
       }
 
       // Date filter
       if (_dateFilter == 'Today') {
-        if (!item.isoDate.startsWith(todayStr)) return false;
-      } else if (_dateFilter == 'Past 7 Days') {
-        final itemDate = item.parsedDateTime;
-        if (itemDate != null && now.difference(itemDate).inDays > 7) {
+        if (!_matchesDate(item, todayStr)) return false;
+      } else if (_dateFilter == 'Custom' && _selectedCustomDate != null) {
+        final customDateStr = '${_selectedCustomDate!.year}-${_selectedCustomDate!.month.toString().padLeft(2, '0')}-${_selectedCustomDate!.day.toString().padLeft(2, '0')}';
+        if (!_matchesDate(item, customDateStr)) {
           return false;
         }
       }
@@ -670,9 +756,22 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
         return false;
       }
 
-      // Store filter
-      if (_selectedStore != 'All Stores' && item.storeName != _selectedStore) {
+      // Store filter (only active in Recently Captured tab or Operations folder)
+      final isOperationsOrRecent = _activeTab == _PhotoProofTab.recentlyCaptured ||
+          (_selectedDepartment != null && _selectedDepartment!.trim().toLowerCase() == 'operations');
+      if (isOperationsOrRecent &&
+          _selectedStore != 'All Stores' &&
+          item.storeName.trim().toLowerCase() != _selectedStore.trim().toLowerCase()) {
         return false;
+      }
+
+      // Department filter
+      if (_selectedDepartmentFilter != 'All Departments') {
+        final dept = _resolveEmployeeDepartment(item);
+        if (_canonicalDepartmentName(dept).toLowerCase() !=
+            _canonicalDepartmentName(_selectedDepartmentFilter).toLowerCase()) {
+          return false;
+        }
       }
 
       // Operations store drill-down filter
@@ -685,10 +784,10 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
       // Date filter (inactive when on Departments tab)
       if (_activeTab != _PhotoProofTab.departments) {
         if (_dateFilter == 'Today') {
-          if (!item.isoDate.startsWith(todayStr)) return false;
-        } else if (_dateFilter == 'Past 7 Days') {
-          final itemDate = item.parsedDateTime;
-          if (itemDate != null && now.difference(itemDate).inDays > 7) {
+          if (!_matchesDate(item, todayStr)) return false;
+        } else if (_dateFilter == 'Custom' && _selectedCustomDate != null) {
+          final customDateStr = '${_selectedCustomDate!.year}-${_selectedCustomDate!.month.toString().padLeft(2, '0')}-${_selectedCustomDate!.day.toString().padLeft(2, '0')}';
+          if (!_matchesDate(item, customDateStr)) {
             return false;
           }
         }
@@ -706,6 +805,40 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
 
       return true;
     }).toList(growable: false);
+  }
+
+  List<String> _getAvailableDepartmentFilters() {
+    final depts = <String>{'All Departments'};
+    for (final d in _defaultDepartments) {
+      final canon = _canonicalDepartmentName(d);
+      if (canon.isNotEmpty) depts.add(canon);
+    }
+    for (final d in _allDepartments) {
+      if (d.name.trim().isNotEmpty) {
+        final canon = _canonicalDepartmentName(d.name.trim());
+        if (canon.isNotEmpty) depts.add(canon);
+      }
+    }
+    for (final e in _allEmployees) {
+      if (e.departmentName.trim().isNotEmpty) {
+        final canon = _canonicalDepartmentName(e.departmentName.trim());
+        if (canon.isNotEmpty) depts.add(canon);
+      }
+    }
+    for (final p in _allProofs) {
+      final d = _resolveEmployeeDepartment(p);
+      if (d.isNotEmpty && d != 'General') {
+        final canon = _canonicalDepartmentName(d);
+        if (canon.isNotEmpty) depts.add(canon);
+      }
+    }
+    final list = depts.toList();
+    list.sort((a, b) {
+      if (a == 'All Departments') return -1;
+      if (b == 'All Departments') return 1;
+      return a.compareTo(b);
+    });
+    return list;
   }
 
   List<String> _getAvailableStores() {
@@ -985,6 +1118,7 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
   // CONTROLS BAR
   // ---------------------------------------------------------------------------
   Widget _buildControlsBar() {
+    final departments = _getAvailableDepartmentFilters();
     final stores = _getAvailableStores();
 
     return Container(
@@ -1002,7 +1136,10 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
               height: 38,
               child: TextField(
                 controller: _searchController,
-                onChanged: (_) => setState(() {}),
+                onChanged: (_) => setState(() {
+                  _recentlyCapturedCurrentPage = 0;
+                  _employeeProofsCurrentPage = 0;
+                }),
                 style: const TextStyle(fontSize: 13),
                 decoration: InputDecoration(
                   hintText: 'Search employee, store, department or location...',
@@ -1013,7 +1150,10 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
                           icon: const Icon(Icons.clear, size: 16),
                           onPressed: () {
                             _searchController.clear();
-                            setState(() {});
+                            setState(() {
+                              _recentlyCapturedCurrentPage = 0;
+                              _employeeProofsCurrentPage = 0;
+                            });
                           },
                         )
                       : null,
@@ -1030,7 +1170,7 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
           ),
           const SizedBox(width: 12),
 
-          // Store Dropdown
+          // Department Dropdown Filter
           Container(
             height: 38,
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -1041,28 +1181,144 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
             ),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
-                value: stores.contains(_selectedStore) ? _selectedStore : 'All Stores',
-                items: stores
-                    .map((s) => DropdownMenuItem(
-                          value: s,
-                          child: Text(
-                            s,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF0F172A),
-                            ),
+                value: departments.contains(_selectedDepartmentFilter)
+                    ? _selectedDepartmentFilter
+                    : 'All Departments',
+                icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: Color(0xFF64748B)),
+                items: departments
+                    .map((d) => DropdownMenuItem(
+                          value: d,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                d == 'All Departments'
+                                    ? Icons.domain_rounded
+                                    : Icons.business_outlined,
+                                size: 14,
+                                color: const Color(0xFF64748B),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                d,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF0F172A),
+                                ),
+                              ),
+                            ],
                           ),
                         ))
                     .toList(),
                 onChanged: (val) {
                   if (val != null) {
-                    setState(() => _selectedStore = val);
+                    setState(() {
+                      _selectedDepartmentFilter = val;
+                      _recentlyCapturedCurrentPage = 0;
+                      _employeeProofsCurrentPage = 0;
+                      if (_activeTab == _PhotoProofTab.departments) {
+                        if (val == 'All Departments') {
+                          _selectedDepartment = null;
+                        } else {
+                          _selectedDepartment = val;
+                        }
+                        _selectedStoreInOperations = null;
+                        _selectedEmployeeName = null;
+                        _selectedEmployeeId = null;
+                      }
+                    });
                   }
                 },
               ),
             ),
           ),
+          const SizedBox(width: 10),
+
+          // Store Dropdown (enabled in Recently Captured tab and Operations folder)
+          () {
+            final isStoreFilterEnabled = _activeTab == _PhotoProofTab.recentlyCaptured ||
+                (_activeTab == _PhotoProofTab.departments &&
+                    _selectedDepartment?.trim().toLowerCase() == 'operations');
+
+            return Tooltip(
+              message: isStoreFilterEnabled
+                  ? ''
+                  : 'Store filter is only available in Recently Captured and Operations',
+              waitDuration: const Duration(milliseconds: 300),
+              child: Opacity(
+                opacity: isStoreFilterEnabled ? 1.0 : 0.45,
+                child: Container(
+                  height: 38,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: isStoreFilterEnabled ? Colors.white : const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isStoreFilterEnabled ? const Color(0xFFCBD5E1) : const Color(0xFFE2E8F0),
+                    ),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: stores.contains(_selectedStore) ? _selectedStore : 'All Stores',
+                      icon: Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        size: 18,
+                        color: isStoreFilterEnabled ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
+                      ),
+                      items: stores
+                          .map((s) => DropdownMenuItem(
+                                value: s,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      s == 'All Stores'
+                                          ? Icons.store_mall_directory_rounded
+                                          : Icons.storefront_outlined,
+                                      size: 14,
+                                      color: isStoreFilterEnabled ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      s,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: isStoreFilterEnabled ? const Color(0xFF0F172A) : const Color(0xFF94A3B8),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ))
+                          .toList(),
+                      onChanged: isStoreFilterEnabled
+                          ? (val) {
+                              if (val != null) {
+                                setState(() {
+                                  _selectedStore = val;
+                                  _recentlyCapturedCurrentPage = 0;
+                                  _employeeProofsCurrentPage = 0;
+                                  if (_activeTab == _PhotoProofTab.departments &&
+                                      _selectedDepartment?.trim().toLowerCase() == 'operations') {
+                                    if (val == 'All Stores') {
+                                      _selectedStoreInOperations = null;
+                                    } else {
+                                      _selectedStoreInOperations = val;
+                                    }
+                                    _selectedEmployeeName = null;
+                                    _selectedEmployeeId = null;
+                                  }
+                                });
+                              }
+                            }
+                          : null,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }(),
           const SizedBox(width: 10),
 
           // Date Filter Toggle Buttons
@@ -1087,7 +1343,7 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
                     children: [
                       _buildDateFilterChip('All', disabled: isDepartmentsTab),
                       _buildDateFilterChip('Today', disabled: isDepartmentsTab),
-                      _buildDateFilterChip('Past 7 Days', disabled: isDepartmentsTab),
+                      _buildDatePickerFilterChip(disabled: isDepartmentsTab),
                     ],
                   ),
                 ),
@@ -1151,7 +1407,13 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
   Widget _buildDateFilterChip(String label, {bool disabled = false}) {
     final isSelected = _dateFilter == label;
     return GestureDetector(
-      onTap: disabled ? null : () => setState(() => _dateFilter = label),
+      onTap: disabled
+          ? null
+          : () => setState(() {
+                _dateFilter = label;
+                _recentlyCapturedCurrentPage = 0;
+                _employeeProofsCurrentPage = 0;
+              }),
       child: MouseRegion(
         cursor: disabled ? SystemMouseCursors.forbidden : SystemMouseCursors.click,
         child: Container(
@@ -1166,6 +1428,83 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
                   ? const Color(0xFF94A3B8)
                   : (isSelected ? const Color(0xFF0F172A) : const Color(0xFF64748B)),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDatePickerFilterChip({bool disabled = false}) {
+    final isSelected = _dateFilter == 'Custom';
+    final hasCustomDate = _selectedCustomDate != null;
+    final label = hasCustomDate ? _formatDateForFilter(_selectedCustomDate!) : 'Pick Date';
+
+    return MouseRegion(
+      cursor: disabled ? SystemMouseCursors.forbidden : SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: disabled
+            ? null
+            : () {
+                if (isSelected || !hasCustomDate) {
+                  _pickCustomDate(disabled: disabled);
+                } else {
+                  setState(() {
+                    _dateFilter = 'Custom';
+                    _recentlyCapturedCurrentPage = 0;
+                    _employeeProofsCurrentPage = 0;
+                  });
+                }
+              },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          color: (!disabled && isSelected) ? const Color(0xFFF1F5F9) : Colors.transparent,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                hasCustomDate ? Icons.calendar_month_rounded : Icons.calendar_today_outlined,
+                size: 13,
+                color: disabled
+                    ? const Color(0xFF94A3B8)
+                    : (isSelected ? const Color(0xFF0284C7) : const Color(0xFF64748B)),
+              ),
+              const SizedBox(width: 5),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: (!disabled && isSelected) ? FontWeight.bold : FontWeight.w500,
+                  color: disabled
+                      ? const Color(0xFF94A3B8)
+                      : (isSelected ? const Color(0xFF0F172A) : const Color(0xFF64748B)),
+                ),
+              ),
+              if (!disabled && hasCustomDate) ...[
+                const SizedBox(width: 5),
+                GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _selectedCustomDate = null;
+                      _dateFilter = 'All';
+                      _recentlyCapturedCurrentPage = 0;
+                      _employeeProofsCurrentPage = 0;
+                    });
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFE2E8F0),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.close_rounded,
+                      size: 11,
+                      color: Color(0xFF475569),
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
       ),
@@ -1270,14 +1609,21 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
   // TAB 1: RECENTLY CAPTURED PHOTO PROOFS (Grid vs List)
   // ---------------------------------------------------------------------------
   Widget _buildRecentlyCapturedTab() {
-    final proofs = _getRecentlyCapturedProofs();
+    final allProofs = _getRecentlyCapturedProofs();
 
-    if (proofs.isEmpty) {
+    if (allProofs.isEmpty) {
       return _buildEmptyState(
         title: 'No Recently Captured Photo Proofs',
         message: 'No photo proofs match your current search, store, or date filter.',
       );
     }
+
+    final int totalCount = allProofs.length;
+    final int pageCount = (totalCount / _proofsPerPage).ceil();
+    final int safePage = _recentlyCapturedCurrentPage.clamp(0, math.max(0, pageCount - 1)).toInt();
+    final int startIndex = safePage * _proofsPerPage;
+    final int endIndex = math.min(startIndex + _proofsPerPage, totalCount);
+    final pageProofs = allProofs.sublist(startIndex, endIndex);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1294,7 +1640,7 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
             ),
             const Spacer(),
             Text(
-              'Showing ${proofs.length} submissions',
+              'Showing ${totalCount == 0 ? 0 : startIndex + 1}-$endIndex of $totalCount submissions',
               style: const TextStyle(fontSize: 12, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
             ),
           ],
@@ -1309,14 +1655,24 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
                     crossAxisSpacing: 16,
                     mainAxisSpacing: 16,
                   ),
-                  itemCount: proofs.length,
+                  itemCount: pageProofs.length,
                   itemBuilder: (context, index) {
-                    final proof = proofs[index];
+                    final proof = pageProofs[index];
                     return _buildProofCard(proof);
                   },
                 )
-              : _buildProofsTableView(proofs),
+              : _buildProofsTableView(pageProofs),
         ),
+        if (pageCount > 1)
+          _buildPaginationBar(
+            currentPage: safePage,
+            pageCount: pageCount,
+            totalItems: totalCount,
+            startIndex: startIndex,
+            endIndex: endIndex,
+            itemLabel: 'submissions',
+            onPageSelected: (p) => setState(() => _recentlyCapturedCurrentPage = p),
+          ),
       ],
     );
   }
@@ -1578,7 +1934,7 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
               final proofCount = _allProofs.where((p) => _canonicalDepartmentName(p.storeName).toLowerCase() == canon).length;
 
               return ListTile(
-                leading: const Icon(Icons.folder, color: Color(0xFFF59E0B), size: 30),
+                leading: const Icon(Icons.folder, color: Color(0xFF94A3B8), size: 30),
                 title: Text(
                   dept,
                   style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
@@ -1613,7 +1969,9 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
     if (stores.isEmpty) {
       return _buildEmptyState(
         title: 'No Stores Found',
-        message: 'No stores recorded under Operations.',
+        message: _selectedStore != 'All Stores'
+            ? 'No stores match the selected store filter "$_selectedStore".'
+            : 'No stores recorded under Operations.',
       );
     }
 
@@ -1665,7 +2023,7 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
               final proofCount = _allProofs.where((p) => p.storeName.trim().toLowerCase() == store.trim().toLowerCase()).length;
 
               return ListTile(
-                leading: const Icon(Icons.folder, color: Color(0xFFF59E0B), size: 30),
+                leading: const Icon(Icons.folder, color: Color(0xFF94A3B8), size: 30),
                 title: Row(
                   children: [
                     Flexible(
@@ -1790,7 +2148,7 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
                   .length;
 
               return ListTile(
-                leading: const Icon(Icons.folder, color: Color(0xFFF59E0B), size: 30),
+                leading: const Icon(Icons.folder, color: Color(0xFF94A3B8), size: 30),
                 title: Text(
                   emp.name,
                   style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
@@ -1869,7 +2227,7 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
               final proofsCount = _allProofs.where((p) => _matchesEmployeeName(emp.name, p.employeeName)).length;
 
               return ListTile(
-                leading: const Icon(Icons.folder, color: Color(0xFFF59E0B), size: 30),
+                leading: const Icon(Icons.folder, color: Color(0xFF94A3B8), size: 30),
                 title: Text(
                   emp.name,
                   style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
@@ -1897,32 +2255,175 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
   // PROOFS LEVEL
   // ---------------------------------------------------------------------------
   Widget _buildProofsLevel() {
-    final proofs = _getFilteredProofsForSelectedEmployee();
+    final allProofs = _getFilteredProofsForSelectedEmployee();
 
-    if (proofs.isEmpty) {
+    if (allProofs.isEmpty) {
       return _buildEmptyState(
         title: 'No Photo Proofs for $_selectedEmployeeName',
         message: 'No photo proof submissions recorded for this employee with the current filters.',
       );
     }
 
-    if (_isGridView) {
-      return GridView.builder(
-        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: 280,
-          mainAxisExtent: 330,
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 16,
+    final int totalCount = allProofs.length;
+    final int pageCount = (totalCount / _proofsPerPage).ceil();
+    final int safePage = _employeeProofsCurrentPage.clamp(0, math.max(0, pageCount - 1)).toInt();
+    final int startIndex = safePage * _proofsPerPage;
+    final int endIndex = math.min(startIndex + _proofsPerPage, totalCount);
+    final pageProofs = allProofs.sublist(startIndex, endIndex);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: _isGridView
+              ? GridView.builder(
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 280,
+                    mainAxisExtent: 330,
+                    crossAxisSpacing: 16,
+                    mainAxisSpacing: 16,
+                  ),
+                  itemCount: pageProofs.length,
+                  itemBuilder: (context, index) {
+                    final proof = pageProofs[index];
+                    return _buildProofCard(proof);
+                  },
+                )
+              : _buildProofsTableView(pageProofs),
         ),
-        itemCount: proofs.length,
-        itemBuilder: (context, index) {
-          final proof = proofs[index];
-          return _buildProofCard(proof);
-        },
-      );
-    } else {
-      return _buildProofsTableView(proofs);
-    }
+        if (pageCount > 1)
+          _buildPaginationBar(
+            currentPage: safePage,
+            pageCount: pageCount,
+            totalItems: totalCount,
+            startIndex: startIndex,
+            endIndex: endIndex,
+            itemLabel: 'submissions',
+            onPageSelected: (p) => setState(() => _employeeProofsCurrentPage = p),
+          ),
+      ],
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // PAGINATION BAR (20 items per page)
+  // ---------------------------------------------------------------------------
+  Widget _buildPaginationBar({
+    required int currentPage,
+    required int pageCount,
+    required int totalItems,
+    required int startIndex,
+    required int endIndex,
+    required String itemLabel,
+    required ValueChanged<int> onPageSelected,
+  }) {
+    final firstPage = math.max(0, math.min(currentPage - 2, math.max(0, pageCount - 5)));
+    final visiblePages = List.generate(math.min(5, pageCount), (i) => firstPage + i);
+
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x05000000),
+            blurRadius: 4,
+            offset: Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Text(
+            'Showing ${totalItems == 0 ? 0 : startIndex + 1}-$endIndex of $totalItems $itemLabel (20 per page)',
+            style: const TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF64748B),
+            ),
+          ),
+          const Spacer(),
+          // First page button
+          IconButton(
+            icon: const Icon(Icons.first_page_rounded, size: 20),
+            tooltip: 'First Page',
+            onPressed: currentPage > 0 ? () => onPageSelected(0) : null,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            color: const Color(0xFF0F172A),
+            disabledColor: const Color(0xFFCBD5E1),
+          ),
+          const SizedBox(width: 2),
+          // Prev page button
+          IconButton(
+            icon: const Icon(Icons.chevron_left_rounded, size: 20),
+            tooltip: 'Previous Page',
+            onPressed: currentPage > 0 ? () => onPageSelected(currentPage - 1) : null,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            color: const Color(0xFF0F172A),
+            disabledColor: const Color(0xFFCBD5E1),
+          ),
+          const SizedBox(width: 6),
+          // Numeric page buttons
+          ...visiblePages.map((page) {
+            final isSelected = page == currentPage;
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: InkWell(
+                onTap: () => onPageSelected(page),
+                borderRadius: BorderRadius.circular(6),
+                child: Container(
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  decoration: BoxDecoration(
+                    color: isSelected ? const Color(0xFF0284C7) : const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: isSelected ? const Color(0xFF0284C7) : const Color(0xFFE2E8F0),
+                    ),
+                  ),
+                  child: Text(
+                    '${page + 1}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                      color: isSelected ? Colors.white : const Color(0xFF334155),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }),
+          const SizedBox(width: 6),
+          // Next page button
+          IconButton(
+            icon: const Icon(Icons.chevron_right_rounded, size: 20),
+            tooltip: 'Next Page',
+            onPressed: currentPage < pageCount - 1 ? () => onPageSelected(currentPage + 1) : null,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            color: const Color(0xFF0F172A),
+            disabledColor: const Color(0xFFCBD5E1),
+          ),
+          const SizedBox(width: 2),
+          // Last page button
+          IconButton(
+            icon: const Icon(Icons.last_page_rounded, size: 20),
+            tooltip: 'Last Page',
+            onPressed: currentPage < pageCount - 1 ? () => onPageSelected(pageCount - 1) : null,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            color: const Color(0xFF0F172A),
+            disabledColor: const Color(0xFFCBD5E1),
+          ),
+        ],
+      ),
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -1957,10 +2458,10 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Row(
               children: [
-                // Yellow Folder Icon
+                // Light Grey Folder Icon
                 const Icon(
                   Icons.folder,
-                  color: Color(0xFFF59E0B),
+                  color: Color(0xFF94A3B8),
                   size: 36,
                 ),
                 const SizedBox(width: 14),
@@ -2055,7 +2556,51 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
   // ---------------------------------------------------------------------------
   // PHOTO PROOF CARD (Grid item matching Image 3)
   // ---------------------------------------------------------------------------
+  String _resolveEmployeeDepartment(_PhotoProofRecord proof) {
+    if (_activeTab == _PhotoProofTab.departments &&
+        _selectedDepartment != null &&
+        _selectedDepartment!.isNotEmpty) {
+      return _selectedDepartment!;
+    }
+
+    if (proof.employeeId.isNotEmpty) {
+      final emp = _allEmployees.where((e) => e.id.trim() == proof.employeeId.trim()).firstOrNull;
+      if (emp != null && emp.departmentName.trim().isNotEmpty) {
+        return _canonicalDepartmentName(emp.departmentName.trim());
+      }
+    }
+
+    if (proof.employeeName.isNotEmpty) {
+      final emp = _allEmployees.where((e) => _matchesEmployeeName(e.name, proof.employeeName)).firstOrNull;
+      if (emp != null && emp.departmentName.trim().isNotEmpty) {
+        return _canonicalDepartmentName(emp.departmentName.trim());
+      }
+    }
+
+    if (proof.storeName.isNotEmpty) {
+      final canon = _canonicalDepartmentName(proof.storeName);
+      if (_defaultDepartments.any((d) => d.toLowerCase() == canon.toLowerCase())) {
+        return canon;
+      }
+      final isStore = _allStores.any((s) => s.name.trim().toLowerCase() == proof.storeName.trim().toLowerCase());
+      if (isStore) {
+        return 'Operations';
+      }
+    }
+
+    if (proof.storeName.isNotEmpty) {
+      return proof.storeName;
+    }
+    return 'General';
+  }
+
   Widget _buildProofCard(_PhotoProofRecord item) {
+    final dept = _resolveEmployeeDepartment(item);
+    final deptDisplay = (item.storeName.isNotEmpty &&
+            item.storeName.trim().toLowerCase() != dept.trim().toLowerCase())
+        ? '$dept • ${item.storeName}'
+        : dept;
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -2074,156 +2619,189 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
         child: InkWell(
           onTap: () => _showProofDetailModal(item),
           borderRadius: BorderRadius.circular(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Photo with Timestamp Pill
-              Expanded(
-                flex: 6,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    ClipRRect(
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(12),
-                        topRight: Radius.circular(12),
-                      ),
-                      child: _buildThumbnailWidget(item),
-                    ),
-
-                    // Timestamp Pill (Top right)
-                    Positioned(
-                      top: 8,
-                      right: 8,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.75),
-                          borderRadius: BorderRadius.circular(5),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.access_time, size: 11, color: Colors.white),
-                            const SizedBox(width: 4),
-                            Text(
-                              item.timeDigits.isNotEmpty
-                                  ? '${item.timeDigits} ${item.timePeriod}'
-                                  : item.formattedTimeOnly,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Card details
-              Expanded(
-                flex: 5,
-                child: Padding(
-                  padding: const EdgeInsets.all(10),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // 1. Photo with Proof Stamp Overlay & Eye Badge
+                Expanded(
+                  child: Stack(
+                    fit: StackFit.expand,
                     children: [
-                      // Employee Name
-                      Text(
-                        item.employeeName.isNotEmpty
-                            ? item.employeeName
-                            : 'Employee Submission',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF0F172A),
+                      // Photo
+                      _buildThumbnailWidget(item),
+
+                      // Proof Stamp Overlay Banner at the bottom of the photo
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.58),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Time Row + Divider + Date & Day
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  // Time Digits and Period (e.g., 2:00 in white, PM in amber/yellow)
+                                  Text.rich(
+                                    TextSpan(
+                                      children: [
+                                        TextSpan(
+                                          text: item.displayTimeDigits,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.w300,
+                                            letterSpacing: -0.5,
+                                            height: 1.0,
+                                          ),
+                                        ),
+                                        TextSpan(
+                                          text: ' ${item.displayTimePeriod}',
+                                          style: const TextStyle(
+                                            color: Color(0xFFFACC15),
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: 0.2,
+                                            height: 1.0,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+
+                                  // Thin vertical line separator
+                                  Container(
+                                    margin: const EdgeInsets.symmetric(horizontal: 8),
+                                    width: 1.5,
+                                    height: 20,
+                                    color: Colors.white.withValues(alpha: 0.65),
+                                  ),
+
+                                  // Date & Day column
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        item.displayDateFormatted,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.w600,
+                                          height: 1.1,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 1),
+                                      Text(
+                                        item.displayDayFormatted,
+                                        style: TextStyle(
+                                          color: Colors.white.withValues(alpha: 0.95),
+                                          fontSize: 9.5,
+                                          fontWeight: FontWeight.w500,
+                                          height: 1.1,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+
+                              // Location Address Line
+                              if (item.displayLocationText.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  item.displayLocationText,
+                                  style: const TextStyle(
+                                    color: Color(0xFFF1F5F9),
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w500,
+                                    height: 1.25,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ],
+                          ),
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 4),
-
-                      // Department / Store
-                      Row(
-                        children: [
-                          const Icon(Icons.storefront_outlined, size: 13, color: Color(0xFF64748B)),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              item.storeName.isNotEmpty
-                                  ? item.storeName
-                                  : (_selectedDepartment ?? 'General'),
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: Color(0xFF475569),
-                                fontWeight: FontWeight.w500,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 3),
-
-                      // Geolocation text
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Icon(Icons.location_on_outlined, size: 13, color: Color(0xFF0284C7)),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              item.locationText.isNotEmpty
-                                  ? item.locationText
-                                  : (item.latitude != null && item.longitude != null
-                                      ? '${item.latitude!.toStringAsFixed(4)}, ${item.longitude!.toStringAsFixed(4)}'
-                                      : 'No GPS data'),
-                              style: const TextStyle(
-                                fontSize: 10,
-                                color: Color(0xFF64748B),
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const Spacer(),
-
-                      // Date label and "View Details >"
-                      Row(
-                        children: [
-                          Text(
-                            item.dateFormatted.isNotEmpty
-                                ? item.dateFormatted
-                                : item.formattedDateOnly,
-                            style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w500,
-                              color: Color(0xFF94A3B8),
-                            ),
-                          ),
-                          const Spacer(),
-                          const Text(
-                            'View Details >',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF0284C7),
-                            ),
-                          ),
-                        ],
                       ),
                     ],
                   ),
                 ),
-              ),
-            ],
+
+                // 2. Below the photo: Employee name and department
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  color: Colors.white,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Employee Name
+                            Text(
+                              item.employeeName.isNotEmpty
+                                  ? item.employeeName
+                                  : 'Employee Submission',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF0F172A),
+                                height: 1.2,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 3),
+
+                            // Department
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.business_outlined,
+                                  size: 13,
+                                  color: Color(0xFF64748B),
+                                ),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: Text(
+                                    deptDisplay,
+                                    style: const TextStyle(
+                                      fontSize: 11.5,
+                                      color: Color(0xFF64748B),
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      const Icon(
+                        Icons.chevron_right_rounded,
+                        size: 18,
+                        color: Color(0xFF94A3B8),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -2381,14 +2959,20 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
   }
 
   void _showProofDetailModal(_PhotoProofRecord proof) {
+    final dept = _resolveEmployeeDepartment(proof);
+    final deptDisplay = (proof.storeName.isNotEmpty &&
+            proof.storeName.trim().toLowerCase() != dept.trim().toLowerCase())
+        ? '$dept • ${proof.storeName}'
+        : dept;
+
     showDialog(
       context: context,
       builder: (ctx) => Dialog(
         backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 30),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 30, vertical: 24),
         child: Container(
-          width: 780,
-          constraints: const BoxConstraints(maxHeight: 720),
+          width: 540,
+          constraints: const BoxConstraints(maxHeight: 740),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
@@ -2402,8 +2986,9 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Header
+              // Header: Employee Name and Department at the top
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                 decoration: const BoxDecoration(
@@ -2441,14 +3026,19 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
                               fontSize: 16,
                               fontWeight: FontWeight.w700,
                             ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            '${proof.storeName.isNotEmpty ? proof.storeName : (_selectedDepartment ?? "General")} • ${proof.formattedTimeLabel}',
+                            deptDisplay,
                             style: const TextStyle(
                               color: Color(0xFF94A3B8),
                               fontSize: 12,
+                              fontWeight: FontWeight.w500,
                             ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ],
                       ),
@@ -2462,108 +3052,173 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
                 ),
               ),
 
-              // Image & details
+              // Photo with Overlaid Proof Stamp (strictly bounded inside photo)
               Flexible(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(20),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Photo Preview
-                      Expanded(
-                        flex: 5,
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Container(
-                            constraints: const BoxConstraints(maxHeight: 460),
-                            color: const Color(0xFF0F172A),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  child: Center(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Stack(
+                        alignment: Alignment.bottomCenter,
+                        children: [
+                          // Photo constrained to modal dimensions, sizing Stack to exact photo bounds
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(
+                              maxWidth: 500,
+                              maxHeight: 520,
+                            ),
                             child: _buildFullPhotoWidget(proof),
                           ),
-                        ),
-                      ),
-                      const SizedBox(width: 20),
 
-                      // Metadata column
-                      Expanded(
-                        flex: 4,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildDetailItem(
-                              icon: Icons.person_outline,
-                              title: 'Employee Name',
-                              value: proof.employeeName.isNotEmpty
-                                  ? proof.employeeName
-                                  : '—',
-                            ),
-                            const SizedBox(height: 14),
-                            _buildDetailItem(
-                              icon: Icons.storefront_outlined,
-                              title: 'Store / Department',
-                              value: proof.storeName.isNotEmpty
-                                  ? proof.storeName
-                                  : (_selectedDepartment ?? '—'),
-                            ),
-                            const SizedBox(height: 14),
-                            _buildDetailItem(
-                              icon: Icons.access_time,
-                              title: 'Capture Timestamp',
-                              value: proof.formattedTimeLabel,
-                            ),
-                            const SizedBox(height: 14),
-                            _buildDetailItem(
-                              icon: Icons.location_on_outlined,
-                              title: 'Geolocation Address',
-                              value: proof.locationText.isNotEmpty
-                                  ? proof.locationText
-                                  : (proof.latitude != null && proof.longitude != null
-                                      ? 'Lat: ${proof.latitude!.toStringAsFixed(5)}, Long: ${proof.longitude!.toStringAsFixed(5)}'
-                                      : 'No GPS data recorded'),
-                            ),
-                            if (proof.latitude != null && proof.longitude != null) ...[
-                              const SizedBox(height: 14),
-                              _buildDetailItem(
-                                icon: Icons.map_outlined,
-                                title: 'Coordinates',
-                                value: '${proof.latitude!.toStringAsFixed(5)}, ${proof.longitude!.toStringAsFixed(5)}',
+                          // Timestamp and Geolocation Overlay strictly inside the photo
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                                    Colors.transparent,
+                                    Colors.black.withValues(alpha: 0.42),
+                                  ],
+                                  stops: const [0.0, 1.0],
+                                ),
                               ),
-                            ],
-                            if (proof.driveWebViewLink.isNotEmpty) ...[
-                              const SizedBox(height: 20),
-                              OutlinedButton.icon(
-                                onPressed: () {
-                                  Clipboard.setData(ClipboardData(text: proof.driveWebViewLink));
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Google Drive link copied to clipboard!'),
-                                      duration: Duration(seconds: 2),
-                                    ),
-                                  );
-                                },
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: const Color(0xFF2563EB),
-                                  side: const BorderSide(color: Color(0xFF2563EB)),
-                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  // Time + Date Row
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                    children: [
+                                      Text.rich(
+                                        TextSpan(
+                                          children: [
+                                            TextSpan(
+                                              text: proof.displayTimeDigits,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 24,
+                                                fontWeight: FontWeight.w300,
+                                                letterSpacing: -0.5,
+                                                height: 1.0,
+                                                shadows: [
+                                                  Shadow(
+                                                    color: Color(0xCC000000),
+                                                    offset: Offset(1, 1),
+                                                    blurRadius: 4,
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            TextSpan(
+                                              text: ' ${proof.displayTimePeriod}',
+                                              style: const TextStyle(
+                                                color: Color(0xFFFACC15),
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w800,
+                                                letterSpacing: 0.2,
+                                                height: 1.0,
+                                                shadows: [
+                                                  Shadow(
+                                                    color: Color(0xCC000000),
+                                                    offset: Offset(1, 1),
+                                                    blurRadius: 4,
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      Container(
+                                        margin: const EdgeInsets.symmetric(horizontal: 10),
+                                        width: 1.5,
+                                        height: 24,
+                                        color: Colors.white.withValues(alpha: 0.65),
+                                      ),
+                                      Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            proof.displayDateFormatted,
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                              height: 1.1,
+                                              shadows: [
+                                                Shadow(
+                                                  color: Color(0xCC000000),
+                                                  offset: Offset(1, 1),
+                                                  blurRadius: 3,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            proof.displayDayFormatted,
+                                            style: TextStyle(
+                                              color: Colors.white.withValues(alpha: 0.95),
+                                              fontSize: 10.5,
+                                              fontWeight: FontWeight.w500,
+                                              height: 1.1,
+                                              shadows: const [
+                                                Shadow(
+                                                  color: Color(0xCC000000),
+                                                  offset: Offset(1, 1),
+                                                  blurRadius: 3,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
                                   ),
-                                ),
-                                icon: const Icon(Icons.cloud_outlined, size: 16),
-                                label: const Text(
-                                  'Copy Google Drive Link',
-                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                                ),
+
+                                  // Location Address
+                                  if (proof.displayLocationText.isNotEmpty) ...[
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      proof.displayLocationText,
+                                      style: const TextStyle(
+                                        color: Color(0xFFF1F5F9),
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w500,
+                                        height: 1.3,
+                                        shadows: [
+                                          Shadow(
+                                            color: Color(0xE6000000),
+                                            offset: Offset(1, 1),
+                                            blurRadius: 4,
+                                          ),
+                                        ],
+                                      ),
+                                      maxLines: 3,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ],
                               ),
-                            ],
-                          ],
-                        ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),
 
-              // Bottom footer
+              // Bottom Footer: Copy Drive Link (if available) & Done
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                 decoration: const BoxDecoration(
@@ -2575,8 +3230,34 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
                   ),
                 ),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
                   children: [
+                    if (proof.driveWebViewLink.isNotEmpty) ...[
+                      OutlinedButton.icon(
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(text: proof.driveWebViewLink));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Google Drive link copied to clipboard!'),
+                              duration: Duration(seconds: 2),
+                            ),
+                          );
+                        },
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF2563EB),
+                          side: const BorderSide(color: Color(0xFF2563EB)),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        icon: const Icon(Icons.cloud_outlined, size: 16),
+                        label: const Text(
+                          'Copy Google Drive Link',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                    const Spacer(),
                     ElevatedButton(
                       onPressed: () => Navigator.of(ctx).pop(),
                       style: ElevatedButton.styleFrom(
@@ -2597,58 +3278,14 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
     );
   }
 
-  Widget _buildDetailItem({
-    required IconData icon,
-    required String title,
-    required String value,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 18, color: const Color(0xFF64748B)),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF64748B),
-                  ),
-                ),
-                const SizedBox(height: 3),
-                SelectableText(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: HygColors.ink,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFullPhotoWidget(_PhotoProofRecord proof) {
+  Widget _buildFullPhotoWidget(_PhotoProofRecord proof, {BoxFit fit = BoxFit.contain}) {
     final photoUri = proof.resolvedPhotoUrl;
     if (photoUri.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(40),
+      return Container(
+        width: 460,
+        height: 320,
+        color: const Color(0xFF0F172A),
+        child: const Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -2668,7 +3305,7 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
         final bytes = base64Decode(base64String);
         return Image.memory(
           bytes,
-          fit: BoxFit.contain,
+          fit: fit,
           errorBuilder: (_, __, ___) => _buildImageErrorWidget(),
         );
       } catch (_) {
@@ -2678,13 +3315,19 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
 
     return Image.network(
       photoUri,
-      fit: BoxFit.contain,
+      fit: fit,
       loadingBuilder: (context, child, loadingProgress) {
         if (loadingProgress == null) return child;
-        return const Center(
-          child: Padding(
-            padding: EdgeInsets.all(40),
-            child: CircularProgressIndicator(color: Colors.white),
+        return Container(
+          width: 460,
+          height: 320,
+          color: const Color(0xFF0F172A),
+          child: const Center(
+            child: SizedBox(
+              width: 32,
+              height: 32,
+              child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
+            ),
           ),
         );
       },
@@ -2693,9 +3336,11 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
   }
 
   Widget _buildImageErrorWidget() {
-    return const Center(
-      child: Padding(
-        padding: EdgeInsets.all(40),
+    return Container(
+      width: 460,
+      height: 320,
+      color: const Color(0xFF0F172A),
+      child: const Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -2894,5 +3539,52 @@ class _PhotoProofRecord {
     final min = ph.minute.toString().padLeft(2, '0');
     final ampm = ph.hour >= 12 ? 'PM' : 'AM';
     return '$hour12:$min $ampm';
+  }
+
+  String get displayTimeDigits {
+    if (timeDigits.isNotEmpty) return timeDigits;
+    final dt = parsedDateTime;
+    if (dt == null) return '';
+    final ph = dt.toUtc().add(const Duration(hours: 8));
+    final hour12 = ph.hour == 0 ? 12 : (ph.hour > 12 ? ph.hour - 12 : ph.hour);
+    final min = ph.minute.toString().padLeft(2, '0');
+    return '$hour12:$min';
+  }
+
+  String get displayTimePeriod {
+    if (timePeriod.isNotEmpty) return timePeriod;
+    final dt = parsedDateTime;
+    if (dt == null) return '';
+    final ph = dt.toUtc().add(const Duration(hours: 8));
+    return ph.hour >= 12 ? 'PM' : 'AM';
+  }
+
+  String get displayDateFormatted {
+    if (dateFormatted.isNotEmpty) return dateFormatted;
+    final dt = parsedDateTime;
+    if (dt == null) return '';
+    final ph = dt.toUtc().add(const Duration(hours: 8));
+    const months = ['Jan.', 'Feb.', 'Mar.', 'Apr.', 'May', 'Jun.', 'Jul.', 'Aug.', 'Sept.', 'Oct.', 'Nov.', 'Dec.'];
+    final m = months[ph.month - 1];
+    final d = ph.day.toString().padLeft(2, '0');
+    final y = ph.year;
+    return '$m $d, $y';
+  }
+
+  String get displayDayFormatted {
+    if (dayFormatted.isNotEmpty) return dayFormatted;
+    final dt = parsedDateTime;
+    if (dt == null) return '';
+    final ph = dt.toUtc().add(const Duration(hours: 8));
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    return days[ph.weekday % 7];
+  }
+
+  String get displayLocationText {
+    if (locationText.isNotEmpty) return locationText;
+    if (latitude != null && longitude != null) {
+      return '${latitude!.toStringAsFixed(4)}, ${longitude!.toStringAsFixed(4)}';
+    }
+    return '';
   }
 }

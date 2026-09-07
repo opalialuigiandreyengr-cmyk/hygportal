@@ -2671,27 +2671,6 @@ class HrTopBar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          SizedBox(
-            width: 520,
-            height: 44,
-            child: TextField(
-              style: HygTypography.input.copyWith(fontSize: 13),
-              decoration: InputDecoration(
-                hintText: 'Search',
-                prefixIcon: const Icon(Icons.search, color: Color(0xFF94A3B8)),
-                filled: true,
-                fillColor: HygColors.background,
-                contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
-                ),
-              ),
-            ),
-          ),
           const Spacer(),
           TopIconButton(
             icon: Icons.photo_library_outlined,

@@ -3053,6 +3053,8 @@ class EmployeePagination extends StatelessWidget {
     required this.employeesPerPage,
     required this.onPageSelected,
     this.itemLabel = 'employees',
+    this.backgroundColor,
+    this.borderColor = const Color(0xFFCBD5E1),
     super.key,
   });
 
@@ -3062,6 +3064,8 @@ class EmployeePagination extends StatelessWidget {
   final int employeesPerPage;
   final ValueChanged<int> onPageSelected;
   final String itemLabel;
+  final Color? backgroundColor;
+  final Color borderColor;
 
   List<int> get _visiblePages {
     final firstPage = math.max(
@@ -3082,8 +3086,8 @@ class EmployeePagination extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF8DB),
-        border: Border.all(color: HygColors.gold),
+        color: backgroundColor,
+        border: Border.all(color: borderColor),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(

@@ -955,29 +955,29 @@ class CompanyDirectoryService {
   static final _client = Supabase.instance.client;
 
   static Future<List<CompanyPreview>> loadCompanies() async {
-    if (await LocalSyncService.isOnline()) {
-      try {
-        final response = await _client.rpc(
-          'hr_company_directory',
-          params: {
-            'p_username': AppConfig.hrUsername,
-            'p_password': AppConfig.hrPassword,
-          },
+    try {
+      final response = await _client.rpc(
+        'hr_company_directory',
+        params: {
+          'p_username': AppConfig.hrUsername,
+          'p_password': AppConfig.hrPassword,
+        },
+      ).timeout(const Duration(seconds: 12));
+
+      if (response is List) {
+        final rows = response.whereType<Map<String, dynamic>>().toList(
+          growable: false,
         );
-        if (response is List) {
-          final rows = response.whereType<Map<String, dynamic>>().toList(
-            growable: false,
-          );
-          await LocalSyncService.cacheRows('company_cache', rows);
-          unawaited(LocalSyncService.syncNow());
-          return rows
-              .map(CompanyDirectoryService._fromRow)
-              .toList(growable: false);
-        }
-      } catch (e) {
-        debugPrint('hr_company_directory RPC failed: $e');
+        unawaited(LocalSyncService.cacheRows('company_cache', rows));
+        unawaited(LocalSyncService.syncNow());
+        return rows
+            .map(CompanyDirectoryService._fromRow)
+            .toList(growable: false);
       }
+    } catch (e) {
+      debugPrint('hr_company_directory RPC failed: $e');
     }
+
     final cached = await LocalSyncService.loadCachedRows('company_cache');
     return cached.map(CompanyDirectoryService._fromRow).toList(growable: false);
   }
@@ -1117,7 +1117,13 @@ class CompanyDirectoryService {
       row['company_code'],
       fallback: '',
     );
-    final isActive = row['is_active'] == true;
+    final rawActive = row['is_active'];
+    final isActive = rawActive == true ||
+        rawActive == 1 ||
+        rawActive == '1' ||
+        rawActive == 'true' ||
+        rawActive == 't' ||
+        rawActive == null;
 
     return CompanyPreview(
       id: EmployeeDirectoryService._stringValue(row['company_id']),
@@ -3162,9 +3168,13 @@ class AdminRequestsService {
           'p_new_status': newStatus,
         },
       );
-      return response?.toString() ?? 'Request updated.';
+      final result = response?.toString() ?? 'Request updated.';
+      if (result.toLowerCase().startsWith('failed')) {
+        throw Exception(result);
+      }
+      return result;
     } catch (e) {
-      return 'Failed to update request: $e';
+      throw Exception('Failed to update request: $e');
     }
   }
 

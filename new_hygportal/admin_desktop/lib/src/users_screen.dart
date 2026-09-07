@@ -358,6 +358,7 @@ class UsersTableHeader extends StatelessWidget {
           Expanded(flex: 2, child: HeaderLabel('ROLE')),
           Expanded(flex: 2, child: HeaderLabel('STATUS')),
           Expanded(flex: 2, child: HeaderLabel('LEAVE')),
+          Expanded(flex: 2, child: HeaderLabel('OFFSET')),
           Expanded(flex: 2, child: HeaderLabel('REGISTERED')),
           Expanded(flex: 2, child: HeaderLabel('LAST SIGN IN')),
           SizedBox(
@@ -429,13 +430,13 @@ class _UserRowState extends State<UserRow> {
       onExit: (_) => setState(() => _isHovered = false),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 120),
-        constraints: const BoxConstraints(minHeight: 76),
+        height: 66,
         margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: BoxDecoration(
           color: rowColor,
-          border: const Border(bottom: BorderSide(color: HygColors.border)),
-          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: HygColors.border),
+          borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
           children: [
@@ -498,6 +499,7 @@ class _UserRowState extends State<UserRow> {
               ),
             ),
             Expanded(flex: 2, child: BodyCell(_leaveCreditLabel(widget.user))),
+            Expanded(flex: 2, child: BodyCell(_offsetBalanceLabel(widget.user))),
             Expanded(flex: 2, child: BodyCell(widget.user.registeredAt)),
             Expanded(flex: 2, child: BodyCell(widget.user.lastSignInAt)),
             SizedBox(
@@ -528,6 +530,15 @@ class _UserRowState extends State<UserRow> {
     return '${_formatDays(user.leaveRemainingDays)} left / ${_formatDays(user.leaveCreditDays)}';
   }
 
+  String _offsetBalanceLabel(RegisteredUserPreview user) {
+    if (user.employeeId == null || user.offsetBalanceHours == null) return 'N/A';
+    final hours = user.offsetBalanceHours!;
+    final fixed = hours.toStringAsFixed(
+      hours.truncateToDouble() == hours ? 0 : 2,
+    );
+    return '$fixed hrs';
+  }
+
   String _formatDays(double? value) {
     if (value == null) return '0d';
     final fixed = value.toStringAsFixed(
@@ -545,24 +556,26 @@ class UserAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final photoUrl = user.photoUrl?.trim() ?? '';
-    return ClipOval(
-      child: Container(
-        width: 40,
-        height: 40,
+    return Container(
+      width: 38,
+      height: 38,
+      decoration: BoxDecoration(
         color: const Color(0xFFFEF3C7),
-        child: photoUrl.isEmpty
-            ? _UserInitialAvatar(user: user)
-            : Image.network(
-                photoUrl,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) =>
-                    _UserInitialAvatar(user: user),
-                loadingBuilder: (context, child, loadingProgress) {
-                  if (loadingProgress == null) return child;
-                  return _UserInitialAvatar(user: user);
-                },
-              ),
+        borderRadius: BorderRadius.circular(9),
       ),
+      clipBehavior: Clip.antiAlias,
+      child: photoUrl.isEmpty
+          ? _UserInitialAvatar(user: user)
+          : Image.network(
+              photoUrl,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) =>
+                  _UserInitialAvatar(user: user),
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return _UserInitialAvatar(user: user);
+              },
+            ),
     );
   }
 }

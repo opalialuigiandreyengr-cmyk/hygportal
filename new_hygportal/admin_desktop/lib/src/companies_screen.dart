@@ -503,7 +503,7 @@ class CompanyTableHeader extends StatelessWidget {
           Expanded(flex: 3, child: HeaderLabel('ADDRESS')),
           Expanded(child: HeaderLabel('STATUS')),
           SizedBox(
-            width: 46,
+            width: 80,
             child: Icon(Icons.tune, size: 16, color: Color(0xFF475569)),
           ),
         ],
@@ -527,11 +527,12 @@ class CompanyTableRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      constraints: const BoxConstraints(minHeight: 78),
+      height: 66,
       margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: HygColors.border)),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        border: Border.all(color: HygColors.border),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         children: [
@@ -540,8 +541,8 @@ class CompanyTableRow extends StatelessWidget {
             child: Row(
               children: [
                 Container(
-                  width: 46,
-                  height: 46,
+                  width: 38,
+                  height: 38,
                   decoration: BoxDecoration(
                     color: const Color(0xFFFEF3C7),
                     borderRadius: BorderRadius.circular(9),
@@ -552,11 +553,13 @@ class CompanyTableRow extends StatelessWidget {
                       textAlign: TextAlign.center,
                       style: HygTypography.tablePrimary.copyWith(
                         color: HygColors.goldStrong,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     company.name,
@@ -567,13 +570,24 @@ class CompanyTableRow extends StatelessWidget {
               ],
             ),
           ),
-          Expanded(flex: 2, child: BodyCell(company.contactNumber)),
-          Expanded(flex: 3, child: BodyCell(company.address)),
+          Expanded(
+            flex: 2,
+            child: BodyCell(
+              company.contactNumber.trim().isNotEmpty
+                  ? company.contactNumber
+                  : '-',
+            ),
+          ),
+          Expanded(
+            flex: 3,
+            child: BodyCell(
+              company.address.trim().isNotEmpty ? company.address : '-',
+            ),
+          ),
           Expanded(child: StatusPill(status: company.status)),
           SizedBox(
-            width: 86,
+            width: 80,
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 IconButton(
                   tooltip: 'Edit company',

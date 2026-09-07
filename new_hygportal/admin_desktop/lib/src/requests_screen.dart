@@ -48,6 +48,19 @@ String _formatEsarfTransactionAbbr(String? raw) {
   return text;
 }
 
+String _formatSingleEsarfType(String raw) {
+  final trimmed = raw.trim();
+  if (trimmed.isEmpty) return '';
+  if (trimmed.contains('/')) {
+    return trimmed
+        .split('/')
+        .map((s) => _formatEsarfTransactionAbbr(s.trim()))
+        .where((s) => s.isNotEmpty && s != '—')
+        .join('/');
+  }
+  return _formatEsarfTransactionAbbr(trimmed);
+}
+
 /// Formats a numeric days value (e.g. 1.0 -> "1d", 1.5 -> "1.5d", 0 -> "0d").
 String _formatDaysNum(double? d) {
   if (d == null) return '0d';
@@ -57,11 +70,105 @@ String _formatDaysNum(double? d) {
   return '${d}d';
 }
 
+List<String> _getEsarfTypes(AdminRequestItem item) {
+  final List<String> types = [];
+
+  if (item.entries.isNotEmpty) {
+    for (final e in item.entries) {
+      final t = (e.transactionType != null && e.transactionType!.trim().isNotEmpty)
+          ? e.transactionType!.trim()
+          : null;
+      if (t != null) {
+        final commaParts = t.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty);
+        for (final cp in commaParts) {
+          final formatted = _formatSingleEsarfType(cp);
+          if (formatted.isNotEmpty && !types.contains(formatted)) {
+            types.add(formatted);
+          }
+        }
+      }
+    }
+  }
+
+  if (types.isEmpty) {
+    final raw = (item.transactionType != null && item.transactionType!.trim().isNotEmpty)
+        ? item.transactionType!.trim()
+        : item.requestTypeName;
+    final commaParts = raw.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty);
+    for (final cp in commaParts) {
+      final formatted = _formatSingleEsarfType(cp);
+      if (formatted.isNotEmpty && !types.contains(formatted)) {
+        types.add(formatted);
+      }
+    }
+  }
+
+  return types;
+}
+
+String _getDisplayTransactionType(AdminRequestItem item) {
+  if (item.category == AdminRequestCategory.esarf) {
+    final types = _getEsarfTypes(item);
+    if (types.isNotEmpty) {
+      final entryCount = item.entries.length;
+      final typeStr = types.join(', ');
+      return entryCount > 1 ? '$typeStr ($entryCount entries)' : typeStr;
+    }
+    return item.requestTypeName;
+  } else if (item.category == AdminRequestCategory.leave) {
+    final cat = item.leaveCategory?.trim() ?? '';
+    final type = item.leaveType?.trim() ?? '';
+    if (cat.isNotEmpty && type.isNotEmpty) {
+      return '$cat ($type)';
+    } else if (cat.isNotEmpty) {
+      return cat;
+    } else if (type.isNotEmpty) {
+      return type;
+    }
+    return item.requestTypeName;
+  } else if (item.category == AdminRequestCategory.perk) {
+    final kind = item.requestTypeCode == 'discount' ? 'Discount' : 'Charge';
+    final product = item.perkProductName?.trim() ?? '';
+    if (product.isNotEmpty) {
+      return '$kind - $product';
+    }
+    return kind;
+  }
+
+  return item.requestTypeName;
+}
+
 // Ã¢â€â‚¬Ã¢â€â‚¬ Header Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 class RequestsHeader extends StatelessWidget {
-  const RequestsHeader({this.onRefresh, super.key});
+  const RequestsHeader({
+    this.onRefresh,
+    this.requests = const [],
+    this.onOpenValidatedRequests,
+    super.key,
+  });
+
   final VoidCallback? onRefresh;
+  final List<AdminRequestItem> requests;
+  final VoidCallback? onOpenValidatedRequests;
+
+  void _handleOpenValidated(BuildContext context) {
+    if (onOpenValidatedRequests != null) {
+      onOpenValidatedRequests!();
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (ctx) => _ValidatedRequestsScreen(
+          initialCategory: AdminRequestCategory.esarf,
+          allRequests: requests,
+          onRefreshParent: onRefresh ?? () {},
+        ),
+      ),
+    ).then((_) {
+      if (onRefresh != null) onRefresh!();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -97,8 +204,22 @@ class RequestsHeader extends StatelessWidget {
               ],
             ),
           ),
+          const SizedBox(width: 14),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: HygColors.ink,
+              elevation: 0,
+              side: const BorderSide(color: Color(0xFFCBD5E1)),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () => _handleOpenValidated(context),
+            icon: const Icon(Icons.verified_outlined, size: 19, color: Color(0xFF059669)),
+            label: const Text('Validated Requests', style: TextStyle(fontWeight: FontWeight.w700)),
+          ),
           if (onRefresh != null) ...[
-            const SizedBox(width: 14),
+            const SizedBox(width: 10),
             ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
                 backgroundColor: HygColors.gold,
@@ -236,7 +357,25 @@ class _RequestsPanelState extends State<RequestsPanel>
   bool _isPerk(AdminRequestItem item) =>
       item.category == AdminRequestCategory.perk;
 
-  Future<void> _validateLeave(AdminRequestItem item) async {
+  Future<void> _validateRequest(AdminRequestItem item) async {
+    final ok = await performValidation(context, item);
+    if (ok && mounted) {
+      widget.onRefresh();
+    }
+  }
+
+  static Future<bool> performValidation(BuildContext context, AdminRequestItem item) async {
+    if (item.category == AdminRequestCategory.leave) {
+      return await _validateLeave(context, item);
+    } else if (item.category == AdminRequestCategory.esarf) {
+      return await _validateEsarf(context, item);
+    } else if (item.category == AdminRequestCategory.perk) {
+      return await _validatePerk(context, item);
+    }
+    return false;
+  }
+
+  static Future<bool> _validateLeave(BuildContext context, AdminRequestItem item) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => _ValidateLeaveDialogContent(
@@ -252,15 +391,68 @@ class _RequestsPanelState extends State<RequestsPanel>
         },
       ),
     );
-    if (confirmed == true && mounted) {
+    if (confirmed == true && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Leave request validated and credits adjusted successfully!'),
           backgroundColor: Color(0xFF059669),
         ),
       );
-      widget.onRefresh();
+      return true;
     }
+    return false;
+  }
+
+  static Future<bool> _validateEsarf(BuildContext context, AdminRequestItem item) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => _ValidateEsarfDialogContent(
+        item: item,
+        onConfirm: () async {
+          await AdminRequestsService.updateRequestStatus(
+            requestId: item.requestId,
+            isPerk: false,
+            newStatus: 'validated',
+          );
+        },
+      ),
+    );
+    if (confirmed == true && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('ESARF request validated successfully!'),
+          backgroundColor: Color(0xFF059669),
+        ),
+      );
+      return true;
+    }
+    return false;
+  }
+
+  static Future<bool> _validatePerk(BuildContext context, AdminRequestItem item) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => _ValidatePerkDialogContent(
+        item: item,
+        onConfirm: () async {
+          await AdminRequestsService.updateRequestStatus(
+            requestId: item.requestId,
+            isPerk: true,
+            newStatus: 'validated',
+          );
+        },
+      ),
+    );
+    if (confirmed == true && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Perk request validated successfully!'),
+          backgroundColor: Color(0xFF059669),
+        ),
+      );
+      return true;
+    }
+    return false;
   }
 
   Future<void> _openReassignApproverDialog(
@@ -388,7 +580,7 @@ class _RequestsPanelState extends State<RequestsPanel>
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          item.requestTypeName,
+                          _getDisplayTransactionType(item),
                           style: HygTypography.body.copyWith(
                             color: const Color(0xFF475569),
                             fontWeight: FontWeight.w700,
@@ -518,9 +710,28 @@ class _RequestsPanelState extends State<RequestsPanel>
   Future<void> _downloadExcel() async {
     final tabIndex = _tabController.index;
     final items = _itemsForTab(tabIndex);
+    final tabLabel = _tabs[tabIndex];
+    await exportRequestsToExcel(
+      context: context,
+      tabIndex: tabIndex,
+      items: items,
+      tabLabel: tabLabel,
+      dateFrom: _dateFrom,
+      dateTo: _dateTo,
+      filePrefix: 'Requests',
+    );
+  }
 
+  static Future<void> exportRequestsToExcel({
+    required BuildContext context,
+    required int tabIndex,
+    required List<AdminRequestItem> items,
+    required String tabLabel,
+    DateTime? dateFrom,
+    DateTime? dateTo,
+    String filePrefix = 'Requests',
+  }) async {
     if (items.isEmpty) {
-      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('No data to export for the current filters.'),
@@ -530,12 +741,11 @@ class _RequestsPanelState extends State<RequestsPanel>
       return;
     }
 
-    final tabLabel = _tabs[tabIndex];
     final now = DateTime.now();
     final dateTag =
         '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
     final defaultFileName =
-        'Requests_${tabLabel.replaceAll(RegExp(r'[^A-Za-z0-9]'), '_')}_$dateTag.xlsx';
+        '${filePrefix}_${tabLabel.replaceAll(RegExp(r'[^A-Za-z0-9]'), '_')}_$dateTag.xlsx';
 
     // Rename sheet to tab name (sanitized to meet Excel worksheet name constraints)
     String sanitizedSheetName = tabLabel.replaceAll(RegExp(r'[\\/?*\[\]:]'), '_');
@@ -798,12 +1008,12 @@ class _RequestsPanelState extends State<RequestsPanel>
     }
 
     String getDateSubtitle(DateTime dt) {
-      if (_dateFrom != null && _dateTo != null) {
-        return '${formatDateStr(_dateFrom!)} - ${formatDateStr(_dateTo!)}';
-      } else if (_dateFrom != null) {
-        return 'From ${formatDateStr(_dateFrom!)} onwards';
-      } else if (_dateTo != null) {
-        return 'Until ${formatDateStr(_dateTo!)}';
+      if (dateFrom != null && dateTo != null) {
+        return '${formatDateStr(dateFrom)} - ${formatDateStr(dateTo)}';
+      } else if (dateFrom != null) {
+        return 'From ${formatDateStr(dateFrom)} onwards';
+      } else if (dateTo != null) {
+        return 'Until ${formatDateStr(dateTo)}';
       } else {
         // Current month date range as default
         final start = DateTime(dt.year, dt.month, 1);
@@ -978,7 +1188,7 @@ class _RequestsPanelState extends State<RequestsPanel>
     final decimalCols = {'Total Hours', 'Total Days', 'Paid Days', 'Unpaid Days', 'Leave Credits'};
     final integerCols = {'Quantity'};
 
-    // Ã¢â€â‚¬Ã¢â€â‚¬ 5. Write Data Rows (Row 4+) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+    // ————————————————————————————————————————————————————————————————————————
     int currentRow = 4;
     for (var r = 0; r < items.length; r++) {
       final item = items[r];
@@ -1052,7 +1262,7 @@ class _RequestsPanelState extends State<RequestsPanel>
       currentRow++;
     }
 
-    // Ã¢â€â‚¬Ã¢â€â‚¬ 6. Dynamic Column widths calculation Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+    // ————————————————————————————————————————————————————————————————————————
     final maxColWidths = List<int>.generate(headers.length, (c) => headers[c].length + 4);
 
     for (var r = 0; r < items.length; r++) {
@@ -1082,7 +1292,7 @@ class _RequestsPanelState extends State<RequestsPanel>
 
     final encodedBytes = excel.encode();
     if (encodedBytes == null) {
-      if (!mounted) return;
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Failed to generate Excel file.'),
@@ -1105,7 +1315,7 @@ class _RequestsPanelState extends State<RequestsPanel>
       bytes: fileBytes,
     );
 
-    if (!mounted) return;
+    if (!context.mounted) return;
     if (savePath == null) return; // user cancelled
 
     try {
@@ -1115,7 +1325,7 @@ class _RequestsPanelState extends State<RequestsPanel>
       if (!fileExists) {
         await File(savePath).writeAsBytes(fileBytes);
       }
-      if (!mounted) return;
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Saved to: $savePath'),
@@ -1131,7 +1341,7 @@ class _RequestsPanelState extends State<RequestsPanel>
         ),
       );
     } catch (e) {
-      if (!mounted) return;
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Save failed: $e'),
@@ -1142,7 +1352,7 @@ class _RequestsPanelState extends State<RequestsPanel>
     }
   }
 
-  String? _formatDateString(String? dateStr, {bool includeTime = false}) {
+  static String? _formatDateString(String? dateStr, {bool includeTime = false}) {
     if (dateStr == null || dateStr.isEmpty) return null;
     try {
       final dt = DateTime.parse(dateStr).toLocal();
@@ -1160,7 +1370,7 @@ class _RequestsPanelState extends State<RequestsPanel>
     }
   }
 
-  List<int> _postProcessExcelBytes(List<int> encodedBytes) {
+  static List<int> _postProcessExcelBytes(List<int> encodedBytes) {
     try {
       final archive = ZipDecoder().decodeBytes(encodedBytes);
       final outArchive = Archive();
@@ -1359,6 +1569,8 @@ class _RequestsPanelState extends State<RequestsPanel>
                       DropdownMenuItem(
                           value: 'approved', child: Text('Approved')),
                       DropdownMenuItem(
+                          value: 'validated', child: Text('Validated')),
+                      DropdownMenuItem(
                           value: 'rejected', child: Text('Rejected')),
                       DropdownMenuItem(
                           value: 'cancelled', child: Text('Cancelled')),
@@ -1553,7 +1765,7 @@ class _RequestsPanelState extends State<RequestsPanel>
               showDelete: widget.showDeleteAction,
               onDelete: _confirmDelete,
               onReassign: (item, stepId) => _openReassignApproverDialog(item, stepId: stepId),
-              onValidate: _validateLeave,
+              onValidate: _validateRequest,
             ),
 
             // Pagination Footer Bar
@@ -1757,11 +1969,11 @@ class _RequestsTableState extends State<_RequestsTable> {
           const _RequestColDef(title: 'Employee', width: 200),
           const _RequestColDef(title: 'Department', width: 140),
           const _RequestColDef(title: 'Store', width: 110),
-          const _RequestColDef(title: 'Type', width: 130),
+          const _RequestColDef(title: 'Type', width: 150),
           const _RequestColDef(title: 'Approver', width: 240),
           const _RequestColDef(title: 'Status', width: 120),
           const _RequestColDef(title: 'Submitted', width: 140),
-          if (widget.showDelete) const _RequestColDef(title: 'Actions', width: 90),
+          if (widget.showDelete || widget.onValidate != null) const _RequestColDef(title: 'Actions', width: 90),
         ];
       case AdminRequestCategory.leave:
         return [
@@ -1778,7 +1990,7 @@ class _RequestsTableState extends State<_RequestsTable> {
           const _RequestColDef(title: 'Approver', width: 240),
           const _RequestColDef(title: 'Status', width: 120),
           const _RequestColDef(title: 'Submitted', width: 140),
-          if (widget.showDelete) const _RequestColDef(title: 'Actions', width: 90),
+          if (widget.showDelete || widget.onValidate != null) const _RequestColDef(title: 'Actions', width: 90),
         ];
       case AdminRequestCategory.perk:
         return [
@@ -1794,7 +2006,7 @@ class _RequestsTableState extends State<_RequestsTable> {
           const _RequestColDef(title: 'Approver', width: 240),
           const _RequestColDef(title: 'Status', width: 120),
           const _RequestColDef(title: 'Submitted', width: 140),
-          if (widget.showDelete) const _RequestColDef(title: 'Actions', width: 90),
+          if (widget.showDelete || widget.onValidate != null) const _RequestColDef(title: 'Actions', width: 90),
         ];
     }
   }
@@ -2024,32 +2236,93 @@ class _RequestCardRowState extends State<_RequestCardRow> {
   }
 
   Widget _buildEsarfTypeCell(AdminRequestItem item) {
-    final txAbbr = _formatEsarfTransactionAbbr(
-      (item.transactionType != null && item.transactionType!.isNotEmpty)
-          ? item.transactionType!
-          : item.requestTypeName,
-    );
-    final entryCount = item.entries.length;
+    final types = _getEsarfTypes(item);
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(txAbbr, style: HygTypography.tableBody),
-        if (entryCount > 1) ...[
-          const SizedBox(width: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: const Color(0xFFDCFCE7),
-              borderRadius: BorderRadius.circular(4),
+    if (types.isEmpty) {
+      types.add('—');
+    }
+
+    final entryCount = item.entries.length;
+    final firstType = types.first;
+    final otherTypes = types.skip(1).toList();
+    final tooltipText = '${types.join(', ')}${entryCount > 1 ? ' ($entryCount entries)' : ''}';
+
+    return Tooltip(
+      message: tooltipText,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minWidth: 0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: double.infinity,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      firstType,
+                      style: HygTypography.tableBody.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                  ),
+                  if (entryCount > 1) ...[
+                    const SizedBox(width: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFDCFCE7),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        '$entryCount entries',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF15803D),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
-            child: Text(
-              '$entryCount entries',
-              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF15803D)),
-            ),
-          ),
-        ],
-      ],
+            if (otherTypes.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              ...otherTypes.take(2).map(
+                (t) => SizedBox(
+                  width: double.infinity,
+                  child: Text(
+                    t,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF64748B),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                ),
+              ),
+              if (otherTypes.length > 2)
+                Padding(
+                  padding: const EdgeInsets.only(top: 1),
+                  child: Text(
+                    '+${otherTypes.length - 2} more',
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF94A3B8),
+                    ),
+                  ),
+                ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
@@ -2098,7 +2371,7 @@ class _RequestCardRowState extends State<_RequestCardRow> {
     final statusKey = isBirthdayLeave ? 'approved' : item.status.toLowerCase();
 
     final color = switch (statusKey) {
-      'approved' => const Color(0xFF166534),
+      'approved' || 'validated' => const Color(0xFF166534),
       'rejected' => const Color(0xFFB91C1C),
       'cancelled' => const Color(0xFF64748B),
       'needs_admin_review' => const Color(0xFFB45309),
@@ -2106,7 +2379,7 @@ class _RequestCardRowState extends State<_RequestCardRow> {
     };
 
     final bgColor = switch (statusKey) {
-      'approved' => const Color(0xFFDCFCE7),
+      'approved' || 'validated' => const Color(0xFFDCFCE7),
       'rejected' => const Color(0xFFFEE2E2),
       'cancelled' => const Color(0xFFF1F5F9),
       'needs_admin_review' => const Color(0xFFFEF3C7),
@@ -2151,12 +2424,14 @@ class _RequestCardRowState extends State<_RequestCardRow> {
 
   Widget _buildActionsCell(BuildContext context, AdminRequestItem item) {
     final isAutoApproved = item.isAutoApprovedBirthdayGrant;
+    final status = item.status.trim().toLowerCase();
+    final isApproved = status == 'approved' || status == 'validated';
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (!isAutoApproved && widget.category == AdminRequestCategory.leave && widget.onValidate != null) ...[
+        if (!isAutoApproved && isApproved && widget.onValidate != null) ...[
           Tooltip(
-            message: 'Validate request',
+            message: status == 'validated' ? 'Re-validate request' : 'Validate request',
             child: InkWell(
               borderRadius: BorderRadius.circular(6),
               onTap: () => widget.onValidate!(item),
@@ -2174,27 +2449,28 @@ class _RequestCardRowState extends State<_RequestCardRow> {
               ),
             ),
           ),
-          const SizedBox(width: 8),
+          if (widget.showDelete) const SizedBox(width: 8),
         ],
-        Tooltip(
-          message: 'Delete request',
-          child: InkWell(
-            borderRadius: BorderRadius.circular(6),
-            onTap: () => widget.onDelete(item),
-            child: Container(
-              padding: const EdgeInsets.all(5),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFEE2E2),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: const Icon(
-                Icons.delete_outline,
-                size: 16,
-                color: Color(0xFFB91C1C),
+        if (widget.showDelete)
+          Tooltip(
+            message: 'Delete request',
+            child: InkWell(
+              borderRadius: BorderRadius.circular(6),
+              onTap: () => widget.onDelete(item),
+              child: Container(
+                padding: const EdgeInsets.all(5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEE2E2),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Icon(
+                  Icons.delete_outline,
+                  size: 16,
+                  color: Color(0xFFB91C1C),
+                ),
               ),
             ),
           ),
-        ),
       ],
     );
   }
@@ -2440,7 +2716,7 @@ class _RequestCardRowState extends State<_RequestCardRow> {
           _buildApproverCell(item),
           _buildStatusCell(item),
           _buildSubmittedCell(item),
-          if (widget.showDelete) _buildActionsCell(context, item),
+          if (widget.showDelete || widget.onValidate != null) _buildActionsCell(context, item),
         ];
 
       case AdminRequestCategory.leave:
@@ -2478,7 +2754,7 @@ class _RequestCardRowState extends State<_RequestCardRow> {
           _buildApproverCell(item),
           _buildStatusCell(item),
           _buildSubmittedCell(item),
-          if (widget.showDelete) _buildActionsCell(context, item),
+          if (widget.showDelete || widget.onValidate != null) _buildActionsCell(context, item),
         ];
 
       case AdminRequestCategory.perk:
@@ -2518,7 +2794,7 @@ class _RequestCardRowState extends State<_RequestCardRow> {
           _buildApproverCell(item),
           _buildStatusCell(item),
           _buildSubmittedCell(item),
-          if (widget.showDelete) _buildActionsCell(context, item),
+          if (widget.showDelete || widget.onValidate != null) _buildActionsCell(context, item),
         ];
     }
   }
@@ -2747,7 +3023,7 @@ class _ReassignApproverDialogState extends State<_ReassignApproverDialog> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'Select an approver for ${widget.item.employeeName ?? "Request"}\'s ${widget.item.requestTypeName}',
+                          'Select an approver for ${widget.item.employeeName ?? "Request"}\'s ${_getDisplayTransactionType(widget.item)}',
                           style: HygTypography.body.copyWith(
                             color: const Color(0xFF64748B),
                             fontSize: 12,
@@ -3114,6 +3390,295 @@ class _ValidateLeaveDialogContentState extends State<_ValidateLeaveDialogContent
         children: [
           SizedBox(width: 120, child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.black54))),
           Expanded(child: Text(value, style: const TextStyle(fontWeight: FontWeight.w500))),
+        ],
+      ),
+    );
+  }
+}
+
+class _ValidateEsarfDialogContent extends StatefulWidget {
+  const _ValidateEsarfDialogContent({
+    required this.item,
+    required this.onConfirm,
+    super.key,
+  });
+
+  final AdminRequestItem item;
+  final Future<void> Function() onConfirm;
+
+  @override
+  State<_ValidateEsarfDialogContent> createState() =>
+      _ValidateEsarfDialogContentState();
+}
+
+class _ValidateEsarfDialogContentState
+    extends State<_ValidateEsarfDialogContent> {
+  bool _isLoading = false;
+
+  Future<void> _submit() async {
+    setState(() => _isLoading = true);
+    try {
+      await widget.onConfirm();
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final item = widget.item;
+    final dateStr = item.dateFrom != null && item.dateFrom!.isNotEmpty
+        ? (item.dateTo != null &&
+                item.dateTo!.isNotEmpty &&
+                item.dateTo != item.dateFrom
+            ? '${item.dateFrom} - ${item.dateTo}'
+            : item.dateFrom!)
+        : '—';
+
+    return Dialog(
+      insetPadding: const EdgeInsets.all(28),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      backgroundColor: Colors.white,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Validate ESARF Request',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Are you sure you want to validate this request?',
+                style: TextStyle(color: Colors.black87),
+              ),
+              const SizedBox(height: 16),
+              _buildRow('Employee', item.employeeName ?? '—'),
+              _buildRow('Employee No', item.employeeNo ?? '—'),
+              _buildRow('Department', item.departmentName ?? '—'),
+              _buildRow(
+                'Transaction Type',
+                item.transactionType ?? item.requestTypeName,
+              ),
+              _buildRow('Date', dateStr),
+              if (item.totalHours != null && item.totalHours! > 0)
+                _buildRow('Total Hours', '${item.totalHours} hrs'),
+              _buildRow('Current Status', item.statusLabel),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed:
+                        _isLoading ? null : () => Navigator.of(context).pop(false),
+                    child: const Text('Cancel',
+                        style: TextStyle(color: Colors.black54)),
+                  ),
+                  const SizedBox(width: 12),
+                  ElevatedButton(
+                    onPressed: _isLoading ? null : _submit,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF059669),
+                    ),
+                    child: _isLoading
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Text('Validate & Save',
+                            style: TextStyle(color: Colors.white)),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 130,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                color: Colors.black54,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ValidatePerkDialogContent extends StatefulWidget {
+  const _ValidatePerkDialogContent({
+    required this.item,
+    required this.onConfirm,
+    super.key,
+  });
+
+  final AdminRequestItem item;
+  final Future<void> Function() onConfirm;
+
+  @override
+  State<_ValidatePerkDialogContent> createState() =>
+      _ValidatePerkDialogContentState();
+}
+
+class _ValidatePerkDialogContentState
+    extends State<_ValidatePerkDialogContent> {
+  bool _isLoading = false;
+
+  Future<void> _submit() async {
+    setState(() => _isLoading = true);
+    try {
+      await widget.onConfirm();
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final item = widget.item;
+    return Dialog(
+      insetPadding: const EdgeInsets.all(28),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      backgroundColor: Colors.white,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Validate Perk Request',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Are you sure you want to validate this request?',
+                style: TextStyle(color: Colors.black87),
+              ),
+              const SizedBox(height: 16),
+              _buildRow('Employee', item.employeeName ?? '—'),
+              _buildRow('Employee No', item.employeeNo ?? '—'),
+              _buildRow(
+                'Benefit Type',
+                item.perkBenefit ?? item.requestTypeName,
+              ),
+              if (item.perkProductName != null &&
+                  item.perkProductName!.isNotEmpty)
+                _buildRow('Product / Item', item.perkProductName!),
+              if (item.perkQuantity != null && item.perkQuantity! > 0)
+                _buildRow('Quantity', '${item.perkQuantity}'),
+              if (item.perkAmount != null)
+                _buildRow(
+                  'Amount',
+                  '₱${item.perkAmount!.toStringAsFixed(2)}',
+                ),
+              if (item.perkFinalAmount != null)
+                _buildRow(
+                  'Final Amount',
+                  '₱${item.perkFinalAmount!.toStringAsFixed(2)}',
+                ),
+              _buildRow('Current Status', item.statusLabel),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed:
+                        _isLoading ? null : () => Navigator.of(context).pop(false),
+                    child: const Text('Cancel',
+                        style: TextStyle(color: Colors.black54)),
+                  ),
+                  const SizedBox(width: 12),
+                  ElevatedButton(
+                    onPressed: _isLoading ? null : _submit,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF059669),
+                    ),
+                    child: _isLoading
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Text('Validate & Save',
+                            style: TextStyle(color: Colors.white)),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 130,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                color: Colors.black54,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontWeight: FontWeight.w500),
+            ),
+          ),
         ],
       ),
     );
@@ -3862,5 +4427,595 @@ class _RequestDetailModal extends StatelessWidget {
       default:
         return (Icons.access_time_filled, const Color(0xFFB45309));
     }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Dedicated Validated Requests Screen
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ValidatedRequestsScreen extends StatefulWidget {
+  const _ValidatedRequestsScreen({
+    required this.initialCategory,
+    required this.allRequests,
+    required this.onRefreshParent,
+  });
+
+  final AdminRequestCategory initialCategory;
+  final List<AdminRequestItem> allRequests;
+  final VoidCallback onRefreshParent;
+
+  @override
+  State<_ValidatedRequestsScreen> createState() => _ValidatedRequestsScreenState();
+}
+
+class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  final _tabs = const ['ESARF / Time', 'Leave', 'Perks'];
+
+  List<AdminRequestItem> _requests = [];
+  bool _isLoading = false;
+  String? _error;
+
+  String _searchQuery = '';
+  DateTime? _dateFrom;
+  DateTime? _dateTo;
+
+  int _currentPage = 1;
+  static const int _pageSize = 15;
+
+  @override
+  void initState() {
+    super.initState();
+    final initialIndex = switch (widget.initialCategory) {
+      AdminRequestCategory.esarf => 0,
+      AdminRequestCategory.leave => 1,
+      AdminRequestCategory.perk => 2,
+    };
+    _tabController = TabController(
+      length: _tabs.length,
+      vsync: this,
+      initialIndex: initialIndex,
+    );
+    _tabController.addListener(() {
+      setState(() {
+        _currentPage = 1;
+      });
+    });
+    _requests = List<AdminRequestItem>.from(widget.allRequests);
+    _fetchRequests();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _fetchRequests() async {
+    setState(() => _isLoading = true);
+    try {
+      final fetched = await AdminRequestsService.loadAllRequests();
+      if (mounted) {
+        setState(() {
+          _requests = fetched;
+          _isLoading = false;
+          _error = null;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _error = 'Failed to refresh requests: $e';
+        });
+      }
+    }
+  }
+
+  List<AdminRequestItem> _validatedItemsForTab(int tabIndex) {
+    final category = switch (tabIndex) {
+      0 => AdminRequestCategory.esarf,
+      1 => AdminRequestCategory.leave,
+      _ => AdminRequestCategory.perk,
+    };
+
+    var items = _requests
+        .where((r) => r.category == category && r.status.trim().toLowerCase() == 'validated')
+        .toList(growable: false);
+
+    if (_dateFrom != null || _dateTo != null) {
+      items = items.where((r) {
+        if (r.submittedAt == null || r.submittedAt!.isEmpty) return false;
+        try {
+          final dt = DateTime.parse(r.submittedAt!).toUtc();
+          final submitted = DateTime(dt.year, dt.month, dt.day);
+          if (_dateFrom != null && submitted.isBefore(_dateFrom!)) return false;
+          if (_dateTo != null && submitted.isAfter(_dateTo!)) return false;
+          return true;
+        } catch (_) {
+          return false;
+        }
+      }).toList(growable: false);
+    }
+
+    if (_searchQuery.isNotEmpty) {
+      final q = _searchQuery.toLowerCase();
+      items = items.where((r) {
+        return (r.employeeName ?? '').toLowerCase().contains(q) ||
+            (r.employeeNo ?? '').toLowerCase().contains(q) ||
+            (r.departmentName ?? '').toLowerCase().contains(q) ||
+            (r.storeName ?? '').toLowerCase().contains(q) ||
+            r.requestTypeName.toLowerCase().contains(q) ||
+            (r.leaveCategory ?? '').toLowerCase().contains(q) ||
+            (r.perkProductName ?? '').toLowerCase().contains(q) ||
+            (r.reason ?? '').toLowerCase().contains(q) ||
+            r.approverNames.toLowerCase().contains(q);
+      }).toList(growable: false);
+    }
+
+    return items;
+  }
+
+  int _countForTab(int tabIndex) {
+    final category = switch (tabIndex) {
+      0 => AdminRequestCategory.esarf,
+      1 => AdminRequestCategory.leave,
+      _ => AdminRequestCategory.perk,
+    };
+    return _requests
+        .where((r) => r.category == category && r.status.trim().toLowerCase() == 'validated')
+        .length;
+  }
+
+  Future<void> _validateRequest(AdminRequestItem item) async {
+    final ok = await _RequestsPanelState.performValidation(context, item);
+    if (ok && mounted) {
+      widget.onRefreshParent();
+      _fetchRequests();
+    }
+  }
+
+  Future<void> _downloadExcel() async {
+    final tabIndex = _tabController.index;
+    final items = _validatedItemsForTab(tabIndex);
+    final tabLabel = _tabs[tabIndex];
+    await _RequestsPanelState.exportRequestsToExcel(
+      context: context,
+      tabIndex: tabIndex,
+      items: items,
+      tabLabel: 'Validated_$tabLabel',
+      dateFrom: _dateFrom,
+      dateTo: _dateTo,
+      filePrefix: 'Validated_Requests',
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tabIndex = _tabController.index;
+    final allFilteredItems = _validatedItemsForTab(tabIndex);
+    final totalItems = allFilteredItems.length;
+    final totalPages = (totalItems / _pageSize).ceil();
+    final effectiveTotalPages = totalPages == 0 ? 1 : totalPages;
+    final safePage = _currentPage.clamp(1, effectiveTotalPages);
+    if (_currentPage != safePage) {
+      _currentPage = safePage;
+    }
+    final startIndex = (safePage - 1) * _pageSize;
+    final endIndex = (startIndex + _pageSize > totalItems) ? totalItems : (startIndex + _pageSize);
+    final paginatedItems = (startIndex < totalItems)
+        ? allFilteredItems.sublist(startIndex, endIndex)
+        : <AdminRequestItem>[];
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF1F5F9),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Top Header Bar
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0F766E),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        Icons.verified_outlined,
+                        color: Colors.white,
+                        size: 22,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Text(
+                                'Validated Requests',
+                                style: TextStyle(
+                                  color: Color(0xFF0F172A),
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 0,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFDCFCE7),
+                                  borderRadius: BorderRadius.circular(99),
+                                  border: Border.all(color: const Color(0xFF86EFAC)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: const [
+                                    Icon(Icons.check_circle_rounded, size: 13, color: Color(0xFF166534)),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'VALIDATED ARCHIVE',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 0.4,
+                                        color: Color(0xFF166534),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          const Text(
+                            'Stored and verified requests that have received final validation from administration.',
+                            style: TextStyle(
+                              color: Color(0xFF64748B),
+                              fontSize: 13,
+                              letterSpacing: 0,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    ElevatedButton.icon(
+                      onPressed: _isLoading ? null : _fetchRequests,
+                      icon: _isLoading
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: HygColors.ink,
+                              ),
+                            )
+                          : const Icon(Icons.refresh, size: 16, color: HygColors.ink),
+                      label: const Text('Refresh', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: HygColors.gold,
+                        foregroundColor: HygColors.ink,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    OutlinedButton.icon(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF0F172A),
+                        side: const BorderSide(color: Color(0xFFCBD5E1)),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      icon: const Icon(Icons.arrow_back, size: 16),
+                      label: const Text(
+                        'Back',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 14),
+
+              // Main Content Card
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border.all(color: HygColors.border),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Column(
+                  children: [
+                    // Tab Bar
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(18, 16, 18, 0),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Container(
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: HygColors.background,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: TabBar(
+                                controller: _tabController,
+                                indicator: BoxDecoration(
+                                  color: HygColors.gold,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                indicatorSize: TabBarIndicatorSize.tab,
+                                dividerColor: Colors.transparent,
+                                labelColor: HygColors.ink,
+                                unselectedLabelColor: HygColors.muted,
+                                labelStyle: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                                tabs: [
+                                  for (int i = 0; i < _tabs.length; i++)
+                                    Tab(
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Text(_tabs[i]),
+                                          const SizedBox(width: 6),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 7,
+                                              vertical: 2,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: _tabController.index == i
+                                                  ? HygColors.ink.withValues(alpha: 0.12)
+                                                  : const Color(0xFFE2E8F0),
+                                              borderRadius: BorderRadius.circular(99),
+                                            ),
+                                            child: Text(
+                                              '${_countForTab(i)}',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w700,
+                                                color: _tabController.index == i
+                                                    ? HygColors.ink
+                                                    : HygColors.muted,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Search & Date filters + Excel Download
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: SizedBox(
+                              height: 38,
+                              child: TextField(
+                                onChanged: (v) => setState(() {
+                                  _searchQuery = v;
+                                  _currentPage = 1;
+                                }),
+                                style: HygTypography.input.copyWith(fontSize: 13),
+                                decoration: InputDecoration(
+                                  hintText: 'Search employee, department, store, type...',
+                                  prefixIcon: const Icon(
+                                    Icons.search,
+                                    color: Color(0xFF94A3B8),
+                                    size: 18,
+                                  ),
+                                  filled: true,
+                                  fillColor: HygColors.background,
+                                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(9),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(9),
+                                    borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          // Submitted date range filter
+                          const Icon(Icons.date_range, size: 16, color: Color(0xFF64748B)),
+                          const SizedBox(width: 6),
+                          Text('Submitted:',
+                              style: HygTypography.tableHeader
+                                  .copyWith(color: const Color(0xFF64748B))),
+                          const SizedBox(width: 8),
+                          _DateRangePill(
+                            dateFrom: _dateFrom,
+                            dateTo: _dateTo,
+                            onPick: () async {
+                              final result = await showDateRangePicker(
+                                context: context,
+                                firstDate: DateTime(2020),
+                                lastDate: DateTime(2035),
+                                initialDateRange: _dateFrom != null && _dateTo != null
+                                    ? DateTimeRange(start: _dateFrom!, end: _dateTo!)
+                                    : null,
+                                builder: (context, child) {
+                                  return Theme(
+                                    data: Theme.of(context).copyWith(
+                                      colorScheme: const ColorScheme.light(
+                                        primary: Color(0xFF1E40AF),
+                                        onPrimary: Colors.white,
+                                        surface: Colors.white,
+                                        onSurface: HygColors.ink,
+                                      ),
+                                    ),
+                                    child: UnconstrainedBox(
+                                      child: Container(
+                                        width: 400,
+                                        height: 520,
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          borderRadius: BorderRadius.circular(16),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.black.withValues(alpha: 0.18),
+                                              blurRadius: 20,
+                                              offset: const Offset(0, 8),
+                                            ),
+                                          ],
+                                        ),
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(16),
+                                          child: child ?? const SizedBox.shrink(),
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              );
+                              if (result != null) {
+                                setState(() {
+                                  _dateFrom = result.start;
+                                  _dateTo = result.end;
+                                  _currentPage = 1;
+                                });
+                              }
+                            },
+                          ),
+                          if (_dateFrom != null || _dateTo != null) ...[
+                            const SizedBox(width: 8),
+                            GestureDetector(
+                              onTap: () => setState(() {
+                                _dateFrom = null;
+                                _dateTo = null;
+                                _currentPage = 1;
+                              }),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFEE2E2),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Text(
+                                  'Clear dates',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFFB91C1C),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                          const SizedBox(width: 14),
+                          SizedBox(
+                            height: 34,
+                            child: ElevatedButton.icon(
+                              onPressed: _downloadExcel,
+                              icon: const Icon(Icons.download, size: 16),
+                              label: const Text('Download Excel'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF166534),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                padding: const EdgeInsets.symmetric(horizontal: 14),
+                                textStyle: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 14),
+
+                    if (_isLoading)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 40),
+                        child: Center(
+                          child: CircularProgressIndicator(color: HygColors.gold),
+                        ),
+                      )
+                    else if (allFilteredItems.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(18, 10, 18, 26),
+                        child: EmployeesStateMessage(
+                          icon: Icons.fact_check_outlined,
+                          title: 'No validated requests found',
+                          message: _searchQuery.isNotEmpty || _dateFrom != null || _dateTo != null
+                              ? 'Try adjusting your search or date filters.'
+                              : 'No requests have been validated in this category yet.',
+                        ),
+                      )
+                    else ...[
+                      _RequestsTable(
+                        items: paginatedItems,
+                        category: switch (tabIndex) {
+                          0 => AdminRequestCategory.esarf,
+                          1 => AdminRequestCategory.leave,
+                          _ => AdminRequestCategory.perk,
+                        },
+                        showDelete: false,
+                        onDelete: (_) {},
+                        onReassign: (_, __) {},
+                        onValidate: _validateRequest,
+                      ),
+
+                      // Pagination Footer Bar
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+                        child: EmployeePagination(
+                          currentPage: safePage - 1,
+                          pageCount: effectiveTotalPages,
+                          totalEmployees: totalItems,
+                          employeesPerPage: _pageSize,
+                          itemLabel: 'validated requests',
+                          onPageSelected: (page) => setState(() => _currentPage = page + 1),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

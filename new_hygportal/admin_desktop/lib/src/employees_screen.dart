@@ -786,7 +786,7 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
       final companies = await CompanyDirectoryService.loadCompanies();
       if (!mounted) return;
 
-      final names =
+      final activeNames =
           companies
               .where((company) => company.status.toLowerCase() == 'active')
               .map((company) => company.name.trim())
@@ -795,10 +795,26 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
               .toList()
             ..sort();
 
+      final names = activeNames.isNotEmpty
+          ? activeNames
+          : (companies
+              .map((company) => company.name.trim())
+              .where((name) => name.isNotEmpty)
+              .toSet()
+              .toList()
+            ..sort());
+
       setState(() {
         _companyOptions = names;
-        _company = _resolveLoadedOption(_company, names);
+        if (names.length == 1 && (_company == 'Select' || _company.isEmpty)) {
+          _company = names.first;
+        } else {
+          _company = _resolveLoadedOption(_company, names);
+        }
         _isLoadingCompanyOptions = false;
+        if (names.isEmpty) {
+          _companyLoadError = 'No companies found or assigned to your HR account.';
+        }
       });
     } catch (error) {
       if (!mounted) return;
@@ -963,6 +979,9 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
     final normalizedCurrent = _normalizeOption(currentValue);
     if (normalizedCurrent.isEmpty ||
         normalizedCurrent == _normalizeOption('Select')) {
+      if (options.length == 1) {
+        return options.first;
+      }
       return 'Select';
     }
 

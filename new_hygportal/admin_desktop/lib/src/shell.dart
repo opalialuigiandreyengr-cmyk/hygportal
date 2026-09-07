@@ -1803,7 +1803,10 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         if (_activeSection == HrSection.requests) ...[
-                          RequestsHeader(onRefresh: _loadAllRequests),
+                          RequestsHeader(
+                            onRefresh: _loadAllRequests,
+                            requests: _allRequests,
+                          ),
                           const SizedBox(height: 14),
                           RequestsPanel(
                             requests: _allRequests,
@@ -2096,7 +2099,7 @@ class HrSidebar extends StatelessWidget {
               Container(
                 width: 46,
                 height: 46,
-                padding: const EdgeInsets.all(5),
+                padding: const EdgeInsets.all(2.5),
                 decoration: BoxDecoration(
                   color: HygColors.gold,
                   borderRadius: BorderRadius.circular(10),

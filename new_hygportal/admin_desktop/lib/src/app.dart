@@ -87,10 +87,10 @@ class SplashScreen extends StatelessWidget {
             Container(
               width: 112,
               height: 112,
-              padding: const EdgeInsets.all(14),
+              padding: const EdgeInsets.all(5),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(26),
                 boxShadow: const [
                   BoxShadow(
                     color: Color(0x33000000),
@@ -99,7 +99,10 @@ class SplashScreen extends StatelessWidget {
                   ),
                 ],
               ),
-              child: Image.asset('assets/hyg_icon.png', fit: BoxFit.contain),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(21),
+                child: Image.asset('assets/hyg_icon.png', fit: BoxFit.contain),
+              ),
             ),
             const SizedBox(height: 24),
             const Text(
@@ -343,8 +346,9 @@ class BrandPanel extends StatelessWidget {
             height: 76,
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: HygColors.gold,
               borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white, width: 2.5),
             ),
             child: Image.asset('assets/hyg_logo.png', fit: BoxFit.contain),
           ),

@@ -90,6 +90,9 @@ class _AddStoreDialogState extends State<AddStoreDialog> {
                 .toList()
               ..sort();
         _clusters = clusters;
+        if (widget.store == null && _companies.length == 1 && (_company == 'Select' || _company.isEmpty)) {
+          _company = _companies.first;
+        }
         _normalizeClusterSelection();
       });
     } catch (error) {

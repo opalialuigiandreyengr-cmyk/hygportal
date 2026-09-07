@@ -737,6 +737,7 @@ class AdminRequestItem {
     final s = status.toLowerCase();
     if (s == 'pending') return 'Pending';
     if (s == 'approved') return 'Approved';
+    if (s == 'validated') return 'Validated';
     if (s == 'rejected') return 'Rejected';
     if (s == 'cancelled') return 'Cancelled';
     if (s == 'needs_admin_review') return 'Needs Review';

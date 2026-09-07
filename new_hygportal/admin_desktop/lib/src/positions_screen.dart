@@ -87,13 +87,24 @@ class PositionsPanel extends StatefulWidget {
 }
 
 class _PositionsPanelState extends State<PositionsPanel> {
+  static const _positionsPerPage = 15;
+
   final _searchController = TextEditingController();
   String _query = '';
+  var _currentPage = 0;
 
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant PositionsPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_currentPage >= _pageCount) {
+      _currentPage = math.max(0, _pageCount - 1);
+    }
   }
 
   List<PositionPreview> get _filteredPositions {
@@ -105,6 +116,32 @@ class _PositionsPanelState extends State<PositionsPanel> {
       return pos.name.toLowerCase().contains(q) ||
           pos.authorityLevel.toString().contains(q);
     }).toList();
+  }
+
+  int get _pageCount =>
+      (_filteredPositions.length / _positionsPerPage).ceil().clamp(1, 999999);
+
+  List<PositionPreview> get _visiblePositions {
+    final start = _currentPage * _positionsPerPage;
+    final end = math.min(start + _positionsPerPage, _filteredPositions.length);
+    if (start >= _filteredPositions.length) return const [];
+    return _filteredPositions.sublist(start, end);
+  }
+
+  void _goToPage(int page) {
+    final nextPage = page.clamp(0, _pageCount - 1);
+    if (nextPage == _currentPage) {
+      return;
+    }
+    setState(() => _currentPage = nextPage);
+  }
+
+  void _clearSearch() {
+    _searchController.clear();
+    setState(() {
+      _query = '';
+      _currentPage = 0;
+    });
   }
 
   @override
@@ -125,11 +162,11 @@ class _PositionsPanelState extends State<PositionsPanel> {
                 child: TableSearchField(
                   controller: _searchController,
                   hint: 'Search position name',
-                  onChanged: (val) => setState(() => _query = val),
-                  onClear: () {
-                    _searchController.clear();
-                    setState(() => _query = '');
-                  },
+                  onChanged: (val) => setState(() {
+                    _query = val;
+                    _currentPage = 0;
+                  }),
+                  onClear: _clearSearch,
                 ),
               ),
               const SizedBox(width: 10),
@@ -171,13 +208,10 @@ class _PositionsPanelState extends State<PositionsPanel> {
               title: 'No matching positions',
               message: 'Try another position name.',
               actionLabel: 'Clear',
-              onAction: () {
-                _searchController.clear();
-                setState(() => _query = '');
-              },
+              onAction: _clearSearch,
             )
-          else
-            ...filtered.map(
+          else ...[
+            ..._visiblePositions.map(
               (position) => PositionRow(
                 position: position,
                 onEdit: () => widget.onEditPosition(position),
@@ -185,6 +219,16 @@ class _PositionsPanelState extends State<PositionsPanel> {
                 canEditAndDelete: widget.canEditAndDelete,
               ),
             ),
+            const SizedBox(height: 14),
+            EmployeePagination(
+              currentPage: _currentPage,
+              pageCount: _pageCount,
+              totalEmployees: filtered.length,
+              employeesPerPage: _positionsPerPage,
+              itemLabel: 'positions',
+              onPageSelected: _goToPage,
+            ),
+          ],
         ],
       ),
     );
@@ -211,7 +255,7 @@ class PositionTableHeader extends StatelessWidget {
           Expanded(flex: 2, child: HeaderLabel('CREATED')),
           Expanded(flex: 2, child: HeaderLabel('UPDATED')),
           SizedBox(
-            width: 86,
+            width: 80,
             child: Icon(Icons.tune, size: 16, color: Color(0xFF475569)),
           ),
         ],
@@ -618,11 +662,12 @@ class PositionRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      constraints: const BoxConstraints(minHeight: 78),
+      height: 66,
       margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: HygColors.border)),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        border: Border.all(color: HygColors.border),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         children: [
@@ -631,8 +676,8 @@ class PositionRow extends StatelessWidget {
             child: Row(
               children: [
                 Container(
-                  width: 46,
-                  height: 46,
+                  width: 38,
+                  height: 38,
                   decoration: BoxDecoration(
                     color: const Color(0xFFEFF6FF),
                     borderRadius: BorderRadius.circular(9),
@@ -640,10 +685,10 @@ class PositionRow extends StatelessWidget {
                   child: const Icon(
                     Icons.badge,
                     color: Color(0xFF2563EB),
-                    size: 22,
+                    size: 20,
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     position.name,
@@ -662,10 +707,9 @@ class PositionRow extends StatelessWidget {
           Expanded(flex: 2, child: BodyCell(position.created)),
           Expanded(flex: 2, child: BodyCell(position.updated)),
           SizedBox(
-            width: 86,
+            width: 80,
             child: canEditAndDelete
                 ? Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       IconButton(
                         tooltip: 'Edit position',

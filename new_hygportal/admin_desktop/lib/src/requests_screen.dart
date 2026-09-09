@@ -172,52 +172,79 @@ class RequestsHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        children: [
-          const Icon(
-            Icons.inbox_outlined,
-            color: HygColors.goldStrong,
-            size: 42,
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          final validatedCount = requests
+              .where((r) => r.status.trim().toLowerCase() == 'validated')
+              .length;
+
+          return Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Row(
               children: [
-                const Kicker('Admin Control Center'),
-                const SizedBox(height: 4),
-                Text(
-                  'All Employee Requests',
-                  style: HygTypography.pageTitle,
+                const Icon(
+                  Icons.inbox_outlined,
+                  color: HygColors.goldStrong,
+                  size: 42,
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  'View and monitor ESARF, Leave, and Perk requests across the organisation.',
-                  style: HygTypography.body,
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Kicker('Admin Control Center'),
+                      const SizedBox(height: 4),
+                      Text(
+                        'All Employee Requests',
+                        style: HygTypography.pageTitle,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'View and monitor ESARF, Leave, and Perk requests across the organisation.',
+                        style: HygTypography.body,
+                      ),
+                    ],
+                  ),
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 14),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: HygColors.ink,
-              elevation: 0,
-              side: const BorderSide(color: Color(0xFFCBD5E1)),
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            onPressed: () => _handleOpenValidated(context),
-            icon: const Icon(Icons.verified_outlined, size: 19, color: Color(0xFF059669)),
-            label: const Text('Validated Requests', style: TextStyle(fontWeight: FontWeight.w700)),
-          ),
+                const SizedBox(width: 14),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: HygColors.ink,
+                    elevation: 0,
+                    side: const BorderSide(color: Color(0xFFCBD5E1)),
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () => _handleOpenValidated(context),
+                  icon: const Icon(Icons.verified_outlined, size: 19, color: Color(0xFF059669)),
+                  label: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('Validated Requests', style: TextStyle(fontWeight: FontWeight.w700)),
+                      if (validatedCount > 0) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFD1FAE5),
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                          child: Text(
+                            '$validatedCount',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF065F46),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
           if (onRefresh != null) ...[
             const SizedBox(width: 10),
             ElevatedButton.icon(
@@ -298,7 +325,7 @@ class _RequestsPanelState extends State<RequestsPanel>
     };
 
     var items = widget.requests
-        .where((r) => r.category == category)
+        .where((r) => r.category == category && r.status.trim().toLowerCase() != 'validated')
         .toList(growable: false);
 
     if (_statusFilter != 'all') {
@@ -349,7 +376,9 @@ class _RequestsPanelState extends State<RequestsPanel>
       1 => AdminRequestCategory.leave,
       _ => AdminRequestCategory.perk,
     };
-    return widget.requests.where((r) => r.category == category).length;
+    return widget.requests
+        .where((r) => r.category == category && r.status.trim().toLowerCase() != 'validated')
+        .length;
   }
 
   // Ã¢â€â‚¬Ã¢â€â‚¬ Action helpers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
@@ -1569,8 +1598,6 @@ class _RequestsPanelState extends State<RequestsPanel>
                       DropdownMenuItem(
                           value: 'approved', child: Text('Approved')),
                       DropdownMenuItem(
-                          value: 'validated', child: Text('Validated')),
-                      DropdownMenuItem(
                           value: 'rejected', child: Text('Rejected')),
                       DropdownMenuItem(
                           value: 'cancelled', child: Text('Cancelled')),
@@ -1944,22 +1971,223 @@ class _RequestsTable extends StatefulWidget {
 }
 
 class _RequestsTableState extends State<_RequestsTable> {
+  static const double _kFloatingBarHeight = 26.0;
+  static const double _kBottomDockInset = 4.0;
+  static const double _kViewportBottomClearance = 10.0;
+
   final ScrollController _scrollController = ScrollController();
+  final ScrollController _floatingScrollController = ScrollController();
+  final ValueNotifier<double> _floatingBarY = ValueNotifier<double>(0.0);
+  final ValueNotifier<bool> _isFloatingBarVisible = ValueNotifier<bool>(false);
+
+  ScrollPosition? _ancestorPosition;
+  ScrollableState? _ancestorScrollable;
+  bool _isSyncingScroll = false;
 
   @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onTableScroll);
+    _floatingScrollController.addListener(_onFloatingScroll);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _updateFloatingPosition();
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final scrollable = Scrollable.maybeOf(context);
+    if (_ancestorScrollable != scrollable) {
+      _ancestorPosition?.removeListener(_onAncestorScroll);
+      _ancestorScrollable = scrollable;
+      _ancestorPosition = scrollable?.position;
+      _ancestorPosition?.addListener(_onAncestorScroll);
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _updateFloatingPosition();
+    });
   }
 
   @override
   void didUpdateWidget(_RequestsTable oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.items != widget.items) {
+    if (oldWidget.items != widget.items || oldWidget.category != widget.category) {
       if (_scrollController.hasClients) {
         _scrollController.jumpTo(0);
       }
+      if (_floatingScrollController.hasClients) {
+        _floatingScrollController.jumpTo(0);
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _updateFloatingPosition();
+      });
     }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onTableScroll);
+    _floatingScrollController.removeListener(_onFloatingScroll);
+    _ancestorPosition?.removeListener(_onAncestorScroll);
+    _scrollController.dispose();
+    _floatingScrollController.dispose();
+    _floatingBarY.dispose();
+    _isFloatingBarVisible.dispose();
+    super.dispose();
+  }
+
+  void _onTableScroll() {
+    if (_isSyncingScroll) return;
+    _isSyncingScroll = true;
+    try {
+      if (_floatingScrollController.hasClients && _scrollController.hasClients) {
+        final target = _scrollController.offset.clamp(
+          0.0,
+          _floatingScrollController.position.maxScrollExtent,
+        );
+        if ((_floatingScrollController.offset - target).abs() > 0.5) {
+          _floatingScrollController.jumpTo(target);
+        }
+      }
+    } finally {
+      _isSyncingScroll = false;
+    }
+  }
+
+  void _onFloatingScroll() {
+    if (_isSyncingScroll) return;
+    _isSyncingScroll = true;
+    try {
+      if (_scrollController.hasClients && _floatingScrollController.hasClients) {
+        final target = _floatingScrollController.offset.clamp(
+          0.0,
+          _scrollController.position.maxScrollExtent,
+        );
+        if ((_scrollController.offset - target).abs() > 0.5) {
+          _scrollController.jumpTo(target);
+        }
+      }
+    } finally {
+      _isSyncingScroll = false;
+    }
+  }
+
+  void _onAncestorScroll() {
+    _updateFloatingPosition();
+  }
+
+  void _updateFloatingPosition() {
+    if (!mounted) return;
+
+    final tableRenderObject = context.findRenderObject();
+    if (tableRenderObject is! RenderBox || !tableRenderObject.hasSize || !tableRenderObject.attached) {
+      return;
+    }
+
+    final scrollable = _ancestorScrollable ?? Scrollable.maybeOf(context);
+    final viewportRenderObject = scrollable?.context.findRenderObject();
+    if (viewportRenderObject is! RenderBox || !viewportRenderObject.hasSize || !viewportRenderObject.attached) {
+      final double fallbackY = math.max(0.0, tableRenderObject.size.height - _kFloatingBarHeight - _kBottomDockInset);
+      if (_floatingBarY.value != fallbackY) {
+        _floatingBarY.value = fallbackY;
+      }
+      if (!_isFloatingBarVisible.value) {
+        _isFloatingBarVisible.value = true;
+      }
+      return;
+    }
+
+    final tableGlobal = tableRenderObject.localToGlobal(Offset.zero);
+    final viewportGlobal = viewportRenderObject.localToGlobal(Offset.zero);
+
+    final double topInViewport = tableGlobal.dy - viewportGlobal.dy;
+    final double tableHeight = tableRenderObject.size.height;
+    final double bottomInViewport = topInViewport + tableHeight;
+    final double viewportHeight = viewportRenderObject.size.height;
+
+    final bool isTableVisible = topInViewport < (viewportHeight - _kFloatingBarHeight) &&
+        bottomInViewport > (_kFloatingBarHeight + 20.0);
+
+    if (!isTableVisible) {
+      if (_isFloatingBarVisible.value) {
+        _isFloatingBarVisible.value = false;
+      }
+      return;
+    }
+
+    final double visibleBottom = math.min(bottomInViewport, viewportHeight - _kViewportBottomClearance);
+    double localY = visibleBottom - topInViewport - _kFloatingBarHeight;
+
+    final double maxLocalY = math.max(0.0, tableHeight - _kFloatingBarHeight - _kBottomDockInset);
+    localY = localY.clamp(0.0, maxLocalY);
+
+    if ((_floatingBarY.value - localY).abs() > 0.5) {
+      _floatingBarY.value = localY;
+    }
+    if (!_isFloatingBarVisible.value) {
+      _isFloatingBarVisible.value = true;
+    }
+  }
+
+  Widget _buildFloatingScrollbar(double availableWidth, double rowWidth) {
+    return Tooltip(
+      message: 'Drag or click to scroll table horizontally',
+      waitDuration: const Duration(milliseconds: 700),
+      child: Container(
+        width: availableWidth,
+        height: _kFloatingBarHeight,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.95),
+          borderRadius: BorderRadius.circular(_kFloatingBarHeight / 2),
+          border: Border.all(
+            color: const Color(0xFFCBD5E1),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: HygColors.ink.withValues(alpha: 0.12),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular((_kFloatingBarHeight - 6) / 2),
+          child: ScrollConfiguration(
+            behavior: ScrollConfiguration.of(context).copyWith(
+              dragDevices: {
+                PointerDeviceKind.touch,
+                PointerDeviceKind.mouse,
+                PointerDeviceKind.trackpad,
+                PointerDeviceKind.stylus,
+              },
+            ),
+            child: RawScrollbar(
+              controller: _floatingScrollController,
+              thumbVisibility: true,
+              trackVisibility: true,
+              thickness: 9,
+              radius: const Radius.circular(5),
+              thumbColor: const Color(0xFF64748B),
+              trackColor: const Color(0xFFF1F5F9),
+              trackBorderColor: Colors.transparent,
+              interactive: true,
+              child: SingleChildScrollView(
+                controller: _floatingScrollController,
+                scrollDirection: Axis.horizontal,
+                physics: const ClampingScrollPhysics(),
+                child: SizedBox(
+                  width: rowWidth,
+                  height: _kFloatingBarHeight - 6,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   List<_RequestColDef> _getBaseColumns() {
@@ -2072,49 +2300,72 @@ class _RequestsTableState extends State<_RequestsTable> {
           final availableWidth = constraints.maxWidth;
           final columns = _computeScaledColumns(baseColumns, availableWidth);
           final double rowWidth = math.max(availableWidth, totalBaseWidth);
+          final bool needsHorizontalScroll = totalBaseWidth > availableWidth;
 
-          return ScrollConfiguration(
-            behavior: ScrollConfiguration.of(context).copyWith(
-              dragDevices: {
-                PointerDeviceKind.touch,
-                PointerDeviceKind.mouse,
-                PointerDeviceKind.trackpad,
-                PointerDeviceKind.stylus,
-              },
-            ),
-            child: Scrollbar(
-              controller: _scrollController,
-              thumbVisibility: true,
-              trackVisibility: true,
-              child: SingleChildScrollView(
-                controller: _scrollController,
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.only(bottom: 12),
-                child: SizedBox(
-                  width: rowWidth,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildHeader(columns, rowWidth),
-                      const SizedBox(height: 8),
-                      ...widget.items.map(
-                        (item) => _RequestCardRow(
-                          key: ValueKey(item.requestId),
-                          item: item,
-                          columns: columns,
-                          rowWidth: rowWidth,
-                          category: widget.category,
-                          showDelete: widget.showDelete,
-                          onDelete: widget.onDelete,
-                          onReassign: widget.onReassign,
-                          onValidate: widget.onValidate,
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _updateFloatingPosition();
+          });
+
+          return Stack(
+            clipBehavior: Clip.none,
+            children: [
+              ScrollConfiguration(
+                behavior: ScrollConfiguration.of(context).copyWith(
+                  dragDevices: {
+                    PointerDeviceKind.touch,
+                    PointerDeviceKind.mouse,
+                    PointerDeviceKind.trackpad,
+                    PointerDeviceKind.stylus,
+                  },
+                ),
+                child: SingleChildScrollView(
+                  controller: _scrollController,
+                  scrollDirection: Axis.horizontal,
+                  padding: EdgeInsets.only(bottom: needsHorizontalScroll ? 36 : 12),
+                  child: SizedBox(
+                    width: rowWidth,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildHeader(columns, rowWidth),
+                        const SizedBox(height: 8),
+                        ...widget.items.map(
+                          (item) => _RequestCardRow(
+                            key: ValueKey(item.requestId),
+                            item: item,
+                            columns: columns,
+                            rowWidth: rowWidth,
+                            category: widget.category,
+                            showDelete: widget.showDelete,
+                            onDelete: widget.onDelete,
+                            onReassign: widget.onReassign,
+                            onValidate: widget.onValidate,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
+              if (needsHorizontalScroll)
+                ValueListenableBuilder<bool>(
+                  valueListenable: _isFloatingBarVisible,
+                  builder: (context, isVisible, _) {
+                    if (!isVisible) return const SizedBox.shrink();
+                    return ValueListenableBuilder<double>(
+                      valueListenable: _floatingBarY,
+                      builder: (context, yOffset, _) {
+                        return Positioned(
+                          top: yOffset,
+                          left: 0,
+                          right: 0,
+                          child: _buildFloatingScrollbar(availableWidth, rowWidth),
+                        );
+                      },
+                    );
+                  },
+                ),
+            ],
           );
         },
       ),

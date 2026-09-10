@@ -1,0 +1,3 @@
+[submodule "new_hygportal/mobile"]
+	path = new_hygportal/mobile
+	url = https://github.com/opalialuigiandreyengr-cmyk/HYGPORTAL-APP.git

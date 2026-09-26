@@ -43,3 +43,41 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Old Flask app
+website/
+instance/
+dist/
+run.py
+requirements.txt
+*.db
+
+# Old root-level Flutter desktop
+pubspec.yaml
+pubspec.lock
+analysis_options.yaml
+windows/
+test/
+assets/
+
+# Credentials / env
+.env
+.env.example
+
+# IDE / tooling junk
+.expo/
+.vs/
+.metadata
+.vscode/
+
+# Build artifacts & loose files
+*.zip
+*.xlsx
+*.png
+*.iss
+installer_output/
+hyg_admin_local.db
+
+# Dart/Flutter build outputs
+new_hygportal/admin_desktop/.dart_tool/
+new_hygportal/admin_desktop/build/

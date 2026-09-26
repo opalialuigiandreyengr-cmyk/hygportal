@@ -725,6 +725,30 @@ class AdminRequestItem {
     return AdminRequestCategory.esarf;
   }
 
+  DateTime? get submittedDateTime {
+    final raw = submittedAt?.trim();
+    if (raw != null && raw.isNotEmpty) {
+      final parsed = DateTime.tryParse(raw);
+      if (parsed != null) return parsed;
+    }
+    final df = dateFrom?.trim();
+    if (df != null && df.isNotEmpty) {
+      final parsed = DateTime.tryParse(df);
+      if (parsed != null) return parsed;
+    }
+    final sd = startDate?.trim();
+    if (sd != null && sd.isNotEmpty) {
+      final parsed = DateTime.tryParse(sd);
+      if (parsed != null) return parsed;
+    }
+    final fa = finalApprovedAt?.trim();
+    if (fa != null && fa.isNotEmpty) {
+      final parsed = DateTime.tryParse(fa);
+      if (parsed != null) return parsed;
+    }
+    return null;
+  }
+
   bool get isAutoApprovedBirthdayGrant {
     final cat = (leaveCategory ?? '').trim().toLowerCase();
     final r = (reason ?? '').trim().toLowerCase();

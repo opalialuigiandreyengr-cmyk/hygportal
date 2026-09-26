@@ -3147,6 +3147,15 @@ class AdminRequestsService {
       }
     } catch (_) {}
 
+    requests.sort((a, b) {
+      final da = a.submittedDateTime;
+      final db = b.submittedDateTime;
+      if (da == null && db == null) return 0;
+      if (da == null) return 1;
+      if (db == null) return -1;
+      return db.compareTo(da);
+    });
+
     return requests;
   }
 

@@ -342,7 +342,7 @@ class _RequestsPanelState extends State<RequestsPanel>
 
     var items = widget.requests
         .where((r) => r.category == category && r.status.trim().toLowerCase() != 'validated')
-        .toList(growable: false);
+        .toList();
 
     if (_statusFilter != 'all') {
       items = items
@@ -350,7 +350,7 @@ class _RequestsPanelState extends State<RequestsPanel>
             final effectiveStatus = r.isAutoApprovedBirthdayGrant ? 'approved' : r.status.toLowerCase();
             return effectiveStatus == _statusFilter;
           })
-          .toList(growable: false);
+          .toList();
     }
 
     if (_dateFrom != null || _dateTo != null) {
@@ -365,7 +365,7 @@ class _RequestsPanelState extends State<RequestsPanel>
         } catch (_) {
           return false;
         }
-      }).toList(growable: false);
+      }).toList();
     }
 
     if (_searchQuery.isNotEmpty) {
@@ -380,8 +380,17 @@ class _RequestsPanelState extends State<RequestsPanel>
             (r.perkProductName ?? '').toLowerCase().contains(q) ||
             (r.reason ?? '').toLowerCase().contains(q) ||
             r.approverNames.toLowerCase().contains(q);
-      }).toList(growable: false);
+      }).toList();
     }
+
+    items.sort((a, b) {
+      final da = a.submittedDateTime;
+      final db = b.submittedDateTime;
+      if (da == null && db == null) return 0;
+      if (da == null) return 1;
+      if (db == null) return -1;
+      return db.compareTo(da);
+    });
 
     return items;
   }
@@ -4798,7 +4807,7 @@ class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
 
     var items = _requests
         .where((r) => r.category == category && r.status.trim().toLowerCase() == 'validated')
-        .toList(growable: false);
+        .toList();
 
     if (_dateFrom != null || _dateTo != null) {
       items = items.where((r) {
@@ -4812,7 +4821,7 @@ class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
         } catch (_) {
           return false;
         }
-      }).toList(growable: false);
+      }).toList();
     }
 
     if (_searchQuery.isNotEmpty) {
@@ -4827,8 +4836,17 @@ class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
             (r.perkProductName ?? '').toLowerCase().contains(q) ||
             (r.reason ?? '').toLowerCase().contains(q) ||
             r.approverNames.toLowerCase().contains(q);
-      }).toList(growable: false);
+      }).toList();
     }
+
+    items.sort((a, b) {
+      final da = a.submittedDateTime;
+      final db = b.submittedDateTime;
+      if (da == null && db == null) return 0;
+      if (da == null) return 1;
+      if (db == null) return -1;
+      return db.compareTo(da);
+    });
 
     return items;
   }

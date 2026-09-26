@@ -695,8 +695,20 @@ class AdminRequestItem {
   final String? remarks;
 
   AdminRequestCategory get category {
-    final code = requestTypeCode.toLowerCase();
-    if (code == 'discount' || code == 'charge') {
+    final code = requestTypeCode.trim().toLowerCase();
+    final name = requestTypeName.trim().toLowerCase();
+    if (code == 'discount' ||
+        code == 'charge' ||
+        code.contains('perk') ||
+        code.contains('discount') ||
+        code.contains('charge') ||
+        name.contains('perk') ||
+        name.contains('discount') ||
+        name.contains('charge') ||
+        (perkApprovalCode != null && perkApprovalCode!.trim().isNotEmpty) ||
+        perkAmount != null ||
+        (perkProductName != null && perkProductName!.trim().isNotEmpty) ||
+        (perkBenefit != null && perkBenefit!.trim().isNotEmpty)) {
       return AdminRequestCategory.perk;
     }
     if (code.contains('leave') ||
@@ -706,7 +718,8 @@ class AdminRequestItem {
         code.contains('bl') ||
         code.contains('spl') ||
         code.contains('pl') ||
-        code.contains('ml')) {
+        code.contains('ml') ||
+        name.contains('leave')) {
       return AdminRequestCategory.leave;
     }
     return AdminRequestCategory.esarf;

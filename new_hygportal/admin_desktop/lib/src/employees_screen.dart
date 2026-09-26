@@ -2221,6 +2221,8 @@ class ModalTextField extends StatelessWidget {
     this.readOnly = false,
     this.obscureText = false,
     this.onTap,
+    this.onTrailingIconPressed,
+    this.suffixIcon,
     super.key,
   });
 
@@ -2233,6 +2235,8 @@ class ModalTextField extends StatelessWidget {
   final bool readOnly;
   final bool obscureText;
   final VoidCallback? onTap;
+  final VoidCallback? onTrailingIconPressed;
+  final Widget? suffixIcon;
 
   @override
   Widget build(BuildContext context) {
@@ -2252,7 +2256,8 @@ class ModalTextField extends StatelessWidget {
           decoration: modalInputDecoration(
             hint: hint,
             trailingIcon: trailingIcon,
-            onTrailingIconPressed: onTap,
+            onTrailingIconPressed: onTrailingIconPressed ?? onTap,
+            suffixIcon: suffixIcon,
           ),
         ),
       ],
@@ -2624,12 +2629,13 @@ InputDecoration modalInputDecoration({
   String hint = '',
   IconData? trailingIcon,
   VoidCallback? onTrailingIconPressed,
+  Widget? suffixIcon,
 }) {
-  Widget? suffixIcon;
-  if (trailingIcon != null) {
+  Widget? effectiveSuffixIcon = suffixIcon;
+  if (effectiveSuffixIcon == null && trailingIcon != null) {
     final iconWidget = Icon(trailingIcon, size: 18, color: HygColors.ink);
     if (onTrailingIconPressed != null) {
-      suffixIcon = IconButton(
+      effectiveSuffixIcon = IconButton(
         icon: iconWidget,
         onPressed: onTrailingIconPressed,
         padding: EdgeInsets.zero,
@@ -2637,14 +2643,14 @@ InputDecoration modalInputDecoration({
         splashRadius: 18,
       );
     } else {
-      suffixIcon = iconWidget;
+      effectiveSuffixIcon = iconWidget;
     }
   }
 
   return InputDecoration(
     hintText: hint,
     hintStyle: HygTypography.input.copyWith(color: const Color(0xFF6B7280)),
-    suffixIcon: suffixIcon,
+    suffixIcon: effectiveSuffixIcon,
     filled: true,
     fillColor: Colors.white,
     isDense: true,

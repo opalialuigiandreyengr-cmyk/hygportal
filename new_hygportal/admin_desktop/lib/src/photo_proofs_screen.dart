@@ -3052,166 +3052,19 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
                 ),
               ),
 
-              // Photo with Overlaid Proof Stamp (strictly bounded inside photo)
+              // Photo (displays verified photo proof with its embedded details)
               Flexible(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                   child: Center(
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(12),
-                      child: Stack(
-                        alignment: Alignment.bottomCenter,
-                        children: [
-                          // Photo constrained to modal dimensions, sizing Stack to exact photo bounds
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(
-                              maxWidth: 500,
-                              maxHeight: 520,
-                            ),
-                            child: _buildFullPhotoWidget(proof),
-                          ),
-
-                          // Timestamp and Geolocation Overlay strictly inside the photo
-                          Positioned(
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  colors: [
-                                    Colors.transparent,
-                                    Colors.black.withValues(alpha: 0.42),
-                                  ],
-                                  stops: const [0.0, 1.0],
-                                ),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  // Time + Date Row
-                                  Row(
-                                    crossAxisAlignment: CrossAxisAlignment.center,
-                                    children: [
-                                      Text.rich(
-                                        TextSpan(
-                                          children: [
-                                            TextSpan(
-                                              text: proof.displayTimeDigits,
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 24,
-                                                fontWeight: FontWeight.w300,
-                                                letterSpacing: -0.5,
-                                                height: 1.0,
-                                                shadows: [
-                                                  Shadow(
-                                                    color: Color(0xCC000000),
-                                                    offset: Offset(1, 1),
-                                                    blurRadius: 4,
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                            TextSpan(
-                                              text: ' ${proof.displayTimePeriod}',
-                                              style: const TextStyle(
-                                                color: Color(0xFFFACC15),
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.w800,
-                                                letterSpacing: 0.2,
-                                                height: 1.0,
-                                                shadows: [
-                                                  Shadow(
-                                                    color: Color(0xCC000000),
-                                                    offset: Offset(1, 1),
-                                                    blurRadius: 4,
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      Container(
-                                        margin: const EdgeInsets.symmetric(horizontal: 10),
-                                        width: 1.5,
-                                        height: 24,
-                                        color: Colors.white.withValues(alpha: 0.65),
-                                      ),
-                                      Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Text(
-                                            proof.displayDateFormatted,
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w600,
-                                              height: 1.1,
-                                              shadows: [
-                                                Shadow(
-                                                  color: Color(0xCC000000),
-                                                  offset: Offset(1, 1),
-                                                  blurRadius: 3,
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            proof.displayDayFormatted,
-                                            style: TextStyle(
-                                              color: Colors.white.withValues(alpha: 0.95),
-                                              fontSize: 10.5,
-                                              fontWeight: FontWeight.w500,
-                                              height: 1.1,
-                                              shadows: const [
-                                                Shadow(
-                                                  color: Color(0xCC000000),
-                                                  offset: Offset(1, 1),
-                                                  blurRadius: 3,
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-
-                                  // Location Address
-                                  if (proof.displayLocationText.isNotEmpty) ...[
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      proof.displayLocationText,
-                                      style: const TextStyle(
-                                        color: Color(0xFFF1F5F9),
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w500,
-                                        height: 1.3,
-                                        shadows: [
-                                          Shadow(
-                                            color: Color(0xE6000000),
-                                            offset: Offset(1, 1),
-                                            blurRadius: 4,
-                                          ),
-                                        ],
-                                      ),
-                                      maxLines: 3,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          maxWidth: 500,
+                          maxHeight: 520,
+                        ),
+                        child: _buildFullPhotoWidget(proof),
                       ),
                     ),
                   ),

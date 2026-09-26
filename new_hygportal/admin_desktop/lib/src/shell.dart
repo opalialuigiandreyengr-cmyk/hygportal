@@ -56,11 +56,21 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
   String _selectedRewardCategory = 'All Categories';
   Timer? _directoryRefreshTimer;
   StreamSubscription<void>? _connectionRestoredSubscription;
+  final LayerLink _notificationsLayerLink = LayerLink();
+  OverlayEntry? _notificationsOverlayEntry;
+  bool _isNotificationsOpen = false;
+  int _requestsInitialTab = 0;
+
+  void _onUnreadNotifsChanged() {
+    if (mounted) setState(() {});
+  }
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    AdminNotificationsService.initialize();
+    AdminNotificationsService.unreadCountNotifier.addListener(_onUnreadNotifsChanged);
     final canAccessRequests = widget.session.canManageAdminSettings ||
         widget.session.appRole.toLowerCase() == 'hr';
     _activeSection = canAccessRequests
@@ -90,6 +100,8 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
   void dispose() {
     _rewardsSearchController.dispose();
     _pointsSearchController.dispose();
+    AdminNotificationsService.unreadCountNotifier.removeListener(_onUnreadNotifsChanged);
+    _closeNotificationsPopover();
     WidgetsBinding.instance.removeObserver(this);
     _directoryRefreshTimer?.cancel();
     unawaited(_connectionRestoredSubscription?.cancel());
@@ -1697,6 +1709,115 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
     ).push(MaterialPageRoute<void>(builder: (_) => const HygPhotoProofsScreen()));
   }
 
+  void _toggleNotificationsPopover() {
+    if (_isNotificationsOpen) {
+      _closeNotificationsPopover();
+    } else {
+      _showNotificationsPopover();
+    }
+  }
+
+  void _closeNotificationsPopover() {
+    if (_notificationsOverlayEntry != null) {
+      _notificationsOverlayEntry?.remove();
+      _notificationsOverlayEntry = null;
+    }
+    if (mounted && _isNotificationsOpen) {
+      setState(() => _isNotificationsOpen = false);
+    }
+  }
+
+  void _showNotificationsPopover() {
+    _closeNotificationsPopover();
+
+    _notificationsOverlayEntry = OverlayEntry(
+      builder: (context) => Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _closeNotificationsPopover,
+              child: const SizedBox.expand(),
+            ),
+          ),
+          Positioned(
+            child: CompositedTransformFollower(
+              link: _notificationsLayerLink,
+              showWhenUnlinked: false,
+              targetAnchor: Alignment.bottomRight,
+              followerAnchor: Alignment.topRight,
+              offset: const Offset(0, 10),
+              child: AdminNotificationsPopover(
+                onClose: _closeNotificationsPopover,
+                onSelectNotification: _handleNotificationSelected,
+                onOpenFullScreen: _openNotificationsScreen,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    Overlay.of(context).insert(_notificationsOverlayEntry!);
+    setState(() => _isNotificationsOpen = true);
+  }
+
+  void _handleNotificationSelected(AdminNotificationItem item) {
+    _closeNotificationsPopover();
+
+    switch (item.category) {
+      case NotificationCategory.esarf:
+        setState(() {
+          _requestsInitialTab = 0;
+          _selectSection(HrSection.requests);
+        });
+        break;
+      case NotificationCategory.leave:
+        setState(() {
+          _requestsInitialTab = 1;
+          _selectSection(HrSection.requests);
+        });
+        break;
+      case NotificationCategory.perk:
+        setState(() {
+          _requestsInitialTab = 2;
+          _selectSection(HrSection.requests);
+        });
+        break;
+      case NotificationCategory.user:
+        _selectSection(HrSection.users);
+        break;
+      case NotificationCategory.photoProof:
+        _openPhotoProofs();
+        break;
+      case NotificationCategory.system:
+      case NotificationCategory.all:
+        setState(() {
+          _requestsInitialTab = 0;
+          _selectSection(HrSection.requests);
+        });
+        break;
+    }
+  }
+
+  void _openNotificationsScreen() {
+    _closeNotificationsPopover();
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => HygNotificationsScreen(
+          onNavigateToRequests: (tabIndex) {
+            setState(() {
+              _requestsInitialTab = tabIndex;
+              _selectSection(HrSection.requests);
+            });
+          },
+          onNavigateToUsers: () => _selectSection(HrSection.users),
+          onNavigateToProofs: _openPhotoProofs,
+        ),
+      ),
+    );
+  }
+
   Future<void> _confirmSignOut() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1795,6 +1916,9 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
                   onOpenAssist: _openHygAssistScreen,
                   onOpenBirthdays: _openHygBirthdaysScreen,
                   onOpenPhotoProofs: _openPhotoProofs,
+                  onOpenNotifications: _toggleNotificationsPopover,
+                  notificationCount: AdminNotificationsService.unreadCountNotifier.value,
+                  notificationsLayerLink: _notificationsLayerLink,
                 ),
                 Expanded(
                   child: SingleChildScrollView(
@@ -1813,6 +1937,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
                             isLoading: _isLoadingRequests,
                             error: _requestsError,
                             onRefresh: _loadAllRequests,
+                            initialTabIndex: _requestsInitialTab,
                             showDeleteAction: widget.session.appRole.toLowerCase() != 'hr',
                             onDeleteRequest: (String id, bool isPerk) async =>
                                 await AdminRequestsService.deleteRequest(
@@ -2216,8 +2341,6 @@ class HrSidebar extends StatelessWidget {
                   HrNavDropdown(
                     icon: Icons.redeem_outlined,
                     label: 'Rewards System',
-                    enabled: false,
-                    tooltip: 'Coming Soon.',
                     active: {
                       HrSection.rewards,
                       HrSection.pointsManagement,
@@ -2227,32 +2350,40 @@ class HrSidebar extends StatelessWidget {
                     }.contains(activeSection),
                     items: [
                       HrDropdownItem(
-                        icon: Icons.emoji_events_outlined,
-                        label: 'Rewards',
-                        active: activeSection == HrSection.rewards,
-                        onTap: () => onSelectSection(HrSection.rewards),
-                      ),
-                      HrDropdownItem(
                         icon: Icons.toll_outlined,
                         label: 'Points Management',
                         active: activeSection == HrSection.pointsManagement,
                         onTap: () => onSelectSection(HrSection.pointsManagement),
                       ),
                       HrDropdownItem(
+                        icon: Icons.emoji_events_outlined,
+                        label: 'Rewards',
+                        enabled: false,
+                        tooltip: 'Coming Soon.',
+                        active: activeSection == HrSection.rewards,
+                        onTap: () => onSelectSection(HrSection.rewards),
+                      ),
+                      HrDropdownItem(
                         icon: Icons.card_giftcard_outlined,
                         label: 'Redemption Request',
+                        enabled: false,
+                        tooltip: 'Coming Soon.',
                         active: activeSection == HrSection.redemptionRequests,
                         onTap: () => onSelectSection(HrSection.redemptionRequests),
                       ),
                       HrDropdownItem(
                         icon: Icons.verified_outlined,
                         label: 'Badges',
+                        enabled: false,
+                        tooltip: 'Coming Soon.',
                         active: activeSection == HrSection.badges,
                         onTap: () => onSelectSection(HrSection.badges),
                       ),
                       HrDropdownItem(
                         icon: Icons.bar_chart_outlined,
                         label: 'Reports',
+                        enabled: false,
+                        tooltip: 'Coming Soon.',
                         active: activeSection == HrSection.rewardsReports,
                         onTap: () => onSelectSection(HrSection.rewardsReports),
                       ),
@@ -2636,12 +2767,18 @@ class HrTopBar extends StatelessWidget {
     required this.onOpenAssist,
     this.onOpenBirthdays,
     this.onOpenPhotoProofs,
+    this.onOpenNotifications,
+    this.notificationCount = 0,
+    this.notificationsLayerLink,
     super.key,
   });
 
   final VoidCallback onOpenAssist;
   final VoidCallback? onOpenBirthdays;
   final VoidCallback? onOpenPhotoProofs;
+  final VoidCallback? onOpenNotifications;
+  final int notificationCount;
+  final LayerLink? notificationsLayerLink;
 
   String _philippineDateLabel() {
     const monthNames = <String>[
@@ -2687,10 +2824,27 @@ class HrTopBar extends StatelessWidget {
             onTap: onOpenBirthdays,
           ),
           const SizedBox(width: 10),
-          const TopIconButton(
-            icon: Icons.notifications_none,
-            tooltip: 'Notifications',
-          ),
+          if (notificationsLayerLink != null)
+            CompositedTransformTarget(
+              link: notificationsLayerLink!,
+              child: TopIconButton(
+                icon: Icons.notifications_none,
+                tooltip: notificationCount > 0
+                    ? 'Notifications ($notificationCount unread)'
+                    : 'Notifications',
+                badgeCount: notificationCount,
+                onTap: onOpenNotifications,
+              ),
+            )
+          else
+            TopIconButton(
+              icon: Icons.notifications_none,
+              tooltip: notificationCount > 0
+                  ? 'Notifications ($notificationCount unread)'
+                  : 'Notifications',
+              badgeCount: notificationCount,
+              onTap: onOpenNotifications,
+            ),
           const SizedBox(width: 10),
           const TopIconButton(
             icon: Icons.chat_bubble_outline,
@@ -2743,6 +2897,8 @@ class TopIconButton extends StatefulWidget {
     this.filled = false,
     this.onTap,
     this.tooltip,
+    this.badgeCount,
+    this.hasBadge = false,
     super.key,
   });
 
@@ -2750,6 +2906,8 @@ class TopIconButton extends StatefulWidget {
   final bool filled;
   final VoidCallback? onTap;
   final String? tooltip;
+  final int? badgeCount;
+  final bool hasBadge;
 
   @override
   State<TopIconButton> createState() => _TopIconButtonState();
@@ -2799,36 +2957,78 @@ class _TopIconButtonState extends State<TopIconButton> {
           scale: _isHovered ? 1.08 : 1.0,
           duration: const Duration(milliseconds: 150),
           curve: Curves.easeOutCubic,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: bgColor,
-              border: Border.all(color: borderColor, width: _isHovered ? 1.5 : 1.0),
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: _isHovered
-                  ? [
-                      BoxShadow(
-                        color: (isCake
-                                ? const Color(0xFFEC4899)
-                                : isPhotoProof
-                                    ? const Color(0xFF0284C7)
-                                    : isFilled
-                                        ? const Color(0xFFEAB308)
-                                        : Colors.black)
-                            .withValues(alpha: 0.18),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: bgColor,
+                  border: Border.all(color: borderColor, width: _isHovered ? 1.5 : 1.0),
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: _isHovered
+                      ? [
+                          BoxShadow(
+                            color: (isCake
+                                    ? const Color(0xFFEC4899)
+                                    : isPhotoProof
+                                        ? const Color(0xFF0284C7)
+                                        : isFilled
+                                            ? const Color(0xFFEAB308)
+                                            : Colors.black)
+                                .withValues(alpha: 0.18),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                          ),
+                        ]
+                      : const [],
+                ),
+                child: Icon(
+                  widget.icon,
+                  size: 19,
+                  color: iconColor,
+                ),
+              ),
+              if ((widget.badgeCount != null && widget.badgeCount! > 0) || widget.hasBadge)
+                Positioned(
+                  top: -4,
+                  right: -4,
+                  child: Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: (widget.badgeCount ?? 0) > 9 ? 5 : 4,
+                      vertical: 1.5,
+                    ),
+                    constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEF4444),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.white, width: 1.5),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFEF4444).withValues(alpha: 0.4),
+                          blurRadius: 4,
+                          offset: const Offset(0, 1),
+                        ),
+                      ],
+                    ),
+                    child: Center(
+                      child: Text(
+                        widget.badgeCount != null && widget.badgeCount! > 99
+                            ? '99+'
+                            : '${widget.badgeCount ?? ''}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                          height: 1,
+                        ),
                       ),
-                    ]
-                  : const [],
-            ),
-            child: Icon(
-              widget.icon,
-              size: 19,
-              color: iconColor,
-            ),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
       ),

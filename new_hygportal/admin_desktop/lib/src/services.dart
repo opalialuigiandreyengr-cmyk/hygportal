@@ -3,6 +3,31 @@ part of '../main.dart';
 class AdminAuthService {
   static final _client = Supabase.instance.client;
 
+  static void _checkNetworkError(Object error) {
+    final str = error.toString().toLowerCase();
+    if (error is SocketException ||
+        error is TimeoutException ||
+        str.contains('failed host lookup') ||
+        str.contains('no such host is known') ||
+        str.contains('socket') ||
+        str.contains('clientexception') ||
+        str.contains('network') ||
+        str.contains('connection') ||
+        str.contains('timed out') ||
+        str.contains('timeout') ||
+        str.contains('handshake') ||
+        str.contains('errno = 11001') ||
+        str.contains('errno = 10054') ||
+        str.contains('errno = 10060') ||
+        str.contains('errno = 10061') ||
+        str.contains('errno = 10051') ||
+        str.contains('errno = 10050') ||
+        str.contains('host lookup') ||
+        str.contains('os error')) {
+      throw Exception('No internet connection. Please check your network and try again.');
+    }
+  }
+
   static Future<AdminLoginSession> signInAdmin({
     required String username,
     required String password,
@@ -20,12 +45,16 @@ class AdminAuthService {
       );
       email = resolvedEmail?.toString().trim() ?? '';
     } on PostgrestException catch (e) {
+      _checkNetworkError(e);
       final msg = e.message.toLowerCase();
       if (msg.contains('not found') ||
           msg.contains('not registered') ||
           msg.contains('no login account')) {
         throw Exception('Invalid username or password. Please try again.');
       }
+      rethrow;
+    } catch (e) {
+      _checkNetworkError(e);
       rethrow;
     }
 
@@ -42,26 +71,35 @@ class AdminAuthService {
       if (userId == null) {
         throw Exception('Invalid username or password. Please try again.');
       }
-    } on AuthException {
+    } on AuthException catch (e) {
+      _checkNetworkError(e);
       throw Exception('Invalid username or password. Please try again.');
+    } catch (e) {
+      _checkNetworkError(e);
+      rethrow;
     }
 
-    final checkResponse = await _client.rpc('admin_desktop_login_check');
-    if (checkResponse is! List || checkResponse.isEmpty) {
-      await _client.auth.signOut();
-      throw Exception('Admin access is required.');
-    }
+    try {
+      final checkResponse = await _client.rpc('admin_desktop_login_check');
+      if (checkResponse is! List || checkResponse.isEmpty) {
+        await _client.auth.signOut();
+        throw Exception('Admin access is required.');
+      }
 
-    final row = checkResponse.first;
-    if (row is! Map<String, dynamic>) {
-      await _client.auth.signOut();
-      throw Exception('Admin access is required.');
-    }
+      final row = checkResponse.first;
+      if (row is! Map<String, dynamic>) {
+        await _client.auth.signOut();
+        throw Exception('Admin access is required.');
+      }
 
-    return AdminLoginSession(
-      username: row['username']?.toString() ?? loginName,
-      appRole: row['app_role']?.toString() ?? 'hr',
-    );
+      return AdminLoginSession(
+        username: row['username']?.toString() ?? loginName,
+        appRole: row['app_role']?.toString() ?? 'hr',
+      );
+    } catch (e) {
+      _checkNetworkError(e);
+      rethrow;
+    }
   }
 
   static Future<void> signOut() => _client.auth.signOut();

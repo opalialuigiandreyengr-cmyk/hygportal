@@ -202,28 +202,62 @@ class _LoginScreenState extends State<LoginScreen> {
     } on PostgrestException catch (e) {
       if (!mounted) return;
       final msg = e.message.toLowerCase();
+      final isNetworkError = msg.contains('failed host lookup') ||
+          msg.contains('no such host is known') ||
+          msg.contains('socket') ||
+          msg.contains('clientexception') ||
+          msg.contains('network') ||
+          msg.contains('connection') ||
+          msg.contains('host lookup') ||
+          msg.contains('timed out') ||
+          msg.contains('timeout');
       final isCredentialError = msg.contains('not found') ||
           msg.contains('not registered') ||
           msg.contains('invalid') ||
           msg.contains('no login account');
       setState(() {
-        _error = isCredentialError
-            ? 'Invalid username or password. Please try again.'
-            : e.message;
+        _error = isNetworkError
+            ? 'No internet connection. Please check your network and try again.'
+            : (isCredentialError
+                ? 'Invalid username or password. Please try again.'
+                : e.message);
         _isSigningIn = false;
       });
     } catch (error) {
       if (!mounted) return;
       final rawError = error.toString().replaceFirst('Exception: ', '').trim();
       final lowerError = rawError.toLowerCase();
-      final displayError =
-          lowerError.contains('invalid login credentials') ||
+
+      final isNetworkError = lowerError.contains('failed host lookup') ||
+          lowerError.contains('no such host is known') ||
+          lowerError.contains('socket') ||
+          lowerError.contains('clientexception') ||
+          lowerError.contains('network') ||
+          lowerError.contains('no internet') ||
+          lowerError.contains('connection') ||
+          lowerError.contains('timed out') ||
+          lowerError.contains('timeout') ||
+          lowerError.contains('handshake') ||
+          lowerError.contains('os error') ||
+          lowerError.contains('errno = 11001') ||
+          lowerError.contains('errno = 10054') ||
+          lowerError.contains('errno = 10060') ||
+          lowerError.contains('errno = 10061') ||
+          lowerError.contains('errno = 10051') ||
+          lowerError.contains('errno = 10050') ||
+          lowerError.contains('host lookup') ||
+          error is SocketException ||
+          error is TimeoutException;
+
+      final displayError = isNetworkError
+          ? 'No internet connection. Please check your network and try again.'
+          : (lowerError.contains('invalid login credentials') ||
                   lowerError.contains('username was not found') ||
                   lowerError.contains('authapiexception') ||
                   lowerError.contains('postgrestexception') ||
                   lowerError.contains('no login account')
               ? 'Invalid username or password. Please try again.'
-              : rawError;
+              : rawError);
       setState(() {
         _error = displayError;
         _isSigningIn = false;
@@ -523,15 +557,45 @@ class _LoginCardState extends State<LoginCard> {
             const SizedBox(height: 8),
             ConstrainedBox(
               constraints: const BoxConstraints(minHeight: 20),
-              child: Text(
-                widget.error,
-                style: const TextStyle(
-                  color: Color(0xFFDC2626),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0,
-                ),
-              ),
+              child: widget.error.isEmpty
+                  ? const SizedBox.shrink()
+                  : Builder(
+                      builder: (context) {
+                        final isOffline = widget.error.toLowerCase().contains('internet') ||
+                            widget.error.toLowerCase().contains('network') ||
+                            widget.error.toLowerCase().contains('connection');
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF2F2),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFFFCA5A5)),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Icon(
+                                isOffline ? Icons.wifi_off_rounded : Icons.error_outline_rounded,
+                                size: 18,
+                                color: const Color(0xFFDC2626),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  widget.error,
+                                  style: const TextStyle(
+                                    color: Color(0xFF991B1B),
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    height: 1.3,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
             ),
             const SizedBox(height: 12),
             FilledButton(

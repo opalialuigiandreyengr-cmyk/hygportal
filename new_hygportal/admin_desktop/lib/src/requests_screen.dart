@@ -275,6 +275,7 @@ class RequestsPanel extends StatefulWidget {
     required this.onRefresh,
     this.onDeleteRequest,
     this.showDeleteAction = true,
+    this.initialTabIndex = 0,
     super.key,
   });
 
@@ -284,6 +285,7 @@ class RequestsPanel extends StatefulWidget {
   final VoidCallback onRefresh;
   final Future<String> Function(String requestId, bool isPerk)? onDeleteRequest;
   final bool showDeleteAction;
+  final int initialTabIndex;
 
   @override
   State<RequestsPanel> createState() => _RequestsPanelState();
@@ -305,10 +307,24 @@ class _RequestsPanelState extends State<RequestsPanel>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: _tabs.length, vsync: this);
+    final idx = (widget.initialTabIndex >= 0 && widget.initialTabIndex < _tabs.length)
+        ? widget.initialTabIndex
+        : 0;
+    _tabController = TabController(length: _tabs.length, vsync: this, initialIndex: idx);
     _tabController.addListener(() => setState(() {
       _currentPage = 1;
     }));
+  }
+
+  @override
+  void didUpdateWidget(RequestsPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialTabIndex != oldWidget.initialTabIndex &&
+        widget.initialTabIndex >= 0 &&
+        widget.initialTabIndex < _tabs.length &&
+        _tabController.index != widget.initialTabIndex) {
+      _tabController.animateTo(widget.initialTabIndex);
+    }
   }
 
   @override
@@ -3018,7 +3034,11 @@ class _RequestCardRowState extends State<_RequestCardRow> {
           ),
           _buildStoreCell(item),
           Text(
-            item.requestTypeCode == 'discount' ? 'Discount' : 'Charge',
+            item.requestTypeCode.toLowerCase().contains('discount')
+                ? 'Discount'
+                : (item.requestTypeCode.toLowerCase().contains('charge')
+                    ? 'Charge'
+                    : (item.requestTypeName.isNotEmpty ? item.requestTypeName : 'Perk')),
             style: HygTypography.tableBody,
           ),
           _buildProductCell(item),
@@ -4331,7 +4351,11 @@ class _RequestDetailModal extends StatelessWidget {
               ('Total Days', item.totalDays != null ? '${item.totalDays}' : '—'),
             ]
           : [
-              ('Type', item.requestTypeCode == 'discount' ? 'Discount' : 'Charge'),
+              ('Type', item.requestTypeCode.toLowerCase().contains('discount')
+                  ? 'Discount'
+                  : (item.requestTypeCode.toLowerCase().contains('charge')
+                      ? 'Charge'
+                      : (item.requestTypeName.isNotEmpty ? item.requestTypeName : 'Perk'))),
               ('Product', item.perkProductName ?? '—'),
               ('Quantity', '${item.perkQuantity ?? 0}'),
               ('Amount', item.perkAmount != null ? '₱${item.perkAmount!.toStringAsFixed(2)}' : '—'),

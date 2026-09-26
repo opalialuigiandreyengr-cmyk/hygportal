@@ -923,6 +923,8 @@ class _AddUserDialogState extends State<AddUserDialog> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmController = TextEditingController();
+  bool _obscurePassword = true;
+  bool _obscureConfirm = true;
   var _role = 'employee';
   String? _selectedEmployeeId;
   final List<String> _selectedCompanyIds = [];
@@ -1024,16 +1026,14 @@ class _AddUserDialogState extends State<AddUserDialog> {
               children: [
                 _buildHeader(),
                 const SizedBox(height: 20),
-                _buildAccountSection(roles),
-                const SizedBox(height: 18),
-                if (_role == 'hr') ...[
-                  _buildCompaniesSection(),
-                ] else ...[
+                if (_role != 'hr') ...[
                   _buildEmployeeSection(),
-                  if (_selectedEmployee != null) ...[
-                    const SizedBox(height: 14),
-                    _buildEmployeePreview(),
-                  ],
+                  const SizedBox(height: 18),
+                ],
+                _buildAccountSection(roles),
+                if (_role == 'hr') ...[
+                  const SizedBox(height: 18),
+                  _buildCompaniesSection(),
                 ],
                 if (_error != null) ...[
                   const SizedBox(height: 14),
@@ -1135,7 +1135,25 @@ class _AddUserDialogState extends State<AddUserDialog> {
                   controller: _passwordController,
                   label: 'Password',
                   required: true,
-                  obscureText: true,
+                  obscureText: _obscurePassword,
+                  suffixIcon: IconButton(
+                    focusNode: FocusNode(skipTraversal: true),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                    icon: Icon(
+                      _obscurePassword
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                      color: const Color(0xFF64748B),
+                      size: 18,
+                    ),
+                    tooltip: _obscurePassword ? 'Show password' : 'Hide password',
+                    onPressed: () {
+                      setState(() {
+                        _obscurePassword = !_obscurePassword;
+                      });
+                    },
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -1144,7 +1162,25 @@ class _AddUserDialogState extends State<AddUserDialog> {
                   controller: _confirmController,
                   label: 'Confirm',
                   required: true,
-                  obscureText: true,
+                  obscureText: _obscureConfirm,
+                  suffixIcon: IconButton(
+                    focusNode: FocusNode(skipTraversal: true),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                    icon: Icon(
+                      _obscureConfirm
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                      color: const Color(0xFF64748B),
+                      size: 18,
+                    ),
+                    tooltip: _obscureConfirm ? 'Show password' : 'Hide password',
+                    onPressed: () {
+                      setState(() {
+                        _obscureConfirm = !_obscureConfirm;
+                      });
+                    },
+                  ),
                 ),
               ),
             ],
@@ -1197,37 +1233,10 @@ class _AddUserDialogState extends State<AddUserDialog> {
           ? 'Optional — skip to assign later.'
           : 'No unlinked employees available.',
       child: _hasEmployees
-          ? DropdownButtonFormField<String>(
-              isExpanded: true,
-              initialValue: '',
-              decoration: modalInputDecoration(
-                hint: 'Select an employee...',
-              ),
-              style: HygTypography.input.copyWith(fontSize: 14),
-              dropdownColor: Colors.white,
-              icon: const Icon(
-                Icons.keyboard_arrow_down,
-                color: Color(0xFF334155),
-              ),
-              items: [
-                const DropdownMenuItem<String>(
-                  value: '',
-                  child: Text(
-                    'No linked employee',
-                    style: TextStyle(color: Color(0xFF94A3B8)),
-                  ),
-                ),
-                ...widget.employees.map(
-                      (emp) => DropdownMenuItem<String>(
-                        value: emp.id,
-                        child: Text(
-                          '${emp.name}  •  ${emp.idNumber}',
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ),
-              ],
-              onChanged: _onEmployeeSelected,
+          ? SearchableEmployeeDropdown(
+              employees: widget.employees,
+              selectedEmployeeId: _selectedEmployeeId,
+              onSelected: _onEmployeeSelected,
             )
           : Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -1360,75 +1369,6 @@ class _AddUserDialogState extends State<AddUserDialog> {
     );
   }
 
-  Widget _buildEmployeePreview() {
-    final emp = _selectedEmployee!;
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            const Color(0xFFEFF6FF),
-            const Color(0xFFDBEAFE).withValues(alpha: 0.5),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(11),
-        border: Border.all(color: const Color(0xFFBFDBFE)),
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 20,
-            backgroundColor: emp.avatarColor.withValues(alpha: 0.15),
-            child: Text(
-              emp.initial,
-              style: TextStyle(
-                color: emp.avatarColor,
-                fontWeight: FontWeight.w700,
-                fontSize: 14,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  emp.name,
-                  style: HygTypography.tablePrimary.copyWith(fontSize: 13),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '${emp.positionName}  •  ${emp.departmentName}',
-                  style: HygTypography.tableMuted.copyWith(
-                    fontSize: 11.5,
-                    color: const Color(0xFF475569),
-                  ),
-                ),
-                const SizedBox(height: 1),
-                Text(
-                  'ID: ${emp.idNumber}',
-                  style: HygTypography.tableMuted.copyWith(
-                    fontSize: 11,
-                    color: const Color(0xFF64748B),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            tooltip: 'Remove link',
-            onPressed: () => _onEmployeeSelected(''),
-            icon: const Icon(Icons.close, size: 16, color: Color(0xFF94A3B8)),
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildErrorBanner() {
     return Container(
@@ -1495,6 +1435,414 @@ class _AddUserDialogState extends State<AddUserDialog> {
             onPressed: _submit,
             icon: const Icon(Icons.check_rounded, size: 18),
             label: const Text('Create User'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class SearchableEmployeeDropdown extends StatefulWidget {
+  const SearchableEmployeeDropdown({
+    required this.employees,
+    required this.selectedEmployeeId,
+    required this.onSelected,
+    super.key,
+  });
+
+  final List<EmployeePreview> employees;
+  final String? selectedEmployeeId;
+  final ValueChanged<String?> onSelected;
+
+  @override
+  State<SearchableEmployeeDropdown> createState() =>
+      _SearchableEmployeeDropdownState();
+}
+
+class _SearchableEmployeeDropdownState
+    extends State<SearchableEmployeeDropdown> {
+  final _searchController = TextEditingController();
+  final _layerLink = LayerLink();
+  OverlayEntry? _overlayEntry;
+  bool _isOpen = false;
+
+  EmployeePreview? get _selectedEmployee {
+    if (widget.selectedEmployeeId == null || widget.selectedEmployeeId!.isEmpty) {
+      return null;
+    }
+    for (final e in widget.employees) {
+      if (e.id == widget.selectedEmployeeId) return e;
+    }
+    return null;
+  }
+
+  @override
+  void dispose() {
+    _closeDropdown();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _toggleDropdown() {
+    if (_isOpen) {
+      _closeDropdown();
+    } else {
+      _openDropdown();
+    }
+  }
+
+  void _openDropdown() {
+    if (widget.employees.isEmpty) return;
+    _searchController.clear();
+    _overlayEntry = _createOverlayEntry();
+    Overlay.of(context).insert(_overlayEntry!);
+    setState(() => _isOpen = true);
+  }
+
+  void _closeDropdown() {
+    if (_overlayEntry != null) {
+      _overlayEntry?.remove();
+      _overlayEntry = null;
+    }
+    if (mounted && _isOpen) {
+      setState(() => _isOpen = false);
+    }
+  }
+
+  OverlayEntry _createOverlayEntry() {
+    final renderBox = context.findRenderObject() as RenderBox;
+    final size = renderBox.size;
+
+    return OverlayEntry(
+      builder: (context) => Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _closeDropdown,
+              child: const SizedBox.expand(),
+            ),
+          ),
+          Positioned(
+            width: size.width,
+            child: CompositedTransformFollower(
+              link: _layerLink,
+              showWhenUnlinked: false,
+              offset: Offset(0, size.height + 4),
+              child: Material(
+                elevation: 8,
+                shadowColor: Colors.black26,
+                borderRadius: BorderRadius.circular(10),
+                color: Colors.white,
+                child: Container(
+                  constraints: const BoxConstraints(maxHeight: 280),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFCBD5E1)),
+                  ),
+                  child: _EmployeeDropdownListContent(
+                    employees: widget.employees,
+                    selectedEmployeeId: widget.selectedEmployeeId,
+                    searchController: _searchController,
+                    onSelect: (empId) {
+                      widget.onSelected(empId);
+                      _closeDropdown();
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final emp = _selectedEmployee;
+    final displayText = emp != null
+        ? '${emp.name}  •  ${emp.idNumber}'
+        : 'Select an employee...';
+
+    return CompositedTransformTarget(
+      link: _layerLink,
+      child: InkWell(
+        onTap: _toggleDropdown,
+        borderRadius: BorderRadius.circular(9),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(9),
+            border: Border.all(
+              color: _isOpen ? HygColors.goldStrong : const Color(0xFFD1D5DB),
+              width: _isOpen ? 1.5 : 1.0,
+            ),
+          ),
+          child: Row(
+            children: [
+              if (emp != null) ...[
+                CircleAvatar(
+                  radius: 11,
+                  backgroundColor: emp.avatarColor.withValues(alpha: 0.18),
+                  child: Text(
+                    emp.initial,
+                    style: TextStyle(
+                      color: emp.avatarColor,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+              Expanded(
+                child: Text(
+                  displayText,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: HygTypography.bodyFontFamily,
+                    fontSize: 14,
+                    color: emp != null
+                        ? const Color(0xFF1E293B)
+                        : const Color(0xFF94A3B8),
+                  ),
+                ),
+              ),
+              if (emp != null)
+                InkWell(
+                  onTap: () => widget.onSelected(null),
+                  borderRadius: BorderRadius.circular(12),
+                  child: const Padding(
+                    padding: EdgeInsets.all(2),
+                    child: Icon(
+                      Icons.clear,
+                      size: 16,
+                      color: Color(0xFF94A3B8),
+                    ),
+                  ),
+                ),
+              const SizedBox(width: 4),
+              Icon(
+                _isOpen ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                color: const Color(0xFF64748B),
+                size: 20,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EmployeeDropdownListContent extends StatefulWidget {
+  const _EmployeeDropdownListContent({
+    required this.employees,
+    required this.selectedEmployeeId,
+    required this.searchController,
+    required this.onSelect,
+  });
+
+  final List<EmployeePreview> employees;
+  final String? selectedEmployeeId;
+  final TextEditingController searchController;
+  final ValueChanged<String?> onSelect;
+
+  @override
+  State<_EmployeeDropdownListContent> createState() =>
+      _EmployeeDropdownListContentState();
+}
+
+class _EmployeeDropdownListContentState
+    extends State<_EmployeeDropdownListContent> {
+  String _query = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _query = widget.searchController.text;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final q = _query.toLowerCase().trim();
+    final filtered = widget.employees.where((emp) {
+      if (q.isEmpty) return true;
+      final nameMatches = emp.name.toLowerCase().contains(q);
+      final idMatches = emp.idNumber.toLowerCase().contains(q);
+      final deptMatches = emp.departmentName.toLowerCase().contains(q);
+      final posMatches = emp.positionName.toLowerCase().contains(q);
+      final emailMatches = (emp.email ?? '').toLowerCase().contains(q);
+      return nameMatches || idMatches || deptMatches || posMatches || emailMatches;
+    }).toList();
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
+          child: SizedBox(
+            height: 36,
+            child: TextField(
+              controller: widget.searchController,
+              autofocus: true,
+              onChanged: (val) => setState(() => _query = val),
+              style: const TextStyle(
+                fontFamily: HygTypography.bodyFontFamily,
+                fontSize: 13,
+              ),
+              decoration: InputDecoration(
+                hintText: 'Search employee name or ID...',
+                hintStyle: const TextStyle(
+                  fontFamily: HygTypography.bodyFontFamily,
+                  fontSize: 13,
+                  color: Color(0xFF94A3B8),
+                ),
+                prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF94A3B8)),
+                suffixIcon: _query.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear, size: 16, color: Color(0xFF94A3B8)),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                        onPressed: () {
+                          widget.searchController.clear();
+                          setState(() => _query = '');
+                        },
+                      )
+                    : null,
+                contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                filled: true,
+                fillColor: const Color(0xFFF8FAFC),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(6),
+                  borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(6),
+                  borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(6),
+                  borderSide: const BorderSide(color: HygColors.goldStrong, width: 1.5),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const Divider(height: 1, thickness: 1, color: Color(0xFFF1F5F9)),
+        Flexible(
+          child: ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            children: [
+              if (q.isEmpty || 'no linked employee'.contains(q) || 'none'.contains(q))
+                InkWell(
+                  onTap: () => widget.onSelect(null),
+                  hoverColor: const Color(0xFFF8FAFC),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.person_off_outlined, size: 18, color: Color(0xFF94A3B8)),
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Text(
+                            'No linked employee',
+                            style: TextStyle(
+                              fontFamily: HygTypography.bodyFontFamily,
+                              fontSize: 13,
+                              color: Color(0xFF64748B),
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ),
+                        if (widget.selectedEmployeeId == null || widget.selectedEmployeeId!.isEmpty)
+                          const Icon(Icons.check, size: 16, color: HygColors.goldStrong),
+                      ],
+                    ),
+                  ),
+                ),
+              for (final emp in filtered)
+                InkWell(
+                  onTap: () => widget.onSelect(emp.id),
+                  hoverColor: const Color(0xFFF8FAFC),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 13,
+                          backgroundColor: emp.avatarColor.withValues(alpha: 0.15),
+                          child: Text(
+                            emp.initial,
+                            style: TextStyle(
+                              color: emp.avatarColor,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                emp.name,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontFamily: HygTypography.bodyFontFamily,
+                                  fontSize: 13,
+                                  fontWeight: emp.id == widget.selectedEmployeeId
+                                      ? FontWeight.w600
+                                      : FontWeight.w500,
+                                  color: const Color(0xFF1E293B),
+                                ),
+                              ),
+                              const SizedBox(height: 1),
+                              Text(
+                                '${emp.idNumber}${emp.positionName.isNotEmpty ? '  •  ${emp.positionName}' : ''}',
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontFamily: HygTypography.bodyFontFamily,
+                                  fontSize: 11.5,
+                                  color: Color(0xFF64748B),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (emp.id == widget.selectedEmployeeId)
+                          const Icon(Icons.check, size: 16, color: HygColors.goldStrong),
+                      ],
+                    ),
+                  ),
+                ),
+              if (filtered.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+                  child: Column(
+                    children: [
+                      const Icon(Icons.person_search_outlined, size: 28, color: Color(0xFFCBD5E1)),
+                      const SizedBox(height: 6),
+                      Text(
+                        'No employees matching "$_query"',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontFamily: HygTypography.bodyFontFamily,
+                          fontSize: 12.5,
+                          color: Color(0xFF94A3B8),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
           ),
         ),
       ],
@@ -2258,6 +2606,8 @@ class UserPasswordDialog extends StatefulWidget {
 class _UserPasswordDialogState extends State<UserPasswordDialog> {
   final _passwordController = TextEditingController();
   final _confirmController = TextEditingController();
+  bool _obscurePassword = true;
+  bool _obscureConfirm = true;
   String? _error;
 
   @override
@@ -2403,14 +2753,50 @@ class _UserPasswordDialogState extends State<UserPasswordDialog> {
                 controller: _passwordController,
                 label: 'New Password',
                 required: true,
-                obscureText: true,
+                obscureText: _obscurePassword,
+                suffixIcon: IconButton(
+                  focusNode: FocusNode(skipTraversal: true),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                  icon: Icon(
+                    _obscurePassword
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
+                    color: const Color(0xFF64748B),
+                    size: 18,
+                  ),
+                  tooltip: _obscurePassword ? 'Show password' : 'Hide password',
+                  onPressed: () {
+                    setState(() {
+                      _obscurePassword = !_obscurePassword;
+                    });
+                  },
+                ),
               ),
               const SizedBox(height: 12),
               ModalTextField(
                 controller: _confirmController,
                 label: 'Confirm Password',
                 required: true,
-                obscureText: true,
+                obscureText: _obscureConfirm,
+                suffixIcon: IconButton(
+                  focusNode: FocusNode(skipTraversal: true),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                  icon: Icon(
+                    _obscureConfirm
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
+                    color: const Color(0xFF64748B),
+                    size: 18,
+                  ),
+                  tooltip: _obscureConfirm ? 'Show password' : 'Hide password',
+                  onPressed: () {
+                    setState(() {
+                      _obscureConfirm = !_obscureConfirm;
+                    });
+                  },
+                ),
               ),
               if (_error != null) ...[
                 const SizedBox(height: 12),
@@ -2502,16 +2888,15 @@ class _UserLeaveCreditsDialogState extends State<UserLeaveCreditsDialog> {
   String? _reimburseError;
   String? _deductError;
   DateTime? _hiredDate;
-  bool _isLoadingHiredDate = false;
-  String? _dateHiredText;
-  String? _employeeType;
+    String? _employeeType;
   String? _positionName;
+  double? _suggestedCredits;
 
   @override
   void initState() {
     super.initState();
     _creditsController = TextEditingController(
-      text: _formatInitialValue(widget.user.leaveCreditDays ?? 7),
+      text: _formatInitialValue(widget.user.leaveCreditDays ?? 0),
     );
     _reimburseController = TextEditingController();
     _deductController = TextEditingController();
@@ -2523,31 +2908,28 @@ class _UserLeaveCreditsDialogState extends State<UserLeaveCreditsDialog> {
     if (empId == null || empId.trim().isEmpty) {
       return;
     }
-    setState(() => _isLoadingHiredDate = true);
-    try {
+        try {
       final details = await EmployeeDirectoryService.loadEmployeeProfile(
         empId,
       );
       if (details != null) {
-        _dateHiredText = details.dateHired;
         _hiredDate = _parseDateString(details.dateHired);
         _employeeType = details.employeeType;
         _positionName = details.positionName;
         final suggested = _calculateSuggestedLeaveCredits();
-        if (widget.user.leaveCreditDays == null ||
-            widget.user.leaveCreditDays == 0) {
+        setState(() {
+          _suggestedCredits = suggested;
+        });
+        if (widget.user.leaveCreditDays == null) {
           _creditsController.text = _formatInitialValue(suggested);
         }
       }
     } catch (_) {}
-    if (mounted) {
-      setState(() => _isLoadingHiredDate = false);
-    }
-  }
+      }
 
   double _calculateSuggestedLeaveCredits() {
     if (_hiredDate == null) {
-      return widget.user.leaveCreditDays ?? 7;
+      return widget.user.leaveCreditDays ?? 0;
     }
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -2603,37 +2985,10 @@ class _UserLeaveCreditsDialogState extends State<UserLeaveCreditsDialog> {
   void _submitCredits() {
     final value = double.tryParse(_creditsController.text.trim());
     final usedDays = widget.user.leaveUsedDays ?? 0;
-    final hasExistingCredits = widget.user.leaveCreditDays != null &&
-        widget.user.leaveCreditDays! > 0;
 
     if (value == null || value < 0) {
       setState(() => _error = 'Enter zero or higher leave credits.');
       return;
-    }
-
-    if (!hasExistingCredits) {
-      if (_hiredDate != null) {
-        final now = DateTime.now();
-        final today = DateTime(now.year, now.month, now.day);
-        final oneYearAnniversary = DateTime(
-          _hiredDate!.year + 1,
-          _hiredDate!.month,
-          _hiredDate!.day,
-        );
-        if (today.isBefore(oneYearAnniversary)) {
-          setState(
-            () => _error =
-                'The employee is yet to complete one year of service.',
-          );
-          return;
-        }
-      } else if (widget.user.employeeId != null && !_isLoadingHiredDate) {
-        setState(
-          () => _error =
-              'The employee is yet to complete one year of service.',
-        );
-        return;
-      }
     }
 
     if (value < usedDays) {
@@ -2664,7 +3019,7 @@ class _UserLeaveCreditsDialogState extends State<UserLeaveCreditsDialog> {
 
   void _submitDeduct() {
     final deductDays = double.tryParse(_deductController.text.trim());
-    final currentAnnual = widget.user.leaveCreditDays ?? 7;
+    final currentAnnual = widget.user.leaveCreditDays ?? 0;
     final usedDays = widget.user.leaveUsedDays ?? 0;
     final remainingDays = currentAnnual - usedDays;
     if (deductDays == null || deductDays <= 0) {
@@ -2688,7 +3043,7 @@ class _UserLeaveCreditsDialogState extends State<UserLeaveCreditsDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final currentAnnual = widget.user.leaveCreditDays ?? 7;
+    final currentAnnual = widget.user.leaveCreditDays ?? 0;
     final usedDays = widget.user.leaveUsedDays ?? 0;
     final remainingDays = widget.user.leaveRemainingDays ?? 0;
     return Dialog(
@@ -2762,6 +3117,39 @@ class _UserLeaveCreditsDialogState extends State<UserLeaveCreditsDialog> {
                   ),
                   onSubmitted: (_) => _submitCredits(),
                 ),
+                if (_suggestedCredits != null) ...[
+                  const SizedBox(height: 6),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(50, 24),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _creditsController.text =
+                              _formatInitialValue(_suggestedCredits!);
+                          _error = null;
+                        });
+                      },
+                      icon: const Icon(
+                        Icons.auto_awesome,
+                        size: 14,
+                        color: HygColors.goldStrong,
+                      ),
+                      label: Text(
+                        'Suggested by policy: ${_formatDays(_suggestedCredits!)} (click to apply)',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: HygColors.goldStrong,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,

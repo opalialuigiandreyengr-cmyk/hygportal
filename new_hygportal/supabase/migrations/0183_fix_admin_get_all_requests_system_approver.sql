@@ -1,10 +1,10 @@
--- Migration 0177: Fix admin_get_all_requests for Perks and add admin read policy
--- 1. Changes INNER JOIN on employees to LEFT JOIN with fallback to user_profiles
--- 2. Makes employee assignments lateral lookup robust with active/primary ordering
--- 3. Ensures HR filter does not drop perk requests when company is unassigned
--- 4. Grants select access on employee_perk_requests to admin/hr
--- 5. Seeds initial sample perk requests if table is empty so Perks tab displays immediately
+-- Migration 0183: Support system-approved steps (HYG Portal System) in admin_get_all_requests and get_my_requests
+-- When a request is auto-approved by the system (e.g. Birthday Leave Grant),
+-- ras.assigned_approver_employee_id is NULL and the approver identity is stored directly in
+-- ras.approver_name, ras.approver_position_name, and ras.approver_employee_no.
+-- This migration updates admin_get_all_requests and get_my_requests to coalesce these columns.
 
+-- 1. Update admin_get_all_requests
 drop function if exists public.admin_get_all_requests();
 
 create or replace function public.admin_get_all_requests()
@@ -132,18 +132,21 @@ begin
               'approved_at', case when ras.status = 'approved' then ras.acted_at else null end,
               'remarks', ras.remarks,
               'skipped_reason', ras.skipped_reason,
-              'approver_name', nullif(trim(
-                concat_ws(' ',
-                  ae.first_name,
-                  case when nullif(trim(ae.middle_name), '') is not null
-                       then left(trim(ae.middle_name), 1) || '.'
-                       else null end,
-                  ae.last_name,
-                  nullif(trim(ae.suffix), '')
-                )
-              ), ''),
-              'approver_position_name', ap.name,
-              'approver_employee_no', ae.employee_no
+              'approver_name', coalesce(
+                nullif(trim(
+                  concat_ws(' ',
+                    ae.first_name,
+                    case when nullif(trim(ae.middle_name), '') is not null
+                         then left(trim(ae.middle_name), 1) || '.'
+                         else null end,
+                    ae.last_name,
+                    nullif(trim(ae.suffix), '')
+                  )
+                ), ''),
+                nullif(trim(ras.approver_name), '')
+              ),
+              'approver_position_name', coalesce(ap.name, nullif(trim(ras.approver_position_name), '')),
+              'approver_employee_no', coalesce(ae.employee_no, nullif(trim(ras.approver_employee_no), ''))
             )
             order by ras.step_order asc
           )
@@ -325,117 +328,127 @@ grant execute on function public.admin_get_all_requests() to authenticated;
 grant execute on function public.admin_get_all_requests() to anon;
 grant execute on function public.admin_get_all_requests() to service_role;
 
--- 2. Allow Admins and HR to read employee_perk_requests directly if needed
-drop policy if exists "Admins and HR can read all perk requests" on public.employee_perk_requests;
-create policy "Admins and HR can read all perk requests"
-on public.employee_perk_requests for select
-to authenticated
-using (
-  exists (
-    select 1
-    from public.user_profiles up
+-- 2. Update get_my_requests to also coalesce approver_name
+drop function if exists public.get_my_requests();
+
+create or replace function public.get_my_requests()
+returns table (
+  request_id uuid,
+  request_type_code text,
+  request_type_name text,
+  status text,
+  submitted_at timestamptz,
+  final_approved_at timestamptz,
+  rejected_at timestamptz,
+  rejected_reason text,
+  date_from date,
+  date_to date,
+  time_from time,
+  time_to time,
+  time_schedule text,
+  day_off text,
+  payroll_class text,
+  transaction_type text,
+  total_hours numeric,
+  leave_type text,
+  leave_category text,
+  start_date date,
+  end_date date,
+  total_days numeric,
+  paid_days numeric,
+  unpaid_days numeric,
+  reason text,
+  perk_approval_code text,
+  perk_amount numeric,
+  perk_discount_amount numeric,
+  perk_final_amount numeric,
+  perk_benefit text,
+  approval_summary jsonb
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select * from (
+    select
+      r.id as request_id,
+      rt.code as request_type_code,
+      rt.name as request_type_name,
+      r.status,
+      r.submitted_at,
+      r.final_approved_at,
+      r.rejected_at,
+      r.rejected_reason,
+      trd.date_from,
+      trd.date_to,
+      trd.time_from,
+      trd.time_to,
+      trd.time_schedule,
+      trd.day_off,
+      trd.payroll_class,
+      trd.transaction_type,
+      trd.total_hours,
+      lrd.leave_type,
+      lrd.leave_category,
+      lrd.start_date,
+      lrd.end_date,
+      lrd.total_days,
+      lrd.paid_days,
+      lrd.unpaid_days,
+      coalesce(trd.reason, lrd.reason) as reason,
+      null::text as perk_approval_code,
+      null::numeric as perk_amount,
+      null::numeric as perk_discount_amount,
+      null::numeric as perk_final_amount,
+      null::text as perk_benefit,
+      coalesce(
+        (
+          select jsonb_agg(
+            jsonb_build_object(
+              'step_order', ras.step_order,
+              'required_level', ras.required_level,
+              'status', ras.status,
+              'acted_at', ras.acted_at,
+              'remarks', ras.remarks,
+              'skipped_reason', ras.skipped_reason,
+              'approver_name', coalesce(
+                nullif(trim(concat_ws(' ', ae.first_name, ae.middle_name, ae.last_name, ae.suffix)), ''),
+                nullif(trim(ras.approver_name), '')
+              ),
+              'approver_position_name', coalesce(ap.name, nullif(trim(ras.approver_position_name), '')),
+              'approver_employee_no', coalesce(ae.employee_no, nullif(trim(ras.approver_employee_no), ''))
+            )
+            order by ras.step_order asc
+          )
+          from public.request_approval_steps ras
+          left join public.employees ae on ae.id = ras.assigned_approver_employee_id
+          left join lateral (
+            select ea.position_id
+            from public.employee_assignments ea
+            where ea.employee_id = ae.id
+              and ea.is_primary = true
+              and ea.effective_from <= current_date
+              and (ea.effective_to is null or ea.effective_to >= current_date)
+            order by ea.effective_from desc, ea.created_at desc
+            limit 1
+          ) aa on true
+          left join public.positions ap on ap.id = aa.position_id
+          where ras.request_id = r.id
+        ),
+        '[]'::jsonb
+      ) as approval_summary
+    from public.requests r
+    join public.request_types rt on rt.id = r.request_type_id
+    left join public.time_request_details trd on trd.request_id = r.id
+    left join public.leave_request_details lrd on lrd.request_id = r.id
+    join public.user_profiles up on up.employee_id = r.submitted_by_employee_id
     where up.auth_user_id = auth.uid()
-      and up.app_role in ('admin', 'super_admin', 'hr')
-  )
-);
+  ) q
+  order by submitted_at desc;
+$$;
 
--- 3. If employee_perk_requests has zero rows, insert initial perk records for demonstration / validation
-do $$
-declare
-  v_emp record;
-  v_up record;
-  v_cnt int;
-begin
-  select count(*) into v_cnt from public.employee_perk_requests;
-  if v_cnt = 0 then
-    select * into v_up from public.user_profiles where employee_id is not null limit 1;
-    if v_up.id is not null then
-      select * into v_emp from public.employees where id = v_up.employee_id limit 1;
-    else
-      select * into v_emp from public.employees limit 1;
-      select * into v_up from public.user_profiles limit 1;
-    end if;
-
-    if v_emp.id is not null and v_up.id is not null then
-      -- Approved perk request: visible in 'All Employee Requests' under Perks tab, ready to be validated
-      insert into public.employee_perk_requests (
-        submitted_by_employee_id,
-        submitted_by_user_id,
-        form_type,
-        status,
-        email,
-        approval_code,
-        request_label,
-        product_name,
-        quantity,
-        price,
-        products,
-        transaction_date,
-        amount,
-        final_amount,
-        discount_applies,
-        created_at,
-        approved_at
-      ) values (
-        v_emp.id,
-        v_up.id,
-        'discount',
-        'approved',
-        coalesce(v_emp.email, 'employee@hygcompany.com'),
-        '838474',
-        'Employee Discount (Cash)',
-        'Signature Chocolate Cake x1 @ 840.00',
-        1,
-        840.00,
-        '[{"name": "Signature Chocolate Cake", "price": 840.0, "quantity": 1}]'::jsonb,
-        current_date,
-        840.00,
-        714.00,
-        true,
-        now() - interval '2 days',
-        now() - interval '1 day'
-      );
-
-      -- Validated perk request: visible in 'Validated Requests' under Perks tab
-      insert into public.employee_perk_requests (
-        submitted_by_employee_id,
-        submitted_by_user_id,
-        form_type,
-        status,
-        email,
-        approval_code,
-        request_label,
-        product_name,
-        quantity,
-        price,
-        products,
-        transaction_date,
-        amount,
-        final_amount,
-        discount_applies,
-        created_at,
-        approved_at
-      ) values (
-        v_emp.id,
-        v_up.id,
-        'charge',
-        'validated',
-        coalesce(v_emp.email, 'employee@hygcompany.com'),
-        '942183',
-        'Employee Charge (Credit)',
-        'Goldilocks Bento Cake x2 @ 450.00',
-        2,
-        450.00,
-        '[{"name": "Goldilocks Bento Cake", "price": 450.0, "quantity": 2}]'::jsonb,
-        current_date - 5,
-        900.00,
-        765.00,
-        true,
-        now() - interval '5 days',
-        now() - interval '4 days'
-      );
-    end if;
-  end if;
-end $$;
+grant execute on function public.get_my_requests() to authenticated;
+grant execute on function public.get_my_requests() to anon;
+grant execute on function public.get_my_requests() to service_role;
 
 notify pgrst, 'reload schema';

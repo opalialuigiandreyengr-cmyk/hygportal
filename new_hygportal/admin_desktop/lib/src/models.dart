@@ -755,8 +755,16 @@ class AdminRequestItem {
     final rm = (remarks ?? '').trim().toLowerCase();
     final reqId = requestId.trim();
 
+    final isBirthdayCat = cat == 'birthday leave grant' ||
+        cat == 'birthday leave' ||
+        cat.contains('birthday');
+
+    final isSingleDayOrApproved = totalDays == 1 ||
+        (paidDays == 1 && (unpaidDays ?? 0) == 0) ||
+        status.toLowerCase() == 'approved';
+
     return reqId.startsWith('bday_leave_') ||
-        cat == 'birthday leave grant' ||
+        (isBirthdayCat && isSingleDayOrApproved) ||
         r == 'auto-approved birthday leave grant' ||
         r.contains('birthday leave grant') ||
         rm.contains('birthday leave grant') ||

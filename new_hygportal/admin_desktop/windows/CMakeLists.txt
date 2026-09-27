@@ -87,6 +87,14 @@ if(PLUGIN_BUNDLED_LIBRARIES)
     COMPONENT Runtime)
 endif()
 
+# Copy Visual C++ runtime DLLs from redist folder so Windows 10/11 machines run out-of-the-box
+file(GLOB VC_REDIST_FILES "${CMAKE_CURRENT_SOURCE_DIR}/../redist/*.dll")
+if(VC_REDIST_FILES)
+  install(FILES ${VC_REDIST_FILES}
+    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+    COMPONENT Runtime)
+endif()
+
 # Copy the native assets provided by the build.dart from all packages.
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/windows/")
 install(DIRECTORY "${NATIVE_ASSETS_DIR}"

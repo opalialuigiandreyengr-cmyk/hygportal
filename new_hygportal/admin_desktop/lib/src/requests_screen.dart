@@ -2836,7 +2836,13 @@ class _RequestCardRowState extends State<_RequestCardRow> {
     }
 
     final entries = item.approvalSummary.map((entry) {
-          final rawName = (entry['approver_name'] ?? entry['name'] ?? 'Unknown').toString().trim();
+          var rawName = (entry['approver_name'] ?? entry['name'] ?? '').toString().trim();
+          if (rawName.isEmpty || rawName.toLowerCase() == 'unknown') {
+            final remarks = (entry['remarks'] ?? '').toString().toLowerCase();
+            if (remarks.contains('system auto-approved') || item.isAutoApprovedBirthdayGrant) {
+              rawName = 'HYG Portal System';
+            }
+          }
           final name = rawName.isEmpty ? 'Unknown' : rawName;
           final status = (entry['status'] ?? 'pending').toString().toLowerCase();
           final level = (entry['required_level'] ?? entry['approver_level'] ?? entry['level'])?.toString();

@@ -347,7 +347,10 @@ class _RequestsPanelState extends State<RequestsPanel>
     if (_statusFilter != 'all') {
       items = items
           .where((r) {
-            final effectiveStatus = r.isAutoApprovedBirthdayGrant ? 'approved' : r.status.toLowerCase();
+            final rawStatus = r.status.trim().toLowerCase();
+            final effectiveStatus = (rawStatus == 'validated' || rawStatus == 'rejected' || rawStatus == 'cancelled')
+                ? rawStatus
+                : (r.isAutoApprovedBirthdayGrant ? 'approved' : rawStatus);
             return effectiveStatus == _statusFilter;
           })
           .toList();
@@ -439,7 +442,7 @@ class _RequestsPanelState extends State<RequestsPanel>
             requestId: item.requestId,
             newPaidDays: paid,
             newUnpaidDays: unpaid,
-            oldPaidDays: item.paidDays ?? 0.0,
+            oldPaidDays: item.paidDays ?? (item.isAutoApprovedBirthdayGrant ? 1.0 : 0.0),
             userProfileId: item.userProfileId,
           );
         },
@@ -458,24 +461,31 @@ class _RequestsPanelState extends State<RequestsPanel>
   }
 
   static Future<bool> _validateEsarf(BuildContext context, AdminRequestItem item) async {
+    final isValidated = item.status.trim().toLowerCase() == 'validated';
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => _ValidateEsarfDialogContent(
         item: item,
-        onConfirm: () async {
-          await AdminRequestsService.updateRequestStatus(
+        onConfirm: (newTotalHours, newReason) async {
+          await AdminRequestsService.validateEsarfRequest(
             requestId: item.requestId,
-            isPerk: false,
-            newStatus: 'validated',
+            newTotalHours: newTotalHours ?? item.totalHours ?? 0.0,
+            oldTotalHours: item.totalHours ?? 0.0,
+            newReason: newReason,
+            userProfileId: item.userProfileId,
           );
         },
       ),
     );
     if (confirmed == true && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('ESARF request validated successfully!'),
-          backgroundColor: Color(0xFF059669),
+        SnackBar(
+          content: Text(
+            isValidated
+                ? 'ESARF request re-validated and hours adjusted successfully!'
+                : 'ESARF request validated and hours adjusted successfully!',
+          ),
+          backgroundColor: const Color(0xFF059669),
         ),
       );
       return true;
@@ -1982,6 +1992,7 @@ class _RequestsTable extends StatefulWidget {
     required this.showDelete,
     required this.onReassign,
     this.onValidate,
+    this.isValidatedScreen = false,
   });
 
   final List<AdminRequestItem> items;
@@ -1990,6 +2001,7 @@ class _RequestsTable extends StatefulWidget {
   final bool showDelete;
   final void Function(AdminRequestItem item, String? stepId) onReassign;
   final void Function(AdminRequestItem)? onValidate;
+  final bool isValidatedScreen;
 
   @override
   State<_RequestsTable> createState() => _RequestsTableState();
@@ -2226,7 +2238,12 @@ class _RequestsTableState extends State<_RequestsTable> {
           const _RequestColDef(title: 'Approver', width: 240),
           const _RequestColDef(title: 'Status', width: 120),
           const _RequestColDef(title: 'Submitted', width: 140),
-          if (widget.showDelete || widget.onValidate != null) const _RequestColDef(title: 'Actions', width: 90),
+          if (widget.showDelete || widget.onValidate != null)
+            _RequestColDef(
+              title: 'Actions',
+              width: widget.isValidatedScreen ? 130 : 90,
+              alignment: Alignment.center,
+            ),
         ];
       case AdminRequestCategory.leave:
         return [
@@ -2243,7 +2260,12 @@ class _RequestsTableState extends State<_RequestsTable> {
           const _RequestColDef(title: 'Approver', width: 240),
           const _RequestColDef(title: 'Status', width: 120),
           const _RequestColDef(title: 'Submitted', width: 140),
-          if (widget.showDelete || widget.onValidate != null) const _RequestColDef(title: 'Actions', width: 90),
+          if (widget.showDelete || widget.onValidate != null)
+            _RequestColDef(
+              title: 'Actions',
+              width: widget.isValidatedScreen ? 130 : 90,
+              alignment: Alignment.center,
+            ),
         ];
       case AdminRequestCategory.perk:
         return [
@@ -2259,7 +2281,12 @@ class _RequestsTableState extends State<_RequestsTable> {
           const _RequestColDef(title: 'Approver', width: 240),
           const _RequestColDef(title: 'Status', width: 120),
           const _RequestColDef(title: 'Submitted', width: 140),
-          if (widget.showDelete || widget.onValidate != null) const _RequestColDef(title: 'Actions', width: 90),
+          if (widget.showDelete || widget.onValidate != null)
+            _RequestColDef(
+              title: 'Actions',
+              width: widget.isValidatedScreen ? 130 : 90,
+              alignment: Alignment.center,
+            ),
         ];
     }
   }
@@ -2365,6 +2392,7 @@ class _RequestsTableState extends State<_RequestsTable> {
                             onDelete: widget.onDelete,
                             onReassign: widget.onReassign,
                             onValidate: widget.onValidate,
+                            isValidatedScreen: widget.isValidatedScreen,
                           ),
                         ),
                       ],
@@ -2408,6 +2436,7 @@ class _RequestCardRow extends StatefulWidget {
     required this.onDelete,
     required this.onReassign,
     this.onValidate,
+    this.isValidatedScreen = false,
     super.key,
   });
 
@@ -2419,6 +2448,7 @@ class _RequestCardRow extends StatefulWidget {
   final void Function(AdminRequestItem) onDelete;
   final void Function(AdminRequestItem item, String? stepId) onReassign;
   final void Function(AdminRequestItem)? onValidate;
+  final bool isValidatedScreen;
 
   @override
   State<_RequestCardRow> createState() => _RequestCardRowState();
@@ -2643,8 +2673,11 @@ class _RequestCardRowState extends State<_RequestCardRow> {
   }
 
   Widget _buildStatusCell(AdminRequestItem item) {
+    final rawStatus = item.status.trim().toLowerCase();
     final isBirthdayLeave = item.isAutoApprovedBirthdayGrant;
-    final statusKey = isBirthdayLeave ? 'approved' : item.status.toLowerCase();
+    final statusKey = rawStatus == 'validated'
+        ? 'validated'
+        : (isBirthdayLeave ? 'approved' : rawStatus);
 
     final color = switch (statusKey) {
       'approved' || 'validated' => const Color(0xFF166534),
@@ -2701,30 +2734,56 @@ class _RequestCardRowState extends State<_RequestCardRow> {
   Widget _buildActionsCell(BuildContext context, AdminRequestItem item) {
     final isAutoApproved = item.isAutoApprovedBirthdayGrant;
     final status = item.status.trim().toLowerCase();
-    final isApproved = status == 'approved' || status == 'validated';
+    final isApproved = status == 'approved' ||
+        status == 'validated' ||
+        (isAutoApproved && status != 'rejected' && status != 'cancelled');
+    final isRevalidate = widget.isValidatedScreen || status == 'validated';
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (!isAutoApproved && isApproved && widget.onValidate != null) ...[
-          Tooltip(
-            message: status == 'validated' ? 'Re-validate request' : 'Validate request',
-            child: InkWell(
-              borderRadius: BorderRadius.circular(6),
-              onTap: () => widget.onValidate!(item),
-              child: Container(
-                padding: const EdgeInsets.all(5),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFD1FAE5),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: const Icon(
-                  Icons.check_circle_outline,
-                  size: 16,
-                  color: Color(0xFF059669),
+        if (isApproved && widget.onValidate != null) ...[
+          if (isRevalidate) ...[
+            Tooltip(
+              message: 'Re-validate request',
+              child: SizedBox(
+                height: 28,
+                child: ElevatedButton.icon(
+                  onPressed: () => widget.onValidate!(item),
+                  icon: const Icon(Icons.refresh_rounded, size: 13),
+                  label: const Text('Re-validate'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF047857),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                  ),
                 ),
               ),
             ),
-          ),
+          ] else ...[
+            Tooltip(
+              message: 'Validate request',
+              child: InkWell(
+                borderRadius: BorderRadius.circular(6),
+                onTap: () => widget.onValidate!(item),
+                child: Container(
+                  padding: const EdgeInsets.all(5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFD1FAE5),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Icon(
+                    Icons.check_circle_outline,
+                    size: 16,
+                    color: Color(0xFF059669),
+                  ),
+                ),
+              ),
+            ),
+          ],
           if (widget.showDelete) const SizedBox(width: 8),
         ],
         if (widget.showDelete)
@@ -3579,8 +3638,18 @@ class _ValidateLeaveDialogContentState extends State<_ValidateLeaveDialogContent
   @override
   void initState() {
     super.initState();
-    _paidCtrl = TextEditingController(text: widget.item.paidDays?.toString() ?? '0');
-    _unpaidCtrl = TextEditingController(text: widget.item.unpaidDays?.toString() ?? '0');
+    final defaultPaid = widget.item.paidDays ?? (widget.item.isAutoApprovedBirthdayGrant ? 1.0 : 0.0);
+    final defaultUnpaid = widget.item.unpaidDays ?? 0.0;
+    _paidCtrl = TextEditingController(
+      text: defaultPaid == defaultPaid.roundToDouble()
+          ? defaultPaid.toInt().toString()
+          : defaultPaid.toString(),
+    );
+    _unpaidCtrl = TextEditingController(
+      text: defaultUnpaid == defaultUnpaid.roundToDouble()
+          ? defaultUnpaid.toInt().toString()
+          : defaultUnpaid.toString(),
+    );
   }
 
   @override
@@ -3670,12 +3739,23 @@ class _ValidateLeaveDialogContentState extends State<_ValidateLeaveDialogContent
   }
 
   Widget _buildRow(String label, String value) {
+    var displayVal = value;
+    if (displayVal.contains('Ã') || displayVal == '—') {
+      displayVal = '—';
+    }
+    if (widget.item.isAutoApprovedBirthdayGrant) {
+      if (label == 'Category' && (displayVal == '—' || displayVal.isEmpty)) {
+        displayVal = 'Birthday Leave Grant';
+      } else if (label == 'Leave Type' && (displayVal == '—' || displayVal.isEmpty)) {
+        displayVal = 'With Pay';
+      }
+    }
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
           SizedBox(width: 120, child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.black54))),
-          Expanded(child: Text(value, style: const TextStyle(fontWeight: FontWeight.w500))),
+          Expanded(child: Text(displayVal, style: const TextStyle(fontWeight: FontWeight.w500))),
         ],
       ),
     );
@@ -3690,7 +3770,7 @@ class _ValidateEsarfDialogContent extends StatefulWidget {
   });
 
   final AdminRequestItem item;
-  final Future<void> Function() onConfirm;
+  final Future<void> Function(double? newTotalHours, String? newReason) onConfirm;
 
   @override
   State<_ValidateEsarfDialogContent> createState() =>
@@ -3699,12 +3779,118 @@ class _ValidateEsarfDialogContent extends StatefulWidget {
 
 class _ValidateEsarfDialogContentState
     extends State<_ValidateEsarfDialogContent> {
+  late TextEditingController _hoursCtrl;
+  final List<TextEditingController> _entryHoursCtrls = [];
+  late final List<EsarfEntryItem> _entries;
+  late final bool _isMultiEntry;
   bool _isLoading = false;
 
+  bool get _hasHours =>
+      widget.item.totalHours != null || widget.item.isOffsetRequest;
+
+  @override
+  void initState() {
+    super.initState();
+    final defaultHours = widget.item.totalHours ?? 0.0;
+    _hoursCtrl = TextEditingController(
+      text: defaultHours == defaultHours.roundToDouble()
+          ? defaultHours.toInt().toString()
+          : defaultHours.toString(),
+    );
+
+    _entries = EsarfEntryItem.parseEsarfEntriesFromReason(widget.item.rawRow);
+    _isMultiEntry = _entries.length > 1;
+
+    if (_isMultiEntry) {
+      for (final entry in _entries) {
+        final entryHrs = entry.totalHours ?? 0.0;
+        final ctrl = TextEditingController(
+          text: entryHrs == entryHrs.roundToDouble()
+              ? entryHrs.toInt().toString()
+              : entryHrs.toString(),
+        );
+        ctrl.addListener(() {
+          if (mounted) setState(() {});
+        });
+        _entryHoursCtrls.add(ctrl);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _hoursCtrl.dispose();
+    for (final ctrl in _entryHoursCtrls) {
+      ctrl.dispose();
+    }
+    super.dispose();
+  }
+
+  double _calculateMultiEntryTotal() {
+    double sum = 0.0;
+    for (int i = 0; i < _entries.length; i++) {
+      if (_entries[i].isRejected) continue;
+      final val = double.tryParse(_entryHoursCtrls[i].text.trim()) ?? 0.0;
+      sum += val;
+    }
+    return (sum * 100).round() / 100.0;
+  }
+
   Future<void> _submit() async {
+    double? newHours;
+    String? newReason;
+
+    if (_isMultiEntry) {
+      for (int i = 0; i < _entries.length; i++) {
+        if (_entries[i].isRejected) continue;
+        final val = double.tryParse(_entryHoursCtrls[i].text.trim());
+        if (val == null || val < 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Please enter valid hours (0 or greater) for Entry #${i + 1}.'),
+            ),
+          );
+          return;
+        }
+      }
+
+      newHours = _calculateMultiEntryTotal();
+      if (newHours <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Total hours must be greater than zero.'),
+          ),
+        );
+        return;
+      }
+
+      final updatedHoursMap = <int, double>{};
+      for (int i = 0; i < _entries.length; i++) {
+        if (!_entries[i].isRejected) {
+          updatedHoursMap[i] = double.tryParse(_entryHoursCtrls[i].text.trim()) ?? 0.0;
+        }
+      }
+
+      newReason = EsarfEntryItem.buildUpdatedReasonText(
+        currentReason: widget.item.reason,
+        entries: _entries,
+        updatedHoursMap: updatedHoursMap,
+      );
+    } else if (_hasHours) {
+      newHours = double.tryParse(_hoursCtrl.text.trim());
+      if (newHours == null || newHours <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please enter a valid number of hours (greater than 0).'),
+          ),
+        );
+        return;
+      }
+    }
+
     setState(() => _isLoading = true);
     try {
-      await widget.onConfirm();
+      await widget.onConfirm(newHours, newReason);
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       setState(() => _isLoading = false);
@@ -3719,6 +3905,7 @@ class _ValidateEsarfDialogContentState
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
+    final isValidated = item.status.trim().toLowerCase() == 'validated';
     final dateStr = item.dateFrom != null && item.dateFrom!.isNotEmpty
         ? (item.dateTo != null &&
                 item.dateTo!.isNotEmpty &&
@@ -3727,46 +3914,380 @@ class _ValidateEsarfDialogContentState
             : item.dateFrom!)
         : '—';
 
+    final originalTotal = item.totalHours ?? 0.0;
+    final currentTotal = _isMultiEntry
+        ? _calculateMultiEntryTotal()
+        : (double.tryParse(_hoursCtrl.text.trim()) ?? originalTotal);
+    final diff = currentTotal - originalTotal;
+
     return Dialog(
-      insetPadding: const EdgeInsets.all(28),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       backgroundColor: Colors.white,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 480),
+        constraints: BoxConstraints(
+          maxWidth: _isMultiEntry ? 680 : 480,
+          maxHeight: _isMultiEntry ? 740 : 600,
+        ),
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Validate ESARF Request',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              Text(
+                isValidated ? 'Re-validate ESARF Request' : 'Validate ESARF Request',
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                _isMultiEntry
+                    ? (isValidated
+                        ? 'Adjust hours per entry below. Total hours and offset adjustment will update automatically.'
+                        : 'Review and adjust hours per entry before validating.')
+                    : (isValidated
+                        ? 'Are you sure you want to re-validate and adjust this request?'
+                        : 'Are you sure you want to validate this request?'),
+                style: const TextStyle(color: Colors.black54, fontSize: 13),
               ),
               const SizedBox(height: 16),
-              const Text(
-                'Are you sure you want to validate this request?',
-                style: TextStyle(color: Colors.black87),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Column(
+                  children: [
+                    _buildRow('Employee', '${item.employeeName ?? "—"} (${item.employeeNo ?? "—"})'),
+                    _buildRow('Department', item.departmentName ?? '—'),
+                    _buildRow('Transaction Type', item.transactionType ?? item.requestTypeName),
+                    _buildRow('Date', dateStr),
+                    _buildRow('Status', item.statusLabel),
+                    if (_isMultiEntry)
+                      _buildRow('Entries Count', '${_entries.length} entries'),
+                    _buildRow('Current Total', '${originalTotal.toStringAsFixed(1)} hrs'),
+                  ],
+                ),
               ),
-              const SizedBox(height: 16),
-              _buildRow('Employee', item.employeeName ?? '—'),
-              _buildRow('Employee No', item.employeeNo ?? '—'),
-              _buildRow('Department', item.departmentName ?? '—'),
-              _buildRow(
-                'Transaction Type',
-                item.transactionType ?? item.requestTypeName,
+              const SizedBox(height: 14),
+              if (!_isMultiEntry) ...[
+                if (_hasHours) ...[
+                  TextField(
+                    controller: _hoursCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Total Hours (hrs)',
+                      border: OutlineInputBorder(),
+                      suffixText: 'hrs',
+                    ),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+              ] else ...[
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'ENTRIES BREAKDOWN (${_entries.length})',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF0F172A),
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    Text(
+                      'Adjust each entry separately',
+                      style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Flexible(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: _entries.length,
+                        separatorBuilder: (_, __) =>
+                            const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                        itemBuilder: (context, index) {
+                          final entry = _entries[index];
+                          final isRejected = entry.isRejected;
+                          return Container(
+                            color: isRejected
+                                ? const Color(0xFFFFF1F2)
+                                : Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 10),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF0F172A),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        '#${index + 1}',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFEFF6FF),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        entry.transactionType ??
+                                            item.transactionType ??
+                                            'ESARF',
+                                        style: const TextStyle(
+                                          color: Color(0xFF1E40AF),
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                    if (isRejected) ...[
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFFFE4E6),
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                        ),
+                                        child: const Text(
+                                          'REJECTED',
+                                          style: TextStyle(
+                                            color: Color(0xFFBE123C),
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                    const Spacer(),
+                                    Text(
+                                      entry.datesText,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: Color(0xFF1E293B),
+                                      ),
+                                    ),
+                                    if (entry.timesText.isNotEmpty) ...[
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        '(${entry.timesText})',
+                                        style: const TextStyle(
+                                            fontSize: 11,
+                                            color: Color(0xFF64748B)),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                                if (entry.cleanReasonText.isNotEmpty) ...[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    '"${entry.cleanReasonText}"',
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontStyle: FontStyle.italic,
+                                      color: Color(0xFF475569),
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Text(
+                                      'Original: ${(entry.totalHours ?? 0.0).toStringAsFixed(1)} hrs',
+                                      style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Color(0xFF64748B)),
+                                    ),
+                                    const Spacer(),
+                                    if (isRejected)
+                                      const Text(
+                                        'Excluded from total',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: Color(0xFFBE123C),
+                                          fontStyle: FontStyle.italic,
+                                        ),
+                                      )
+                                    else ...[
+                                      const Text(
+                                        'Adjusted Hours: ',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF1E293B),
+                                        ),
+                                      ),
+                                      SizedBox(
+                                        width: 105,
+                                        height: 36,
+                                        child: TextField(
+                                          controller: _entryHoursCtrls[index],
+                                          keyboardType: const TextInputType
+                                              .numberWithOptions(decimal: true),
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.bold),
+                                          decoration: const InputDecoration(
+                                            contentPadding:
+                                                EdgeInsets.symmetric(
+                                                    horizontal: 8, vertical: 8),
+                                            suffixText: 'hrs',
+                                            suffixStyle: TextStyle(
+                                                fontSize: 11,
+                                                color: Color(0xFF64748B)),
+                                            border: OutlineInputBorder(),
+                                            isDense: true,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: diff < 0
+                      ? const Color(0xFFFFF1F2)
+                      : (diff > 0
+                          ? const Color(0xFFF0FDF4)
+                          : const Color(0xFFF8FAFC)),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: diff < 0
+                        ? const Color(0xFFFECDD3)
+                        : (diff > 0
+                            ? const Color(0xFFBBF7D0)
+                            : const Color(0xFFCBD5E1)),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Original: ${originalTotal.toStringAsFixed(1)} hrs',
+                          style: const TextStyle(
+                              fontSize: 12, color: Color(0xFF64748B)),
+                        ),
+                        Row(
+                          children: [
+                            const Text(
+                              'New Total: ',
+                              style: TextStyle(
+                                  fontSize: 12, fontWeight: FontWeight.bold),
+                            ),
+                            Text(
+                              '${currentTotal.toStringAsFixed(1)} hrs',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF0F172A),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: diff < 0
+                                    ? const Color(0xFFFFE4E6)
+                                    : (diff > 0
+                                        ? const Color(0xFFDCFCE7)
+                                        : const Color(0xFFE2E8F0)),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                diff == 0
+                                    ? 'No Change'
+                                    : (diff > 0
+                                        ? '+${diff.toStringAsFixed(1)} hrs'
+                                        : '${diff.toStringAsFixed(1)} hrs'),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: diff < 0
+                                      ? const Color(0xFFBE123C)
+                                      : (diff > 0
+                                          ? const Color(0xFF15803D)
+                                          : const Color(0xFF475569)),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    if (diff != 0) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        diff < 0
+                            ? '⚠️ ${(-diff).toStringAsFixed(1)} hrs will be deducted from offset balance (Offset Deducted).'
+                            : '✅ ${diff.toStringAsFixed(1)} hrs will be added to offset balance (Offset Added).',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: diff < 0
+                              ? const Color(0xFFBE123C)
+                              : const Color(0xFF15803D),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ),
-              _buildRow('Date', dateStr),
-              if (item.totalHours != null && item.totalHours! > 0)
-                _buildRow('Total Hours', '${item.totalHours} hrs'),
-              _buildRow('Current Status', item.statusLabel),
-              const SizedBox(height: 24),
+              const SizedBox(height: 18),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   TextButton(
-                    onPressed:
-                        _isLoading ? null : () => Navigator.of(context).pop(false),
+                    onPressed: _isLoading
+                        ? null
+                        : () => Navigator.of(context).pop(false),
                     child: const Text('Cancel',
                         style: TextStyle(color: Colors.black54)),
                   ),
@@ -3785,8 +4306,12 @@ class _ValidateEsarfDialogContentState
                               strokeWidth: 2,
                             ),
                           )
-                        : const Text('Validate & Save',
-                            style: TextStyle(color: Colors.white)),
+                        : Text(
+                            isValidated
+                                ? 'Re-validate & Save'
+                                : 'Validate & Save',
+                            style: const TextStyle(color: Colors.white),
+                          ),
                   ),
                 ],
               ),
@@ -3985,7 +4510,11 @@ class _RequestDetailModal extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isEsarf = item.category == AdminRequestCategory.esarf;
-    final entries = isEsarf ? EsarfEntryItem.parseEsarfEntriesFromReason(item.rawRow) : <EsarfEntryItem>[];
+    final entries = isEsarf
+        ? (item.entries.isNotEmpty
+            ? item.entries
+            : EsarfEntryItem.parseEsarfEntriesFromReason(item.rawRow))
+        : <EsarfEntryItem>[];
 
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 30),
@@ -4286,7 +4815,13 @@ class _RequestDetailModal extends StatelessWidget {
                 flex: 3,
                 child: Align(
                   alignment: Alignment.centerRight,
-                  child: _buildStatusBadge(entry.status ?? 'pending'),
+                  child: _buildStatusBadge(
+                    entry.isRejected
+                        ? 'rejected'
+                        : (item.status.trim().toLowerCase() == 'validated'
+                            ? 'validated'
+                            : (entry.status ?? item.status)),
+                  ),
                 ),
               ),
             ],
@@ -4423,12 +4958,16 @@ class _RequestDetailModal extends StatelessWidget {
   }
 
   Widget _buildStatusBadge(String statusStr) {
-    final st = statusStr.toLowerCase();
+    final st = statusStr.toLowerCase().trim();
     Color bg = const Color(0xFFFEF3C7);
     Color fg = const Color(0xFFB45309);
     String label = 'PENDING';
 
-    if (st == 'approved' || st == 'success') {
+    if (st == 'validated') {
+      bg = const Color(0xFFDCFCE7);
+      fg = const Color(0xFF166534);
+      label = 'VALIDATED';
+    } else if (st == 'approved' || st == 'success') {
       bg = const Color(0xFFDCFCE7);
       fg = const Color(0xFF15803D);
       label = 'APPROVED';
@@ -4626,9 +5165,9 @@ class _RequestDetailModal extends StatelessWidget {
                 color: color.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(4),
               ),
-              child: const Text(
-                'APPROVED',
-                style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color),
+              child: Text(
+                item.status.trim().toLowerCase() == 'validated' ? 'VALIDATED' : 'APPROVED',
+                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color),
               ),
             ),
           ],
@@ -5293,6 +5832,7 @@ class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
                         onDelete: (_) {},
                         onReassign: (_, __) {},
                         onValidate: _validateRequest,
+                        isValidatedScreen: true,
                       ),
 
                       // Pagination Footer Bar

@@ -1709,6 +1709,12 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
     ).push(MaterialPageRoute<void>(builder: (_) => const HygPhotoProofsScreen()));
   }
 
+  void _openTutorials() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const HygTutorialsScreen()));
+  }
+
   void _toggleNotificationsPopover() {
     if (_isNotificationsOpen) {
       _closeNotificationsPopover();
@@ -1916,6 +1922,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
                   onOpenAssist: _openHygAssistScreen,
                   onOpenBirthdays: _openHygBirthdaysScreen,
                   onOpenPhotoProofs: _openPhotoProofs,
+                  onOpenTutorials: _openTutorials,
                   onOpenNotifications: _toggleNotificationsPopover,
                   notificationCount: AdminNotificationsService.unreadCountNotifier.value,
                   notificationsLayerLink: _notificationsLayerLink,
@@ -2767,6 +2774,7 @@ class HrTopBar extends StatelessWidget {
     required this.onOpenAssist,
     this.onOpenBirthdays,
     this.onOpenPhotoProofs,
+    this.onOpenTutorials,
     this.onOpenNotifications,
     this.notificationCount = 0,
     this.notificationsLayerLink,
@@ -2776,6 +2784,7 @@ class HrTopBar extends StatelessWidget {
   final VoidCallback onOpenAssist;
   final VoidCallback? onOpenBirthdays;
   final VoidCallback? onOpenPhotoProofs;
+  final VoidCallback? onOpenTutorials;
   final VoidCallback? onOpenNotifications;
   final int notificationCount;
   final LayerLink? notificationsLayerLink;
@@ -2824,38 +2833,17 @@ class HrTopBar extends StatelessWidget {
             onTap: onOpenBirthdays,
           ),
           const SizedBox(width: 10),
-          if (notificationsLayerLink != null)
-            CompositedTransformTarget(
-              link: notificationsLayerLink!,
-              child: TopIconButton(
-                icon: Icons.notifications_none,
-                tooltip: notificationCount > 0
-                    ? 'Notifications ($notificationCount unread)'
-                    : 'Notifications',
-                badgeCount: notificationCount,
-                onTap: onOpenNotifications,
-              ),
-            )
-          else
-            TopIconButton(
-              icon: Icons.notifications_none,
-              tooltip: notificationCount > 0
-                  ? 'Notifications ($notificationCount unread)'
-                  : 'Notifications',
-              badgeCount: notificationCount,
-              onTap: onOpenNotifications,
-            ),
-          const SizedBox(width: 10),
-          const TopIconButton(
-            icon: Icons.chat_bubble_outline,
-            tooltip: 'Messages',
-          ),
-          const SizedBox(width: 10),
           TopIconButton(
             icon: Icons.auto_awesome,
             filled: true,
             tooltip: 'HYG Assist',
             onTap: onOpenAssist,
+          ),
+          const SizedBox(width: 10),
+          TopIconButton(
+            customIcon: const HygTutorialsIcon(),
+            tooltip: 'HYG Portal Tutorials',
+            onTap: onOpenTutorials,
           ),
           const SizedBox(width: 10),
           Container(
@@ -2885,6 +2873,33 @@ class HrTopBar extends StatelessWidget {
               ],
             ),
           ),
+          const SizedBox(width: 10),
+          const TopIconButton(
+            icon: Icons.chat_bubble_outline,
+            tooltip: 'Messages',
+          ),
+          const SizedBox(width: 10),
+          if (notificationsLayerLink != null)
+            CompositedTransformTarget(
+              link: notificationsLayerLink!,
+              child: TopIconButton(
+                icon: Icons.notifications_none,
+                tooltip: notificationCount > 0
+                    ? 'Notifications ($notificationCount unread)'
+                    : 'Notifications',
+                badgeCount: notificationCount,
+                onTap: onOpenNotifications,
+              ),
+            )
+          else
+            TopIconButton(
+              icon: Icons.notifications_none,
+              tooltip: notificationCount > 0
+                  ? 'Notifications ($notificationCount unread)'
+                  : 'Notifications',
+              badgeCount: notificationCount,
+              onTap: onOpenNotifications,
+            ),
         ],
       ),
     );
@@ -2893,16 +2908,18 @@ class HrTopBar extends StatelessWidget {
 
 class TopIconButton extends StatefulWidget {
   const TopIconButton({
-    required this.icon,
+    this.icon,
+    this.customIcon,
     this.filled = false,
     this.onTap,
     this.tooltip,
     this.badgeCount,
     this.hasBadge = false,
     super.key,
-  });
+  }) : assert(icon != null || customIcon != null);
 
-  final IconData icon;
+  final IconData? icon;
+  final Widget? customIcon;
   final bool filled;
   final VoidCallback? onTap;
   final String? tooltip;
@@ -2924,6 +2941,8 @@ class _TopIconButtonState extends State<TopIconButton> {
         widget.icon == Icons.photo_library ||
         widget.icon == Icons.photo_camera_outlined ||
         widget.tooltip == 'Photo Proofs';
+    final isTutorial = widget.tooltip == 'HYG Portal Tutorials' ||
+        widget.customIcon is HygTutorialsIcon;
 
     Color bgColor;
     Color borderColor;
@@ -2941,6 +2960,10 @@ class _TopIconButtonState extends State<TopIconButton> {
       bgColor = _isHovered ? const Color(0xFFE0F2FE) : Colors.white;
       borderColor = _isHovered ? const Color(0xFF38BDF8) : const Color(0xFFCBD5E1);
       iconColor = _isHovered ? const Color(0xFF0284C7) : HygColors.ink;
+    } else if (isTutorial) {
+      bgColor = _isHovered ? const Color(0xFFEEF2FF) : Colors.white;
+      borderColor = _isHovered ? const Color(0xFF818CF8) : const Color(0xFFCBD5E1);
+      iconColor = _isHovered ? const Color(0xFF4F46E5) : HygColors.ink;
     } else {
       bgColor = _isHovered ? const Color(0xFFF1F5F9) : Colors.white;
       borderColor = _isHovered ? const Color(0xFF94A3B8) : const Color(0xFFCBD5E1);
@@ -2985,10 +3008,17 @@ class _TopIconButtonState extends State<TopIconButton> {
                         ]
                       : const [],
                 ),
-                child: Icon(
-                  widget.icon,
-                  size: 19,
-                  color: iconColor,
+                child: Center(
+                  child: widget.customIcon != null
+                      ? IconTheme(
+                          data: IconThemeData(size: 19, color: iconColor),
+                          child: widget.customIcon!,
+                        )
+                      : Icon(
+                          widget.icon!,
+                          size: 19,
+                          color: iconColor,
+                        ),
                 ),
               ),
               if ((widget.badgeCount != null && widget.badgeCount! > 0) || widget.hasBadge)
@@ -3044,3 +3074,97 @@ class _TopIconButtonState extends State<TopIconButton> {
     return buttonWidget;
   }
 }
+
+/// Custom clapperboard tutorial icon matching the film slate with diagonal slashes and play button.
+class HygTutorialsIcon extends StatelessWidget {
+  const HygTutorialsIcon({
+    super.key,
+    this.size = 19,
+    this.color,
+  });
+
+  final double size;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final effectiveColor = color ?? IconTheme.of(context).color ?? const Color(0xFF0F172A);
+    final effectiveSize = IconTheme.of(context).size ?? size;
+    return CustomPaint(
+      size: Size(effectiveSize, effectiveSize),
+      painter: _TutorialsIconPainter(color: effectiveColor),
+    );
+  }
+}
+
+class _TutorialsIconPainter extends CustomPainter {
+  const _TutorialsIconPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final scale = size.width / 24.0;
+    canvas.save();
+    canvas.scale(scale, scale);
+
+    final strokePaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..isAntiAlias = true;
+
+    // Outer rounded rectangle
+    final outerRRect = RRect.fromRectAndRadius(
+      const Rect.fromLTWH(2.5, 2.5, 19.0, 19.0),
+      const Radius.circular(4.5),
+    );
+
+    // Draw internal clapperboard lines inside the clipped area
+    canvas.save();
+    canvas.clipRRect(outerRRect);
+
+    // Top horizontal divider
+    canvas.drawLine(
+      const Offset(2.0, 8.0),
+      const Offset(22.0, 8.0),
+      strokePaint,
+    );
+
+    // Diagonal slashes in the clapperboard top header
+    canvas.drawLine(
+      const Offset(7.5, 2.0),
+      const Offset(11.5, 8.0),
+      strokePaint,
+    );
+    canvas.drawLine(
+      const Offset(13.5, 2.0),
+      const Offset(17.5, 8.0),
+      strokePaint,
+    );
+
+    canvas.restore();
+
+    // Draw the outer rounded rectangle outline
+    canvas.drawRRect(outerRRect, strokePaint);
+
+    // Centered hollow play triangle in the bottom portion
+    final playPath = Path()
+      ..moveTo(10.0, 11.5)
+      ..lineTo(16.0, 14.75)
+      ..lineTo(10.0, 18.0)
+      ..close();
+
+    canvas.drawPath(playPath, strokePaint);
+
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _TutorialsIconPainter oldDelegate) {
+    return oldDelegate.color != color;
+  }
+}
+

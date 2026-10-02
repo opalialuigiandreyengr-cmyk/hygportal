@@ -695,6 +695,9 @@ class AdminRequestItem {
   final String? remarks;
 
   AdminRequestCategory get category {
+    if (isAutoApprovedBirthdayGrant) {
+      return AdminRequestCategory.leave;
+    }
     final code = requestTypeCode.trim().toLowerCase();
     final name = requestTypeName.trim().toLowerCase();
     if (code == 'discount' ||
@@ -723,6 +726,17 @@ class AdminRequestItem {
       return AdminRequestCategory.leave;
     }
     return AdminRequestCategory.esarf;
+  }
+
+  bool get isOffsetRequest {
+    final code = requestTypeCode.trim().toLowerCase();
+    final name = requestTypeName.trim().toLowerCase();
+    final tx = (transactionType ?? '').trim().toLowerCase();
+    final r = (reason ?? '').trim().toLowerCase();
+    return code.contains('offset') ||
+        name.contains('offset') ||
+        tx.contains('offset') ||
+        r.contains('offset');
   }
 
   DateTime? get submittedDateTime {
@@ -776,15 +790,15 @@ class AdminRequestItem {
   }
 
   String get statusLabel {
-    if (isAutoApprovedBirthdayGrant) {
-      return 'Approved';
-    }
-    final s = status.toLowerCase();
-    if (s == 'pending') return 'Pending';
-    if (s == 'approved') return 'Approved';
+    final s = status.toLowerCase().trim();
     if (s == 'validated') return 'Validated';
     if (s == 'rejected') return 'Rejected';
     if (s == 'cancelled') return 'Cancelled';
+    if (isAutoApprovedBirthdayGrant) {
+      return 'Approved';
+    }
+    if (s == 'pending') return 'Pending';
+    if (s == 'approved') return 'Approved';
     if (s == 'needs_admin_review') return 'Needs Review';
     return status;
   }
@@ -955,6 +969,7 @@ class EsarfEntryItem {
   String get dayOffText => dayOff ?? '';
   String get timeScheduleText => timeSchedule ?? '';
   String get cleanReasonText => reason ?? '';
+  bool get isRejected => (status ?? '').toLowerCase() == 'rejected';
 
   factory EsarfEntryItem.fromRow(Map<String, dynamic> row) {
     return EsarfEntryItem(
@@ -1036,9 +1051,12 @@ class EsarfEntryItem {
             .replaceAll('[APPROVED]', '')
             .trim();
 
+        final parentStatus = (defaultEntry.status ?? '').toLowerCase().trim();
         final entryStatus = isEntryRejected
             ? 'rejected'
-            : (isEntryApproved ? 'approved' : (defaultEntry.status ?? 'pending'));
+            : (parentStatus == 'validated'
+                ? 'validated'
+                : (isEntryApproved ? 'approved' : (defaultEntry.status ?? 'pending')));
 
         parsedEntries.add(
           EsarfEntryItem(
@@ -1061,6 +1079,37 @@ class EsarfEntryItem {
     }
 
     return parsedEntries.isNotEmpty ? parsedEntries : [defaultEntry];
+  }
+
+  static String buildUpdatedReasonText({
+    required String? currentReason,
+    required List<EsarfEntryItem> entries,
+    required Map<int, double> updatedHoursMap,
+  }) {
+    String text = currentReason ?? '';
+    if (text.isEmpty || !text.contains('[Entry ')) return text;
+
+    for (int i = 0; i < entries.length; i++) {
+      final entryNum = i + 1;
+      final newHours = updatedHoursMap[i];
+      if (newHours != null) {
+        final formattedHours = newHours == newHours.roundToDouble()
+            ? '${newHours.toInt()}.00'
+            : newHours.toStringAsFixed(2);
+
+        // Replace hours in pattern: [Entry X] (Transaction) Date Time (Y.YY hrs): Reason
+        final entryRegex = RegExp(
+          r'(\[Entry\s+' + RegExp.escape(entryNum.toString()) + r'\][^\n]*?\()([0-9.]+\s*hrs?\))',
+          caseSensitive: false,
+        );
+        if (text.contains(entryRegex)) {
+          text = text.replaceAllMapped(entryRegex, (match) {
+            return '${match.group(1)}$formattedHours hrs)';
+          });
+        }
+      }
+    }
+    return text;
   }
 }
 
@@ -1136,4 +1185,90 @@ class AwardedBadgeRecord {
   final String note;
   final int pointsAwarded;
 }
+
+// ==========================================
+// TUTORIAL MODELS
+// ==========================================
+class PortalTutorialItem {
+  const PortalTutorialItem({
+    required this.id,
+    required this.title,
+    required this.youtubeUrl,
+    required this.videoId,
+    this.description = '',
+    this.sortOrder = 0,
+    this.isActive = true,
+    this.createdAt,
+    this.updatedAt,
+  });
+
+  final String id;
+  final String title;
+  final String youtubeUrl;
+  final String videoId;
+  final String description;
+  final int sortOrder;
+  final bool isActive;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+
+  String get thumbnailUrl => videoId.isNotEmpty
+      ? 'https://img.youtube.com/vi/$videoId/hqdefault.jpg'
+      : '';
+
+  String get embedUrl => videoId.isNotEmpty
+      ? 'https://www.youtube.com/embed/$videoId'
+      : '';
+
+  factory PortalTutorialItem.fromMap(Map<String, dynamic> map) {
+    return PortalTutorialItem(
+      id: map['id']?.toString() ?? '',
+      title: map['title']?.toString() ?? '',
+      youtubeUrl: map['youtube_url']?.toString() ?? '',
+      videoId: map['video_id']?.toString() ?? '',
+      description: map['description']?.toString() ?? '',
+      sortOrder: (map['sort_order'] as num?)?.toInt() ?? 0,
+      isActive: map['is_active'] == true || map['is_active'] == null,
+      createdAt: map['created_at'] != null ? DateTime.tryParse(map['created_at'].toString()) : null,
+      updatedAt: map['updated_at'] != null ? DateTime.tryParse(map['updated_at'].toString()) : null,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      if (id.isNotEmpty) 'id': id,
+      'title': title,
+      'youtube_url': youtubeUrl,
+      'video_id': videoId,
+      'description': description,
+      'sort_order': sortOrder,
+      'is_active': isActive,
+    };
+  }
+
+  PortalTutorialItem copyWith({
+    String? id,
+    String? title,
+    String? youtubeUrl,
+    String? videoId,
+    String? description,
+    int? sortOrder,
+    bool? isActive,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) {
+    return PortalTutorialItem(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      youtubeUrl: youtubeUrl ?? this.youtubeUrl,
+      videoId: videoId ?? this.videoId,
+      description: description ?? this.description,
+      sortOrder: sortOrder ?? this.sortOrder,
+      isActive: isActive ?? this.isActive,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+}
+
 

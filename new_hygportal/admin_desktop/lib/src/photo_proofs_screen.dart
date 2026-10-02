@@ -2958,12 +2958,14 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
     );
   }
 
+
   void _showProofDetailModal(_PhotoProofRecord proof) {
     final dept = _resolveEmployeeDepartment(proof);
     final deptDisplay = (proof.storeName.isNotEmpty &&
             proof.storeName.trim().toLowerCase() != dept.trim().toLowerCase())
         ? '$dept • ${proof.storeName}'
         : dept;
+    final viewerKey = GlobalKey<_ProofModalViewerState>();
 
     showDialog(
       context: context,
@@ -3031,7 +3033,9 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            deptDisplay,
+                            proof.formattedTimeLabel.isNotEmpty
+                                ? '$deptDisplay • ${proof.formattedTimeLabel}'
+                                : deptDisplay,
                             style: const TextStyle(
                               color: Color(0xFF94A3B8),
                               fontSize: 12,
@@ -3044,6 +3048,13 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
                       ),
                     ),
                     IconButton(
+                      icon: const Icon(Icons.layers_outlined, color: Colors.white70, size: 20),
+                      tooltip: 'Toggle Details Overlay',
+                      onPressed: () {
+                        viewerKey.currentState?.toggleOverlay();
+                      },
+                    ),
+                    IconButton(
                       icon: const Icon(Icons.close, color: Colors.white, size: 20),
                       onPressed: () => Navigator.of(ctx).pop(),
                       tooltip: 'Close',
@@ -3052,24 +3063,47 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
                 ),
               ),
 
-              // Photo (displays verified photo proof with its embedded details)
+              // Photo with Smart Proof Stamp Overlay
               Flexible(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                   child: Center(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(
-                          maxWidth: 500,
-                          maxHeight: 520,
-                        ),
-                        child: _buildFullPhotoWidget(proof),
-                      ),
+                    child: _ProofModalViewer(
+                      key: viewerKey,
+                      proof: proof,
+                      photoWidgetBuilder: _buildFullPhotoWidget,
                     ),
                   ),
                 ),
               ),
+
+              // Location info strip (address from reverse geocoding / GPS)
+              if (proof.displayLocationText.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFF1F5F9),
+                    border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.location_on_outlined, size: 16, color: Color(0xFF0284C7)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          proof.displayLocationText,
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            color: Color(0xFF334155),
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
 
               // Bottom Footer: Copy Drive Link (if available) & Done
               Container(
@@ -3131,7 +3165,7 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
     );
   }
 
-  Widget _buildFullPhotoWidget(_PhotoProofRecord proof, {BoxFit fit = BoxFit.contain}) {
+    Widget _buildFullPhotoWidget(_PhotoProofRecord proof, {BoxFit fit = BoxFit.contain}) {
     final photoUri = proof.resolvedPhotoUrl;
     if (photoUri.isEmpty) {
       return Container(
@@ -3271,6 +3305,233 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
 }
 
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// MODAL PHOTO VIEWER WITH SMART WATERMARK OVERLAY
+// ---------------------------------------------------------------------------
+class _ProofModalViewer extends StatefulWidget {
+  final _PhotoProofRecord proof;
+  final Widget Function(_PhotoProofRecord, {BoxFit fit}) photoWidgetBuilder;
+
+  const _ProofModalViewer({
+    super.key,
+    required this.proof,
+    required this.photoWidgetBuilder,
+  });
+
+  @override
+  State<_ProofModalViewer> createState() => _ProofModalViewerState();
+}
+
+class _ProofModalViewerState extends State<_ProofModalViewer> {
+  bool? _isBurnedWatermark;
+  bool? _manualOverride;
+  ImageStream? _imageStream;
+  ImageStreamListener? _listener;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkImageWatermark();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ProofModalViewer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.proof.resolvedPhotoUrl != widget.proof.resolvedPhotoUrl) {
+      _checkImageWatermark();
+    }
+  }
+
+  void _checkImageWatermark() {
+    final photoUri = widget.proof.resolvedPhotoUrl;
+    if (photoUri.isEmpty) return;
+
+    ImageProvider provider;
+    if (photoUri.startsWith('data:image')) {
+      try {
+        final commaIndex = photoUri.indexOf(',');
+        final base64String = commaIndex != -1 ? photoUri.substring(commaIndex + 1) : photoUri;
+        final bytes = base64Decode(base64String);
+        provider = MemoryImage(bytes);
+      } catch (_) {
+        return;
+      }
+    } else {
+      provider = NetworkImage(photoUri);
+    }
+
+    if (_imageStream != null && _listener != null) {
+      _imageStream!.removeListener(_listener!);
+    }
+
+    _imageStream = provider.resolve(ImageConfiguration.empty);
+    _listener = ImageStreamListener(
+      (ImageInfo info, bool synchronousCall) {
+        if (!mounted) return;
+        final w = info.image.width;
+        // Web canvas exports are rendered at mobile viewport width (<= 720, e.g. 480x640) with burned watermark.
+        // Android camera captures are full sensor resolution (e.g. 1200x1600) with NO burned watermark.
+        final burned = w > 0 && w <= 720;
+        if (synchronousCall) {
+          _isBurnedWatermark = burned;
+        } else {
+          setState(() {
+            _isBurnedWatermark = burned;
+          });
+        }
+      },
+      onError: (_, __) {},
+    );
+    _imageStream!.addListener(_listener!);
+  }
+
+  @override
+  void dispose() {
+    if (_imageStream != null && _listener != null) {
+      _imageStream!.removeListener(_listener!);
+    }
+    super.dispose();
+  }
+
+  void toggleOverlay() {
+    setState(() {
+      final current = _manualOverride ?? (_isBurnedWatermark == null ? true : !_isBurnedWatermark!);
+      _manualOverride = !current;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final showOverlay = _manualOverride ??
+        (_isBurnedWatermark == null ? true : !_isBurnedWatermark!);
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(
+          maxWidth: 500,
+          maxHeight: 520,
+        ),
+        child: AspectRatio(
+          aspectRatio: 3 / 4,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Photo
+              widget.photoWidgetBuilder(widget.proof, fit: BoxFit.cover),
+
+              // Proof Stamp Overlay Banner (displayed for unwatermarked photos like Android captures)
+              if (showOverlay)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.transparent,
+                          Colors.black.withValues(alpha: 0.75),
+                        ],
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Time digits & period + divider + Date & Day
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Text.rich(
+                              TextSpan(
+                                children: [
+                                  TextSpan(
+                                    text: widget.proof.displayTimeDigits,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 26,
+                                      fontWeight: FontWeight.w300,
+                                      letterSpacing: -0.5,
+                                      height: 1.0,
+                                    ),
+                                  ),
+                                  TextSpan(
+                                    text: ' ${widget.proof.displayTimePeriod}',
+                                    style: const TextStyle(
+                                      color: Color(0xFFFACC15),
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.2,
+                                      height: 1.0,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Container(
+                              margin: const EdgeInsets.symmetric(horizontal: 10),
+                              width: 1.5,
+                              height: 24,
+                              color: Colors.white.withValues(alpha: 0.65),
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  widget.proof.displayDateFormatted,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w600,
+                                    height: 1.1,
+                                  ),
+                                ),
+                                const SizedBox(height: 1.5),
+                                Text(
+                                  widget.proof.displayDayFormatted,
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.95),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                    height: 1.1,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        if (widget.proof.displayLocationText.isNotEmpty) ...[
+                          const SizedBox(height: 5),
+                          Text(
+                            widget.proof.displayLocationText,
+                            style: const TextStyle(
+                              color: Color(0xFFF1F5F9),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              height: 1.3,
+                            ),
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 // DATA MODEL
 // ---------------------------------------------------------------------------
 class _PhotoProofRecord {

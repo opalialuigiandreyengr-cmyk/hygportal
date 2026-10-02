@@ -18,6 +18,7 @@ part 'src/shell.dart';
 part 'src/assist_screen.dart';
 part 'src/birthdays_screen.dart';
 part 'src/photo_proofs_screen.dart';
+part 'src/tutorials_screen.dart';
 part 'src/notifications_screen.dart';
 part 'src/employees_screen.dart';
 part 'src/companies_screen.dart';

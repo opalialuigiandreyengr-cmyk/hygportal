@@ -343,11 +343,11 @@ class _HygBirthdaysScreenState extends State<HygBirthdaysScreen> {
 
   Widget _buildHeader(BuildContext context, String monthName, int year, bool isCurrentMonthYear) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: HygColors.panel,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFF1E3A5F)),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
       child: Row(
         children: [
@@ -358,7 +358,7 @@ class _HygBirthdaysScreenState extends State<HygBirthdaysScreen> {
               gradient: const LinearGradient(
                 colors: [Color(0xFFEC4899), Color(0xFFF43F5E)],
               ),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(Icons.cake, color: Colors.white, size: 24),
           ),
@@ -372,9 +372,9 @@ class _HygBirthdaysScreenState extends State<HygBirthdaysScreen> {
                     const Text(
                       'Upcoming Birthdays',
                       style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 21,
-                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF0F172A),
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
                         letterSpacing: 0,
                       ),
                     ),
@@ -382,15 +382,15 @@ class _HygBirthdaysScreenState extends State<HygBirthdaysScreen> {
                     // Month Navigation Controls
                     Container(
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1E293B),
+                        color: const Color(0xFFF8FAFC),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: const Color(0xFF334155)),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           IconButton(
-                            icon: const Icon(Icons.chevron_left, color: Colors.white, size: 20),
+                            icon: const Icon(Icons.chevron_left, color: Color(0xFF0F172A), size: 18),
                             onPressed: _previousMonth,
                             padding: const EdgeInsets.all(4),
                             constraints: const BoxConstraints(),
@@ -401,14 +401,14 @@ class _HygBirthdaysScreenState extends State<HygBirthdaysScreen> {
                             child: Text(
                               '$monthName $year',
                               style: const TextStyle(
-                                color: Colors.white,
+                                color: Color(0xFF0F172A),
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.chevron_right, color: Colors.white, size: 20),
+                            icon: const Icon(Icons.chevron_right, color: Color(0xFF0F172A), size: 18),
                             onPressed: _nextMonth,
                             padding: const EdgeInsets.all(4),
                             constraints: const BoxConstraints(),
@@ -421,10 +421,10 @@ class _HygBirthdaysScreenState extends State<HygBirthdaysScreen> {
                       const SizedBox(width: 8),
                       TextButton.icon(
                         onPressed: _resetToCurrentMonth,
-                        icon: const Icon(Icons.today, size: 14, color: Color(0xFF38BDF8)),
+                        icon: const Icon(Icons.today, size: 14, color: Color(0xFF0284C7)),
                         label: const Text(
                           'Current Month',
-                          style: TextStyle(color: Color(0xFF38BDF8), fontSize: 12, fontWeight: FontWeight.w600),
+                          style: TextStyle(color: Color(0xFF0284C7), fontSize: 12, fontWeight: FontWeight.w600),
                         ),
                         style: TextButton.styleFrom(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -439,9 +439,8 @@ class _HygBirthdaysScreenState extends State<HygBirthdaysScreen> {
                 Text(
                   'Employee celebrations and birthdays for $monthName $year.',
                   style: const TextStyle(
-                    color: Color(0xFFCBD5E1),
+                    color: Color(0xFF64748B),
                     fontSize: 13,
-                    fontWeight: FontWeight.w500,
                     letterSpacing: 0,
                   ),
                 ),
@@ -449,7 +448,7 @@ class _HygBirthdaysScreenState extends State<HygBirthdaysScreen> {
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.white),
+            icon: const Icon(Icons.refresh, color: Color(0xFF0F172A), size: 20),
             onPressed: _loadBirthdays,
             tooltip: 'Refresh Employee Birthdays',
           ),
@@ -457,14 +456,18 @@ class _HygBirthdaysScreenState extends State<HygBirthdaysScreen> {
           OutlinedButton.icon(
             onPressed: () => Navigator.of(context).pop(),
             style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.white,
-              side: const BorderSide(color: Color(0xFF334155)),
+              foregroundColor: const Color(0xFF0F172A),
+              side: const BorderSide(color: Color(0xFFCBD5E1)),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(8),
               ),
             ),
-            icon: const Icon(Icons.arrow_back, size: 18),
-            label: const Text('Back'),
+            icon: const Icon(Icons.arrow_back, size: 16),
+            label: const Text(
+              'Back',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
           ),
         ],
       ),

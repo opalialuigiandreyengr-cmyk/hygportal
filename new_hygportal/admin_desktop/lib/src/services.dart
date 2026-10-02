@@ -3201,6 +3201,30 @@ class AdminRequestsService {
     }
   }
 
+  /// Validates an ESARF (or offset) request, updating total hours and adjusting offset balance if applicable.
+  static Future<String> validateEsarfRequest({
+    required String requestId,
+    required double newTotalHours,
+    required double oldTotalHours,
+    required String? userProfileId,
+    String? newReason,
+  }) async {
+    try {
+      final response = await _client.rpc(
+        'admin_validate_esarf_request',
+        params: {
+          'p_request_id': requestId,
+          'p_total_hours': newTotalHours,
+          if (newReason != null && newReason.trim().isNotEmpty)
+            'p_reason': newReason.trim(),
+        },
+      );
+      return response?.toString() ?? 'ESARF request validated successfully.';
+    } catch (e) {
+      throw Exception('Validation failed: $e');
+    }
+  }
+
   static Future<String> updateRequestStatus({
     required String requestId,
     required bool isPerk,
@@ -3838,3 +3862,194 @@ class BadgesDatabaseService {
     }
   }
 }
+
+// ==========================================
+// PORTAL TUTORIALS SERVICE
+// ==========================================
+class TutorialService {
+  static final _client = Supabase.instance.client;
+
+  static String extractYouTubeVideoId(String url) {
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) return '';
+
+    // Direct 11-char ID
+    if (RegExp(r'^[a-zA-Z0-9_-]{11}$').hasMatch(trimmed)) {
+      return trimmed;
+    }
+
+    // Match full or shortened YouTube URLs, embed, shorts
+    final regExp = RegExp(
+      r'(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=|(?:shorts)\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})',
+      caseSensitive: false,
+    );
+    final match = regExp.firstMatch(trimmed);
+    if (match != null && match.groupCount >= 1) {
+      return match.group(1)!;
+    }
+    return '';
+  }
+
+  static String normalizeYouTubeUrl(String url) {
+    final id = extractYouTubeVideoId(url);
+    if (id.isNotEmpty) {
+      return 'https://www.youtube.com/watch?v=$id';
+    }
+    return url.trim();
+  }
+
+  static Future<List<PortalTutorialItem>> getTutorials() async {
+    try {
+      final response = await _client
+          .from('portal_tutorials')
+          .select()
+          .order('sort_order', ascending: true)
+          .order('created_at', ascending: false);
+      return (response as List)
+          .map((row) => PortalTutorialItem.fromMap(row as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      final errStr = e.toString().toLowerCase();
+      if (errStr.contains('portal_tutorials') ||
+          errStr.contains('pgrst202') ||
+          errStr.contains('pgrst205') ||
+          errStr.contains('42p01') ||
+          errStr.contains('schema cache')) {
+        throw Exception(
+          'Database setup required: The "portal_tutorials" table is not created in Supabase yet. '
+          'Please execute migration 0184_create_portal_tutorials_table.sql in your Supabase SQL Editor.',
+        );
+      }
+      debugPrint('Direct portal_tutorials select failed, trying RPC: $e');
+      try {
+        final rpcResponse = await _client.rpc('get_portal_tutorials');
+        return (rpcResponse as List)
+            .map((row) => PortalTutorialItem.fromMap(row as Map<String, dynamic>))
+            .toList();
+      } catch (rpcErr) {
+        final rpcStr = rpcErr.toString().toLowerCase();
+        if (rpcStr.contains('pgrst202') ||
+            rpcStr.contains('pgrst205') ||
+            rpcStr.contains('42p01') ||
+            rpcStr.contains('portal_tutorials')) {
+          throw Exception(
+            'Database setup required: The "portal_tutorials" table is not created in Supabase yet. '
+            'Please execute migration 0184_create_portal_tutorials_table.sql in your Supabase SQL Editor.',
+          );
+        }
+        debugPrint('Error fetching tutorials: $rpcErr');
+        rethrow;
+      }
+    }
+  }
+
+  static Future<PortalTutorialItem> createTutorial({
+    required String title,
+    required String youtubeUrl,
+    String description = '',
+    int sortOrder = 0,
+    bool isActive = true,
+  }) async {
+    final videoId = extractYouTubeVideoId(youtubeUrl);
+    final normalizedUrl = normalizeYouTubeUrl(youtubeUrl);
+    final data = {
+      'title': title.trim(),
+      'youtube_url': normalizedUrl,
+      'video_id': videoId,
+      'description': description.trim(),
+      'sort_order': sortOrder,
+      'is_active': isActive,
+    };
+
+    try {
+      final response = await _client
+          .from('portal_tutorials')
+          .insert(data)
+          .select()
+          .single();
+      return PortalTutorialItem.fromMap(response);
+    } catch (e) {
+      debugPrint('Direct insert failed, attempting RPC: $e');
+      final newId = await _client.rpc('admin_save_portal_tutorial', params: {
+        'p_title': title.trim(),
+        'p_youtube_url': normalizedUrl,
+        'p_video_id': videoId,
+        'p_description': description.trim(),
+        'p_sort_order': sortOrder,
+        'p_is_active': isActive,
+      });
+      return PortalTutorialItem(
+        id: newId?.toString() ?? '',
+        title: title.trim(),
+        youtubeUrl: normalizedUrl,
+        videoId: videoId,
+        description: description.trim(),
+        sortOrder: sortOrder,
+        isActive: isActive,
+        createdAt: DateTime.now(),
+      );
+    }
+  }
+
+  static Future<void> updateTutorial({
+    required String id,
+    required String title,
+    required String youtubeUrl,
+    String description = '',
+    int sortOrder = 0,
+    bool isActive = true,
+  }) async {
+    final videoId = extractYouTubeVideoId(youtubeUrl);
+    final normalizedUrl = normalizeYouTubeUrl(youtubeUrl);
+    final data = {
+      'title': title.trim(),
+      'youtube_url': normalizedUrl,
+      'video_id': videoId,
+      'description': description.trim(),
+      'sort_order': sortOrder,
+      'is_active': isActive,
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+
+    try {
+      await _client.from('portal_tutorials').update(data).eq('id', id);
+    } catch (e) {
+      debugPrint('Direct update failed, attempting RPC: $e');
+      await _client.rpc('admin_save_portal_tutorial', params: {
+        'p_id': id,
+        'p_title': title.trim(),
+        'p_youtube_url': normalizedUrl,
+        'p_video_id': videoId,
+        'p_description': description.trim(),
+        'p_sort_order': sortOrder,
+        'p_is_active': isActive,
+      });
+    }
+  }
+
+  static Future<void> deleteTutorial(String id) async {
+    try {
+      await _client.from('portal_tutorials').delete().eq('id', id);
+    } catch (e) {
+      debugPrint('Direct delete failed, attempting RPC: $e');
+      await _client.rpc('admin_delete_portal_tutorial', params: {'p_id': id});
+    }
+  }
+
+  static Future<void> launchUrlInBrowser(String url) async {
+    final cleanUrl = url.trim();
+    if (cleanUrl.isEmpty) return;
+    try {
+      if (Platform.isWindows) {
+        await Process.run('cmd', ['/c', 'start', '', cleanUrl]);
+      } else if (Platform.isMacOS) {
+        await Process.run('open', [cleanUrl]);
+      } else if (Platform.isLinux) {
+        await Process.run('xdg-open', [cleanUrl]);
+      }
+    } catch (e) {
+      debugPrint('Error launching url in browser: $e');
+    }
+  }
+}
+

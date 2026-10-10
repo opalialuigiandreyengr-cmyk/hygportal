@@ -125,7 +125,7 @@ insert into public.request_types (
   requires_offset_credit_check,
   affects_offset_balance
 )
-select 'use_offset', 'Use Offset', id, 1, true, 'use'
+select 'use_offset', 'Use Offset', id, 2, true, 'use'
 from public.functions where code = 'operations'
 on conflict (code) do nothing;
 
@@ -137,7 +137,7 @@ insert into public.request_types (
   requires_offset_credit_check,
   affects_offset_balance
 )
-select 'leave', 'Leave', id, 1, false, 'none'
+select 'leave', 'Leave', id, 2, false, 'none'
 from public.functions where code = 'operations'
 on conflict (code) do nothing;
 

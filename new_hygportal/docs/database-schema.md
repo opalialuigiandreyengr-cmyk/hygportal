@@ -143,8 +143,8 @@ Seed request types:
 ```text
 overtime      approval_count 2   affects_offset_balance none
 offset_earn   approval_count 2   affects_offset_balance earn
-use_offset    approval_count 1   affects_offset_balance use
-leave         approval_count 1   affects_offset_balance none
+use_offset    approval_count 2   affects_offset_balance use
+leave         approval_count 2   affects_offset_balance none
 ```
 
 Seed approval routes:

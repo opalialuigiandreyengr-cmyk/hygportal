@@ -19,6 +19,14 @@ class EmployeesHeader extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: HygColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
         children: [
@@ -235,15 +243,19 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
     _seedEmployeeFields();
     _seedBodyMetricFields();
     _seedChildFields();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) {
         return;
       }
-      _loadCompanyOptions();
-      _loadDepartmentOptions();
-      _loadStoreOptions();
-      _loadPositionOptions();
-      _loadEmployeeProfileForEdit();
+      await Future.wait([
+        _loadCompanyOptions(),
+        _loadDepartmentOptions(),
+        _loadStoreOptions(),
+        _loadPositionOptions(),
+      ]);
+      if (mounted) {
+        await _loadEmployeeProfileForEdit();
+      }
     });
   }
 
@@ -316,21 +328,32 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
       return;
     }
 
-    final nameParts = employee.name
-        .trim()
-        .split(RegExp(r'\s+'))
-        .where((part) => part.isNotEmpty)
-        .toList();
-    if (nameParts.isNotEmpty) {
-      _firstNameController.text = nameParts.first;
-    }
-    if (nameParts.length > 2) {
-      _middleNameController.text = nameParts
-          .sublist(1, nameParts.length - 1)
-          .join(' ');
-    }
-    if (nameParts.length > 1) {
-      _lastNameController.text = nameParts.last;
+    final hasStructuredName =
+        (employee.firstName != null && employee.firstName!.trim().isNotEmpty) ||
+        (employee.lastName != null && employee.lastName!.trim().isNotEmpty);
+
+    if (hasStructuredName) {
+      _firstNameController.text = employee.firstName ?? '';
+      _middleNameController.text = employee.middleName ?? '';
+      _lastNameController.text = employee.lastName ?? '';
+      _suffixController.text = employee.suffix ?? '';
+    } else {
+      final nameParts = employee.name
+          .trim()
+          .split(RegExp(r'\s+'))
+          .where((part) => part.isNotEmpty)
+          .toList();
+      if (nameParts.isNotEmpty) {
+        _firstNameController.text = nameParts.first;
+      }
+      if (nameParts.length > 2) {
+        _middleNameController.text = nameParts
+            .sublist(1, nameParts.length - 1)
+            .join(' ');
+      }
+      if (nameParts.length > 1) {
+        _lastNameController.text = nameParts.last;
+      }
     }
 
     _emailController.text = employee.email?.trim() ?? '';
@@ -338,10 +361,11 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
     _idNumberController.text = employee.idNumber == 'None'
         ? ''
         : employee.idNumber;
-    _dateHiredController.text =
-        employee.rawHiredDate ?? (employee.hired == '-' ? '' : employee.hired);
+    _dateHiredController.text = _formatLoadedDate(employee.rawHiredDate) ??
+        (employee.hired == '-' ? '' : employee.hired);
     _existingPhotoUrl = employee.photoUrl?.trim();
     _updateAgeFromBirthDate(_birthDateController.text);
+    _updateEmployeeTypeFromDateHired(_dateHiredController.text);
 
     if (employee.companyName.trim().isNotEmpty && employee.companyName != '-') {
       _company = employee.companyName.trim();
@@ -410,90 +434,61 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
     setState(() {
       _firstNameController.text =
           details.firstName ?? _firstNameController.text;
-      _middleNameController.text =
-          details.middleName ?? _middleNameController.text;
+      _middleNameController.text = details.middleName ?? '';
       _lastNameController.text = details.lastName ?? _lastNameController.text;
-      _suffixController.text = details.suffix ?? _suffixController.text;
-      _idNumberController.text = details.idNumber ?? _idNumberController.text;
-      _birthDateController.text =
-          details.birthDate ?? _birthDateController.text;
-      _emailController.text = details.email ?? _emailController.text;
-      _phoneController.text = details.phone ?? _phoneController.text;
-      _otherPhoneController.text =
-          details.otherPhone ?? _otherPhoneController.text;
-      _zipCodeController.text = details.zipCode ?? _zipCodeController.text;
-      _socialMediaTypeController.text =
-          details.socialMediaType ?? _socialMediaTypeController.text;
-      _socialMediaDetailController.text =
-          details.socialMediaDetail ?? _socialMediaDetailController.text;
-      _presentAddressController.text =
-          details.presentAddress ?? _presentAddressController.text;
-      _permanentAddressController.text =
-          details.permanentAddress ?? _permanentAddressController.text;
-      _dateHiredController.text =
-          details.dateHired ?? _dateHiredController.text;
-      if (details.reasonOfInactivity != null) {
-        _reasonOfInactivityController.text = details.reasonOfInactivity!;
+      _suffixController.text = details.suffix ?? '';
+      if (details.idNumber != null && details.idNumber!.isNotEmpty) {
+        _idNumberController.text =
+            details.idNumber == 'None' ? '' : details.idNumber!;
       }
-      if (details.dateInactive != null) {
-        _dateInactiveController.text = details.dateInactive!;
+      _birthDateController.text = _formatLoadedDate(details.birthDate) ?? '';
+      _emailController.text = details.email ?? '';
+      _phoneController.text = details.phone ?? '';
+      _otherPhoneController.text = details.otherPhone ?? '';
+      _zipCodeController.text = details.zipCode ?? '';
+      _socialMediaTypeController.text = details.socialMediaType ?? '';
+      _socialMediaDetailController.text = details.socialMediaDetail ?? '';
+      _presentAddressController.text = details.presentAddress ?? '';
+      _permanentAddressController.text = details.permanentAddress ?? '';
+      if (details.dateHired != null && details.dateHired!.trim().isNotEmpty) {
+        _dateHiredController.text =
+            _formatLoadedDate(details.dateHired) ?? _dateHiredController.text;
       }
+      _reasonOfInactivityController.text = details.reasonOfInactivity ?? '';
+      _dateInactiveController.text = details.dateInactive ?? '';
       if (_employmentStatus.toLowerCase() == 'inactive' &&
           _dateInactiveController.text.trim().isEmpty) {
         _dateInactiveController.text = _todayFormatted;
       }
-      _religionController.text = details.religion ?? _religionController.text;
-      _heightController.text = details.height ?? _heightController.text;
-      _weightController.text = details.weight ?? _weightController.text;
-      _tinController.text = details.tin ?? _tinController.text;
-      _sssController.text = details.sss ?? _sssController.text;
-      _pagibigController.text = details.pagibig ?? _pagibigController.text;
-      _philhealthController.text =
-          details.philhealth ?? _philhealthController.text;
-      _accountNoController.text =
-          details.accountNo ?? _accountNoController.text;
-      _emergencyContactController.text =
-          details.emergencyContact ?? _emergencyContactController.text;
-      _emergencyContactNoController.text =
-          details.emergencyContactNo ?? _emergencyContactNoController.text;
-      _elementarySchoolController.text =
-          details.elementarySchool ?? _elementarySchoolController.text;
-      _elementaryYearController.text =
-          details.elementaryYear ?? _elementaryYearController.text;
-      _secondarySchoolController.text =
-          details.secondarySchool ?? _secondarySchoolController.text;
-      _secondaryYearController.text =
-          details.secondaryYear ?? _secondaryYearController.text;
-      _collegeSchoolController.text =
-          details.collegeSchool ?? _collegeSchoolController.text;
-      _collegeYearController.text =
-          details.collegeYear ?? _collegeYearController.text;
-      _collegeCourseController.text =
-          details.collegeCourse ?? _collegeCourseController.text;
-      _yearGraduatedController.text =
-          details.yearGraduated ?? _yearGraduatedController.text;
-      _fatherNameController.text =
-          details.fatherName ?? _fatherNameController.text;
-      _fatherOccupationController.text =
-          details.fatherOccupation ?? _fatherOccupationController.text;
-      _motherMaidenNameController.text =
-          details.motherMaidenName ?? _motherMaidenNameController.text;
-      _motherOccupationController.text =
-          details.motherOccupation ?? _motherOccupationController.text;
-      _numberOfSiblingsController.text =
-          details.numberOfSiblings ?? _numberOfSiblingsController.text;
-      _birthOrderController.text =
-          details.birthOrder ?? _birthOrderController.text;
-      _spouseNameController.text =
-          details.spouseName ?? _spouseNameController.text;
-      _spouseOccupationController.text =
-          details.spouseOccupation ?? _spouseOccupationController.text;
-      _spouseContactController.text =
-          details.spouseContact ?? _spouseContactController.text;
-      _childrenNamesController.text =
-          details.childrenNames ?? _childrenNamesController.text;
-      _childrenCountController.text =
-          details.childrenCount ?? _childrenCountController.text;
+      _religionController.text = details.religion ?? '';
+      _heightController.text = details.height ?? '';
+      _weightController.text = details.weight ?? '';
+      _tinController.text = details.tin ?? '';
+      _sssController.text = details.sss ?? '';
+      _pagibigController.text = details.pagibig ?? '';
+      _philhealthController.text = details.philhealth ?? '';
+      _accountNoController.text = details.accountNo ?? '';
+      _emergencyContactController.text = details.emergencyContact ?? '';
+      _emergencyContactNoController.text = details.emergencyContactNo ?? '';
+      _elementarySchoolController.text = details.elementarySchool ?? '';
+      _elementaryYearController.text = details.elementaryYear ?? '';
+      _secondarySchoolController.text = details.secondarySchool ?? '';
+      _secondaryYearController.text = details.secondaryYear ?? '';
+      _collegeSchoolController.text = details.collegeSchool ?? '';
+      _collegeYearController.text = details.collegeYear ?? '';
+      _collegeCourseController.text = details.collegeCourse ?? '';
+      _yearGraduatedController.text = details.yearGraduated ?? '';
+      _fatherNameController.text = details.fatherName ?? '';
+      _fatherOccupationController.text = details.fatherOccupation ?? '';
+      _motherMaidenNameController.text = details.motherMaidenName ?? '';
+      _motherOccupationController.text = details.motherOccupation ?? '';
+      _numberOfSiblingsController.text = details.numberOfSiblings ?? '';
+      _birthOrderController.text = details.birthOrder ?? '';
+      _spouseNameController.text = details.spouseName ?? '';
+      _spouseOccupationController.text = details.spouseOccupation ?? '';
+      _spouseContactController.text = details.spouseContact ?? '';
+      _childrenNamesController.text = details.childrenNames ?? '';
+      _childrenCountController.text = details.childrenCount ?? '';
       _seedBodyMetricFields();
       _seedChildFields();
 
@@ -546,6 +541,9 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
     });
 
     _updateAgeFromBirthDate(_birthDateController.text);
+    if (widget.employee == null) {
+      _updateEmployeeTypeFromDateHired(_dateHiredController.text);
+    }
   }
 
   void _updateAgeFromBirthDate(String dateText) {
@@ -568,6 +566,55 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
       age -= 1;
     }
     _ageController.text = age < 0 ? '' : age.toString();
+  }
+
+  void _updateEmployeeTypeFromDateHired(String dateText) {
+    final currentType = _employeeType.trim().toLowerCase();
+    if (currentType != 'probationary' && currentType != 'trainee') return;
+
+    final parsed = _parseDate(dateText, required: false);
+    if (parsed == null) return;
+    final hiredDate = DateTime.tryParse(parsed);
+    if (hiredDate == null) return;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    // 6 months anniversary
+    final totalMonths6 = hiredDate.month + 6;
+    final targetYear6 = hiredDate.year + (totalMonths6 - 1) ~/ 12;
+    final targetMonth6 = ((totalMonths6 - 1) % 12) + 1;
+    final daysInTargetMonth6 = DateTime(targetYear6, targetMonth6 + 1, 0).day;
+    final targetDay6 =
+        hiredDate.day > daysInTargetMonth6 ? daysInTargetMonth6 : hiredDate.day;
+    final sixMonthsAnniversary = DateTime(
+      targetYear6,
+      targetMonth6,
+      targetDay6,
+    );
+
+    // 1 month anniversary
+    final totalMonths1 = hiredDate.month + 1;
+    final targetYear1 = hiredDate.year + (totalMonths1 - 1) ~/ 12;
+    final targetMonth1 = ((totalMonths1 - 1) % 12) + 1;
+    final daysInTargetMonth1 = DateTime(targetYear1, targetMonth1 + 1, 0).day;
+    final targetDay1 =
+        hiredDate.day > daysInTargetMonth1 ? daysInTargetMonth1 : hiredDate.day;
+    final oneMonthAnniversary = DateTime(
+      targetYear1,
+      targetMonth1,
+      targetDay1,
+    );
+
+    if (!today.isBefore(sixMonthsAnniversary)) {
+      setState(() {
+        _employeeType = 'Regular';
+      });
+    } else if (currentType == 'trainee' &&
+        !today.isBefore(oneMonthAnniversary)) {
+      setState(() {
+        _employeeType = 'Probationary';
+      });
+    }
   }
 
   String get _todayFormatted {
@@ -1233,6 +1280,16 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
     return value == 'Select' ? null : value;
   }
 
+  String? _formatLoadedDate(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return null;
+    final trimmed = raw.trim();
+    final parsed = DateTime.tryParse(trimmed);
+    if (parsed != null) {
+      return '${parsed.month.toString().padLeft(2, '0')}/${parsed.day.toString().padLeft(2, '0')}/${parsed.year}';
+    }
+    return trimmed;
+  }
+
   String? _parseDate(String value, {bool required = true}) {
     final trimmed = value.trim();
     if (trimmed.isEmpty) {
@@ -1657,7 +1714,12 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
                             hint: 'mm/dd/yyyy',
                             trailingIcon: Icons.calendar_today,
                             controller: _dateHiredController,
-                            onTap: () => _selectDateField(_dateHiredController),
+                            onTap: () => _selectDateField(
+                              _dateHiredController,
+                              onDateSelected: () {
+                                _updateEmployeeTypeFromDateHired(_dateHiredController.text);
+                              },
+                            ),
                           ),
                           ModalSelectField(
                             label: 'Employee Type',
@@ -2824,6 +2886,7 @@ class _EmployeesPanelState extends State<EmployeesPanel> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
+        border: Border.all(color: HygColors.border),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Column(

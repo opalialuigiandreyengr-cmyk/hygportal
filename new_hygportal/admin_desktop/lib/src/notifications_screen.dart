@@ -1488,88 +1488,103 @@ class _HygNotificationsScreenState extends State<HygNotificationsScreen> {
   }
 
   Widget _buildHeader(BuildContext context) {
-    return Row(
-      children: [
-        InkWell(
-          onTap: () => Navigator.of(context).pop(),
-          borderRadius: BorderRadius.circular(10),
-          child: Container(
-            width: 40,
-            height: 40,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: HygColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          InkWell(
+            onTap: () => Navigator.of(context).pop(),
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFCBD5E1)),
+              ),
+              child: const Icon(
+                Icons.arrow_back_rounded,
+                color: Color(0xFF334155),
+                size: 20,
+              ),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Container(
+            width: 42,
+            height: 42,
             decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFFCBD5E1)),
+              color: const Color(0xFFFEF3C7),
+              borderRadius: BorderRadius.circular(12),
             ),
             child: const Icon(
-              Icons.arrow_back_rounded,
-              color: Color(0xFF334155),
-              size: 20,
+              Icons.notifications_active_rounded,
+              color: Color(0xFFD97706),
+              size: 22,
             ),
           ),
-        ),
-        const SizedBox(width: 14),
-        Container(
-          width: 42,
-          height: 42,
-          decoration: BoxDecoration(
-            color: const Color(0xFFFEF3C7),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: const Icon(
-            Icons.notifications_active_rounded,
-            color: Color(0xFFD97706),
-            size: 22,
-          ),
-        ),
-        const SizedBox(width: 14),
-        const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Notifications & Activity Center',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF0F172A),
-                letterSpacing: -0.4,
+          const SizedBox(width: 14),
+          const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Notifications & Activity Center',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF0F172A),
+                  letterSpacing: -0.4,
+                ),
               ),
-            ),
-            SizedBox(height: 2),
-            Text(
-              'Real-time feed of employee requests, account activities, and approvals',
-              style: TextStyle(
-                fontSize: 13,
-                color: Color(0xFF64748B),
+              SizedBox(height: 2),
+              Text(
+                'Real-time feed of employee requests, account activities, and approvals',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Color(0xFF64748B),
+                ),
               ),
+            ],
+          ),
+          const Spacer(),
+          OutlinedButton.icon(
+            onPressed: () => AdminNotificationsService.markAllAsRead(),
+            icon: const Icon(Icons.done_all_rounded, size: 16),
+            label: const Text('Mark All Read'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFF334155),
+              side: const BorderSide(color: Color(0xFFCBD5E1)),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
-          ],
-        ),
-        const Spacer(),
-        OutlinedButton.icon(
-          onPressed: () => AdminNotificationsService.markAllAsRead(),
-          icon: const Icon(Icons.done_all_rounded, size: 16),
-          label: const Text('Mark All Read'),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: const Color(0xFF334155),
-            side: const BorderSide(color: Color(0xFFCBD5E1)),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           ),
-        ),
-        const SizedBox(width: 10),
-        ElevatedButton.icon(
-          onPressed: _refresh,
-          icon: const Icon(Icons.refresh_rounded, size: 16),
-          label: const Text('Refresh'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF2563EB),
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          const SizedBox(width: 10),
+          ElevatedButton.icon(
+            onPressed: _refresh,
+            icon: const Icon(Icons.refresh_rounded, size: 16),
+            label: const Text('Refresh'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2563EB),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -1647,7 +1662,7 @@ class _HygNotificationsScreenState extends State<HygNotificationsScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: HygColors.border),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.02),
@@ -1700,7 +1715,7 @@ class _HygNotificationsScreenState extends State<HygNotificationsScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: HygColors.border),
       ),
       child: Column(
         children: [
@@ -1893,7 +1908,7 @@ class _HygNotificationsScreenState extends State<HygNotificationsScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: item.isRead ? const Color(0xFFE2E8F0) : const Color(0xFFBFDBFE),
+          color: item.isRead ? HygColors.border : const Color(0xFFBFDBFE),
           width: item.isRead ? 1 : 1.5,
         ),
         boxShadow: [

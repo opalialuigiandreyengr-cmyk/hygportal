@@ -14,12 +14,13 @@ class PointsManagementHeader extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: const [
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: HygColors.border),
+        boxShadow: [
           BoxShadow(
-            color: Color(0x08000000),
-            blurRadius: 8,
-            offset: Offset(0, 2),
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -113,7 +114,7 @@ class PointsManagementSearchBar extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
+        border: Border.all(color: HygColors.border),
       ),
       child: TextField(
         controller: controller,
@@ -1028,7 +1029,7 @@ class _PointsManagementPanelState extends State<PointsManagementPanel> {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
+            border: Border.all(color: HygColors.border),
             boxShadow: const [
               BoxShadow(
                 color: Color(0x06000000),
@@ -1256,7 +1257,7 @@ class _PointsFilterDropdown extends StatelessWidget {
         color: enabled ? Colors.white : const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: enabled ? const Color(0xFFE2E8F0) : const Color(0xFFE2E8F0).withValues(alpha: 0.7),
+          color: enabled ? HygColors.border : HygColors.border.withValues(alpha: 0.7),
           width: 1.2,
         ),
       ),
@@ -1313,7 +1314,7 @@ class _PointsStatCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: HygColors.border),
         boxShadow: const [
           BoxShadow(
             color: Color(0x06000000),

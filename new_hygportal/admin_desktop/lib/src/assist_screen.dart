@@ -106,7 +106,7 @@ class _HygAssistScreenState extends State<HygAssistScreen> {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                    border: Border.all(color: HygColors.border),
                   ),
                   child: ListView.separated(
                     controller: _scrollController,
@@ -141,6 +141,13 @@ class _HygAssistScreenState extends State<HygAssistScreen> {
         color: HygColors.panel,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: const Color(0xFF1E3A5F)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.2),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
         children: [

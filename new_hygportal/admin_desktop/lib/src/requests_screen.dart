@@ -181,6 +181,14 @@ class RequestsHeader extends StatelessWidget {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: HygColors.border),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
             child: Row(
               children: [
@@ -4521,17 +4529,21 @@ class _RequestDetailModal extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       backgroundColor: Colors.white,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 860, maxHeight: 780),
+        constraints: const BoxConstraints(
+          maxWidth: 580,
+          maxHeight: 780,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Header Bar in HygColors.ink
+            // Header Bar (White)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
               decoration: const BoxDecoration(
-                color: HygColors.ink,
+                color: Colors.white,
                 borderRadius: BorderRadius.vertical(top: Radius.circular(10)),
+                border: Border(bottom: BorderSide(color: HygColors.border)),
               ),
               child: Row(
                 children: [
@@ -4552,7 +4564,7 @@ class _RequestDetailModal extends StatelessWidget {
                       children: [
                         Text(
                           item.employeeName ?? 'Employee Request Details',
-                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                          style: const TextStyle(color: HygColors.ink, fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 2),
                         Row(
@@ -4561,19 +4573,19 @@ class _RequestDetailModal extends StatelessWidget {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                                 decoration: BoxDecoration(
-                                  color: HygColors.gold.withValues(alpha: 0.2),
+                                  color: const Color(0xFFFEF3C7),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Text(
                                   'Emp #${item.employeeNo}',
-                                  style: const TextStyle(color: HygColors.gold, fontSize: 11, fontWeight: FontWeight.w600),
+                                  style: const TextStyle(color: Color(0xFFB45309), fontSize: 11, fontWeight: FontWeight.w600),
                                 ),
                               ),
                               const SizedBox(width: 8),
                             ],
                             Text(
                               '${item.departmentName ?? 'Department'} • ${item.storeName ?? 'Store'}',
-                              style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                              style: const TextStyle(color: Color(0xFF64748B), fontSize: 11),
                             ),
                           ],
                         ),
@@ -4581,7 +4593,7 @@ class _RequestDetailModal extends StatelessWidget {
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white70, size: 20),
+                    icon: const Icon(Icons.close, color: Color(0xFF64748B), size: 20),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                 ],
@@ -4591,52 +4603,36 @@ class _RequestDetailModal extends StatelessWidget {
             // Content Body
             Flexible(
               child: SingleChildScrollView(
-                padding: isEsarf ? EdgeInsets.zero : const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // ESARF Table Layout
+                    // ESARF Layout
                     if (isEsarf) ...[
                       _buildEsarfEntriesTable(context, item, entries),
                     ] else ...[
                       // Leave & Perk Details
                       _buildNonEsarfDetails(context, item),
-                    ],
 
-                    // Global Reason (Only for Non-ESARF)
-                    if (!isEsarf && ((item.reason != null && item.reason!.isNotEmpty) || (item.remarks != null && item.remarks!.isNotEmpty))) ...[
-                      const SizedBox(height: 14),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: HygColors.background,
-                          border: Border.all(color: HygColors.border),
-                          borderRadius: BorderRadius.circular(8),
+                      // Global Reason (Only for Non-ESARF)
+                      if ((item.reason != null && item.reason!.isNotEmpty) || (item.remarks != null && item.remarks!.isNotEmpty) || item.proofs.isNotEmpty) ...[
+                        const SizedBox(height: 14),
+                        _buildReasonCard(
+                          context,
+                          item,
+                          item.cleanReasonText.isNotEmpty ? item.cleanReasonText : (item.reason ?? item.remarks ?? '—'),
+                          item.proofs,
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('Reason / Remarks', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: HygColors.muted)),
-                            const SizedBox(height: 4),
-                            Text(
-                              item.reason ?? item.remarks ?? '—',
-                              style: const TextStyle(fontSize: 12, color: HygColors.ink),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                      ],
 
-                    // Global Workflow Timeline (Only for Non-ESARF)
-                    if (!isEsarf && (item.approvalSummary.isNotEmpty || item.isAutoApprovedBirthdayGrant)) ...[
-                      const SizedBox(height: 14),
-                      const Text(
-                        'Approval Workflow Timeline',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: HygColors.ink),
-                      ),
-                      const SizedBox(height: 8),
-                      _buildGlobalApprovalTimeline(context, item),
+                      // Global Workflow Timeline (Only for Non-ESARF)
+                      if (item.approvalSummary.isNotEmpty || item.isAutoApprovedBirthdayGrant) ...[
+                        const SizedBox(height: 14),
+                        _buildApprovalTimelineCard(
+                          context,
+                          _buildGlobalApprovalTimeline(context, item),
+                        ),
+                      ],
                     ],
                   ],
                 ),
@@ -4689,195 +4685,845 @@ class _RequestDetailModal extends StatelessWidget {
               totalHours: item.totalHours,
               reason: item.reason,
               status: item.status,
+              proofUrl: item.proofUrl,
+              proofTime: item.proofTime,
+              proofLocation: item.proofLocation,
+              proofId: item.proofId,
+              proofs: item.proofs,
             ),
           ];
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: HygColors.border),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
+    if (list.length > 1) {
+      return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Table Header Bar
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            color: const Color(0xFF0F172A),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
             child: Row(
-              children: const [
-                Expanded(flex: 3, child: Text('ENTRY', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold))),
-                Expanded(flex: 3, child: Text('DATE', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold))),
-                Expanded(flex: 5, child: Text('TIME', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold))),
-                Expanded(flex: 4, child: Text('SCHEDULE', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold))),
-                Expanded(flex: 2, child: Text('HRS', style: TextStyle(color: HygColors.gold, fontSize: 12, fontWeight: FontWeight.bold))),
-                Expanded(flex: 2, child: Text('DAY OFF', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold))),
-                Expanded(flex: 3, child: Align(alignment: Alignment.centerRight, child: Text('STATUS', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)))),
+              children: [
+                const Icon(Icons.layers_outlined, size: 16, color: HygColors.ink),
+                const SizedBox(width: 6),
+                Text(
+                  'Request Entries (${list.length})',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: HygColors.ink,
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFBFDBFE)),
+                  ),
+                  child: Text(
+                    '${list.length} separate entries',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1D4ED8),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
-
-          // Table Rows
           for (int i = 0; i < list.length; i++) ...[
-            _buildEsarfEntryTableRow(context, item, list[i], i + 1, isEven: i % 2 == 0),
-            if (i < list.length - 1) const Divider(height: 1, color: HygColors.border),
+            Container(
+              margin: const EdgeInsets.only(bottom: 14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border.all(color: HygColors.border),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildEntryTopHeader(item, list[i], i + 1),
+                  const SizedBox(height: 12),
+                  const Divider(height: 1, color: HygColors.border),
+                  const SizedBox(height: 12),
+                  _buildDetailGrid(_buildEsarfEntryGridItems(list[i]), cols: 3),
+                  if (list[i].cleanReasonText.isNotEmpty || list[i].proofs.isNotEmpty || (list[i].proofUrl != null && list[i].proofUrl!.isNotEmpty)) ...[
+                    const SizedBox(height: 12),
+                    _buildReasonCard(
+                      context,
+                      item,
+                      list[i].cleanReasonText,
+                      list[i].proofs,
+                      photoTitlePrefix: 'Request #${i + 1} (${list[i].txAbbr})',
+                      fallbackProofUrl: list[i].proofUrl,
+                      fallbackProofTime: list[i].proofTime,
+                      fallbackProofLocation: list[i].proofLocation,
+                      fallbackProofId: list[i].proofId,
+                    ),
+                  ],
+                  if (item.approvalSummary.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    _buildApprovalTimelineCard(
+                      context,
+                      _buildApprovalTimelineForEntry(context, item, list[i]),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ],
+      );
+    }
+
+    // Single entry ESARF
+    final entry = list.first;
+    final singleReason = entry.cleanReasonText.isNotEmpty
+        ? entry.cleanReasonText
+        : (item.cleanReasonText.isNotEmpty
+            ? item.cleanReasonText
+            : (item.reason ?? item.remarks ?? ''));
+    final singleProofs = entry.proofs.isNotEmpty ? entry.proofs : item.proofs;
+    final singleProofUrl = (entry.proofUrl != null && entry.proofUrl!.isNotEmpty)
+        ? entry.proofUrl
+        : item.proofUrl;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Entry Details Card
+        Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border.all(color: HygColors.border),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildEntryTopHeader(item, entry, 1),
+              const SizedBox(height: 12),
+              const Divider(height: 1, color: HygColors.border),
+              const SizedBox(height: 12),
+              _buildDetailGrid(_buildEsarfEntryGridItems(entry), cols: 3),
+            ],
+          ),
+        ),
+
+        // Reason Card
+        if (singleReason.isNotEmpty || singleProofs.isNotEmpty || (singleProofUrl != null && singleProofUrl.isNotEmpty)) ...[
+          const SizedBox(height: 14),
+          _buildReasonCard(
+            context,
+            item,
+            singleReason,
+            singleProofs,
+            photoTitlePrefix: 'Request #1 (${entry.txAbbr})',
+            fallbackProofUrl: singleProofUrl,
+            fallbackProofTime: entry.proofTime ?? item.proofTime,
+            fallbackProofLocation: entry.proofLocation ?? item.proofLocation,
+            fallbackProofId: entry.proofId ?? item.proofId,
+          ),
+        ],
+
+        // Approval Workflow Timeline
+        if (item.approvalSummary.isNotEmpty || item.isAutoApprovedBirthdayGrant) ...[
+          const SizedBox(height: 14),
+          _buildApprovalTimelineCard(
+            context,
+            _buildApprovalTimelineForEntry(context, item, entry),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildEntryTopHeader(AdminRequestItem item, EsarfEntryItem entry, int index) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFEF3C7),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(
+            '#$index',
+            style: const TextStyle(
+              color: Color(0xFFB45309),
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+          decoration: BoxDecoration(
+            color: const Color(0xFFEFF6FF),
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: const Color(0xFFBFDBFE)),
+          ),
+          child: Text(
+            entry.txAbbr,
+            style: const TextStyle(
+              color: Color(0xFF1D4ED8),
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        const Spacer(),
+        _buildStatusBadge(
+          entry.isRejected
+              ? 'rejected'
+              : (item.status.trim().toLowerCase() == 'validated'
+                  ? 'validated'
+                  : (entry.status ?? item.status)),
+        ),
+      ],
+    );
+  }
+
+  List<(String, String)> _buildEsarfEntryGridItems(EsarfEntryItem entry) {
+    final items = <(String, String)>[
+      ('Date', entry.datesText.isNotEmpty ? entry.datesText : '—'),
+      ('Time', entry.timesText.isNotEmpty ? entry.timesText : '—'),
+      ('Total Hours', entry.totalHours != null ? '${entry.totalHours!.toStringAsFixed(1)} hrs' : '—'),
+      ('Schedule', entry.timeScheduleText.isNotEmpty ? entry.timeScheduleText : '—'),
+      ('Day Off', entry.dayOffText.isNotEmpty ? entry.dayOffText : '—'),
+    ];
+    if (entry.payrollClass != null && entry.payrollClass!.isNotEmpty) {
+      items.add(('Payroll Class', entry.payrollClass!));
+    }
+    return items;
+  }
+
+  Widget _buildReasonCard(
+    BuildContext context,
+    AdminRequestItem item,
+    String reasonText,
+    List<RequestProofItem> proofs, {
+    String? photoTitlePrefix,
+    String? fallbackProofUrl,
+    String? fallbackProofTime,
+    String? fallbackProofLocation,
+    String? fallbackProofId,
+  }) {
+    final hasReason = reasonText.trim().isNotEmpty;
+    final allProofs = proofs.isNotEmpty
+        ? proofs
+        : (fallbackProofUrl != null && fallbackProofUrl.isNotEmpty
+            ? [
+                RequestProofItem(
+                  proofUrl: fallbackProofUrl,
+                  proofTime: fallbackProofTime ?? item.proofTime,
+                  proofLocation: fallbackProofLocation ?? item.proofLocation,
+                  proofId: fallbackProofId ?? item.proofId,
+                )
+              ]
+            : <RequestProofItem>[]);
+
+    if (!hasReason && allProofs.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: HygColors.background,
+        border: Border.all(color: HygColors.border),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Reason / Remarks',
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: HygColors.muted),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            hasReason ? reasonText : '—',
+            style: const TextStyle(fontSize: 12, color: HygColors.ink),
+          ),
+          if (allProofs.isNotEmpty) ...[
+            if (allProofs.length > 1) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(Icons.collections_outlined, size: 13, color: Color(0xFF64748B)),
+                  const SizedBox(width: 5),
+                  Text(
+                    'Attached Photos (${allProofs.length})',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF64748B),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            for (int pIdx = 0; pIdx < allProofs.length; pIdx++) ...[
+              _buildProofAttachmentCard(
+                context,
+                allProofs[pIdx].proofUrl,
+                photoIndex: pIdx,
+                totalPhotos: allProofs.length,
+                allProofs: allProofs,
+                title: allProofs.length > 1
+                    ? 'Photo Proof #${pIdx + 1} • ${photoTitlePrefix ?? item.requestTypeName}'
+                    : 'Photo Proof • ${photoTitlePrefix ?? item.requestTypeName}',
+                proofTime: allProofs[pIdx].proofTime ?? item.proofTime,
+                proofLocation: allProofs[pIdx].proofLocation ?? item.proofLocation,
+                proofId: allProofs[pIdx].proofId ?? item.proofId,
+                employeeName: item.employeeName,
+                employeeId: item.employeeId,
+                storeName: item.storeName,
+                department: item.departmentName,
+              ),
+            ],
           ],
         ],
       ),
     );
   }
 
-  Widget _buildEsarfEntryTableRow(BuildContext context, AdminRequestItem item, EsarfEntryItem entry, int index, {required bool isEven}) {
+  Widget _buildApprovalTimelineCard(BuildContext context, Widget timelineContent) {
     return Container(
-      color: isEven ? Colors.white : const Color(0xFFF8FAFC),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: HygColors.background,
+        border: Border.all(color: HygColors.border),
+        borderRadius: BorderRadius.circular(8),
+      ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // Entry # & Type Badge
-              Expanded(
-                flex: 3,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('#$index', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: HygColors.ink)),
-                    const SizedBox(width: 5),
-                    Flexible(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFEFF6FF),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          entry.txAbbr,
-                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF1E40AF)),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Date
-              Expanded(
-                flex: 3,
-                child: Text(
-                  entry.datesText.isNotEmpty ? entry.datesText : '—',
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: HygColors.ink),
-                ),
-              ),
-
-              // Time
-              Expanded(
-                flex: 5,
-                child: Text(
-                  entry.timesText.isNotEmpty ? entry.timesText : '—',
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: HygColors.ink),
-                ),
-              ),
-
-              // Schedule
-              Expanded(
-                flex: 4,
-                child: Text(
-                  entry.timeScheduleText.isNotEmpty ? entry.timeScheduleText : '—',
-                  style: const TextStyle(fontSize: 12, color: Color(0xFF475569)),
-                ),
-              ),
-
-              // Hrs
-              Expanded(
-                flex: 2,
-                child: Text(
-                  entry.totalHours != null ? '${entry.totalHours!.toStringAsFixed(1)}h' : '—',
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Color(0xFF2563EB)),
-                ),
-              ),
-
-              // Day Off
-              Expanded(
-                flex: 2,
-                child: Text(
-                  entry.dayOffText.isNotEmpty ? entry.dayOffText : '—',
-                  style: const TextStyle(fontSize: 12, color: Color(0xFF475569)),
-                ),
-              ),
-
-              // Status (Aligned Right)
-              Expanded(
-                flex: 3,
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: _buildStatusBadge(
-                    entry.isRejected
-                        ? 'rejected'
-                        : (item.status.trim().toLowerCase() == 'validated'
-                            ? 'validated'
-                            : (entry.status ?? item.status)),
-                  ),
+            children: const [
+              Icon(Icons.account_tree_outlined, size: 14, color: Color(0xFF64748B)),
+              SizedBox(width: 6),
+              Text(
+                'Approval Workflow Timeline',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF64748B),
                 ),
               ),
             ],
           ),
+          const SizedBox(height: 8),
+          timelineContent,
+        ],
+      ),
+    );
+  }
 
-          // Note / Reason (Rendered below main row metrics)
-          if (entry.cleanReasonText.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Padding(
-              padding: const EdgeInsets.only(left: 2, top: 2, bottom: 2),
-              child: RichText(
-                text: TextSpan(
-                  style: HygTypography.body.copyWith(fontSize: 12, color: HygColors.ink),
+  static Future<void> _launchUrlInBrowser(String url) async {
+    final cleanUrl = url.trim();
+    if (cleanUrl.isEmpty) return;
+    try {
+      if (Platform.isWindows) {
+        await Process.run('cmd', ['/c', 'start', '', cleanUrl]);
+      } else if (Platform.isMacOS) {
+        await Process.run('open', [cleanUrl]);
+      } else if (Platform.isLinux) {
+        await Process.run('xdg-open', [cleanUrl]);
+      }
+    } catch (e) {
+      debugPrint('Error launching url in browser: $e');
+    }
+  }
+
+  static String _getDirectProofImageUrl(String url) {
+    final trimmed = url.trim();
+    final lh3Match = RegExp(r'googleusercontent\.com/d/([a-zA-Z0-9_-]+)', caseSensitive: false).firstMatch(trimmed);
+    if (lh3Match != null) {
+      return 'https://lh3.googleusercontent.com/d/${lh3Match.group(1)}=w1000';
+    }
+    final driveMatch1 = RegExp(r'drive\.google\.com/file/d/([a-zA-Z0-9_-]+)', caseSensitive: false).firstMatch(trimmed);
+    if (driveMatch1 != null) {
+      return 'https://lh3.googleusercontent.com/d/${driveMatch1.group(1)}=w1000';
+    }
+    final driveMatch2 = RegExp(r'drive\.google\.com/open\?id=([a-zA-Z0-9_-]+)', caseSensitive: false).firstMatch(trimmed);
+    if (driveMatch2 != null) {
+      return 'https://lh3.googleusercontent.com/d/${driveMatch2.group(1)}=w1000';
+    }
+    final driveMatch3 = RegExp(r'drive\.google\.com/uc\?(?:export=view&)?id=([a-zA-Z0-9_-]+)', caseSensitive: false).firstMatch(trimmed);
+    if (driveMatch3 != null) {
+      return 'https://lh3.googleusercontent.com/d/${driveMatch3.group(1)}=w1000';
+    }
+    return trimmed;
+  }
+
+  static String? _extractDriveFileId(String url) {
+    final trimmed = url.trim();
+    final lh3Match = RegExp(r'googleusercontent\.com/d/([a-zA-Z0-9_-]+)', caseSensitive: false).firstMatch(trimmed);
+    if (lh3Match != null) return lh3Match.group(1);
+    final driveMatch1 = RegExp(r'drive\.google\.com/file/d/([a-zA-Z0-9_-]+)', caseSensitive: false).firstMatch(trimmed);
+    if (driveMatch1 != null) return driveMatch1.group(1);
+    final driveMatch2 = RegExp(r'drive\.google\.com/open\?id=([a-zA-Z0-9_-]+)', caseSensitive: false).firstMatch(trimmed);
+    if (driveMatch2 != null) return driveMatch2.group(1);
+    final driveMatch3 = RegExp(r'drive\.google\.com/uc\?(?:export=view&)?id=([a-zA-Z0-9_-]+)', caseSensitive: false).firstMatch(trimmed);
+    if (driveMatch3 != null) return driveMatch3.group(1);
+    if (RegExp(r'^[a-zA-Z0-9_-]{25,50}$').hasMatch(trimmed)) return trimmed;
+    return null;
+  }
+
+  static void _showProofPreviewDialog(
+    BuildContext context,
+    String rawUrl, {
+    String? title,
+    String? proofTime,
+    String? proofLocation,
+    String? proofId,
+    String? employeeName,
+    String? employeeId,
+    String? storeName,
+    String? department,
+    List<RequestProofItem>? allProofs,
+    int initialIndex = 0,
+  }) {
+    showDialog(
+      context: context,
+      builder: (ctx) => _RequestProofPreviewDialog(
+        rawUrl: rawUrl,
+        title: title,
+        proofTime: proofTime,
+        proofLocation: proofLocation,
+        proofId: proofId,
+        employeeName: employeeName,
+        employeeId: employeeId,
+        storeName: storeName,
+        department: department,
+        allProofs: allProofs,
+        initialIndex: initialIndex,
+      ),
+    );
+  }
+
+  static void _unusedLegacyProofPreviewDialog(BuildContext context, String rawUrl, {String? title}) {
+    final directUrl = _getDirectProofImageUrl(rawUrl);
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 30),
+        child: Container(
+          width: 720,
+          constraints: const BoxConstraints(maxHeight: 800),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x33000000),
+                blurRadius: 24,
+                offset: Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Header Bar
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF0F172A),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
+                ),
+                child: Row(
                   children: [
-                    const TextSpan(
-                      text: 'Note / Reason: ',
-                      style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF64748B)),
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0284C7).withValues(alpha: 0.25),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Icon(Icons.photo_camera_outlined, color: Color(0xFF38BDF8), size: 16),
                     ),
-                    TextSpan(text: entry.cleanReasonText),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        title ?? 'Attached Photo Proof',
+                        style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.open_in_new, color: Colors.white70, size: 18),
+                      tooltip: 'Open in Browser',
+                      onPressed: () => _launchUrlInBrowser(rawUrl),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.copy, color: Colors.white70, size: 18),
+                      tooltip: 'Copy Link',
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: rawUrl));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Proof URL copied to clipboard'),
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white70, size: 20),
+                      onPressed: () => Navigator.of(ctx).pop(),
+                    ),
                   ],
                 ),
               ),
-            ),
-          ],
 
-          // Embedded Approval Timeline
-          if (item.approvalSummary.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.account_tree_outlined, size: 14, color: Color(0xFF64748B)),
-                      const SizedBox(width: 5),
-                      Text(
-                        'Approval Timeline',
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF64748B)),
-                      ),
-                    ],
+              // Image Preview Area with InteractiveViewer
+              Flexible(
+                child: Container(
+                  color: Colors.white,
+                  constraints: const BoxConstraints(minHeight: 280, maxHeight: 580),
+                  alignment: Alignment.center,
+                  child: InteractiveViewer(
+                    panEnabled: true,
+                    boundaryMargin: const EdgeInsets.all(20),
+                    minScale: 0.8,
+                    maxScale: 4.0,
+                    child: Image.network(
+                      directUrl,
+                      fit: BoxFit.contain,
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        final total = loadingProgress.expectedTotalBytes;
+                        final current = loadingProgress.cumulativeBytesLoaded;
+                        return Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const CircularProgressIndicator(color: Color(0xFF0284C7)),
+                              const SizedBox(height: 12),
+                              Text(
+                                total != null
+                                    ? 'Loading proof: ${(current / total * 100).toInt()}%'
+                                    : 'Loading photo proof...',
+                                style: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                      errorBuilder: (context, error, stackTrace) {
+                        return Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.broken_image_outlined, color: Color(0xFF94A3B8), size: 48),
+                              const SizedBox(height: 12),
+                              const Text(
+                                'Unable to preview image directly in-app.',
+                                style: TextStyle(color: Color(0xFF0F172A), fontSize: 13, fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 6),
+                              const Text(
+                                'The image may be hosted on an external drive or require browser authentication.',
+                                style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 16),
+                              ElevatedButton.icon(
+                                onPressed: () => _launchUrlInBrowser(rawUrl),
+                                icon: const Icon(Icons.open_in_new, size: 16),
+                                label: const Text('Open Photo Proof in Browser'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF0284C7),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
                   ),
-                  const SizedBox(height: 6),
-                  _buildApprovalTimelineForEntry(context, item, entry),
-                ],
+                ),
               ),
-            ),
-          ],
-        ],
+
+              // Footer Bar
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.vertical(bottom: Radius.circular(14)),
+                  border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        rawUrl,
+                        style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    OutlinedButton.icon(
+                      onPressed: () => _launchUrlInBrowser(rawUrl),
+                      icon: const Icon(Icons.open_in_new, size: 14),
+                      label: const Text('Open in Browser', style: TextStyle(fontSize: 12)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF0F172A),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0F172A),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      ),
+                      child: const Text('Close', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProofAttachmentCard(
+    BuildContext context,
+    String proofUrl, {
+    int? photoIndex,
+    int? totalPhotos,
+    List<RequestProofItem>? allProofs,
+    String? title,
+    String? proofTime,
+    String? proofLocation,
+    String? proofId,
+    String? employeeName,
+    String? employeeId,
+    String? storeName,
+    String? department,
+  }) {
+    final directUrl = _getDirectProofImageUrl(proofUrl);
+
+    final isMulti = totalPhotos != null && totalPhotos > 1;
+    final photoBadgeLabel = isMulti ? 'Photo #${(photoIndex ?? 0) + 1}' : 'Photo Proof';
+
+    String timeBadgeText = isMulti ? 'Photo #${(photoIndex ?? 0) + 1} Attached' : 'Photo Proof Attached';
+    if (proofTime != null && proofTime.trim().isNotEmpty) {
+      try {
+        final dt = DateTime.parse(proofTime.trim());
+        final ph = dt.toUtc().add(const Duration(hours: 8));
+        const months = ['Jan.', 'Feb.', 'Mar.', 'Apr.', 'May', 'Jun.', 'Jul.', 'Aug.', 'Sept.', 'Oct.', 'Nov.', 'Dec.'];
+        final m = months[ph.month - 1];
+        final d = ph.day.toString().padLeft(2, '0');
+        final y = ph.year;
+        final hour12 = ph.hour == 0 ? 12 : (ph.hour > 12 ? ph.hour - 12 : ph.hour);
+        final min = ph.minute.toString().padLeft(2, '0');
+        final ampm = ph.hour >= 12 ? 'PM' : 'AM';
+        timeBadgeText = '$m $d, $y • $hour12:$min $ampm';
+      } catch (_) {}
+    }
+
+    final locationSubtitle = (proofLocation != null && proofLocation.trim().isNotEmpty)
+        ? proofLocation.trim()
+        : '';
+    return Padding(
+      padding: EdgeInsets.only(top: isMulti && (photoIndex ?? 0) > 0 ? 4 : 6, bottom: 2),
+      child: InkWell(
+        onTap: () => _showProofPreviewDialog(
+          context,
+          proofUrl,
+          title: title,
+          proofTime: proofTime,
+          proofLocation: proofLocation,
+          proofId: proofId,
+          employeeName: employeeName,
+          employeeId: employeeId,
+          storeName: storeName,
+          department: department,
+          allProofs: allProofs,
+          initialIndex: photoIndex ?? 0,
+        ),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xFFCBD5E1)),
+          ),
+          child: Row(
+            children: [
+              // Thumbnail Box
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: Container(
+                  width: 44,
+                  height: 44,
+                  color: const Color(0xFFE2E8F0),
+                  child: Image.network(
+                    directUrl,
+                    fit: BoxFit.cover,
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return const Center(
+                        child: SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0284C7)),
+                        ),
+                      );
+                    },
+                    errorBuilder: (context, error, stackTrace) {
+                      return const Center(
+                        child: Icon(Icons.photo_camera_outlined, size: 20, color: Color(0xFF64748B)),
+                      );
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              // Meta Info
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        if (isMulti) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            margin: const EdgeInsets.only(right: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0F172A),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.image_outlined, size: 11, color: Color(0xFF38BDF8)),
+                                const SizedBox(width: 4),
+                                Text(
+                                  photoBadgeLabel,
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        Flexible(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEFF6FF),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.photo_camera_outlined, size: 12, color: Color(0xFF2563EB)),
+                                const SizedBox(width: 4),
+                                Flexible(
+                                  child: Text(
+                                    timeBadgeText,
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF1E40AF),
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    if (locationSubtitle.isNotEmpty) ...[
+                      Row(
+                        children: [
+                          const Icon(Icons.location_on_outlined, size: 11, color: Color(0xFF64748B)),
+                          const SizedBox(width: 3),
+                          Expanded(
+                            child: Text(
+                              locationSubtitle,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Color(0xFF64748B),
+                                fontWeight: FontWeight.w500,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ] else ...[
+                      const Text(
+                      'Click to inspect full photo proof',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Color(0xFF64748B),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Action Button
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.visibility_outlined, size: 14, color: Color(0xFF2563EB)),
+                    SizedBox(width: 4),
+                    Text(
+                      'View Proof',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF2563EB),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -4915,8 +5561,7 @@ class _RequestDetailModal extends StatelessWidget {
     );
   }
 
-  Widget _buildDetailGrid(List<(String, String)> items) {
-    const int cols = 4;
+  Widget _buildDetailGrid(List<(String, String)> items, {int cols = 3}) {
     final rows = <Widget>[];
 
     for (int i = 0; i < items.length; i += cols) {
@@ -5461,7 +6106,14 @@ class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                  border: Border.all(color: HygColors.border),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.04),
+                      blurRadius: 10,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
                 child: Row(
                   children: [
@@ -5853,6 +6505,641 @@ class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RequestProofPreviewDialog extends StatefulWidget {
+  final String rawUrl;
+  final String? title;
+  final String? proofTime;
+  final String? proofLocation;
+  final String? proofId;
+  final String? employeeName;
+  final String? employeeId;
+  final String? storeName;
+  final String? department;
+  final List<RequestProofItem>? allProofs;
+  final int initialIndex;
+
+  const _RequestProofPreviewDialog({
+    super.key,
+    required this.rawUrl,
+    this.title,
+    this.proofTime,
+    this.proofLocation,
+    this.proofId,
+    this.employeeName,
+    this.employeeId,
+    this.storeName,
+    this.department,
+    this.allProofs,
+    this.initialIndex = 0,
+  });
+
+  @override
+  State<_RequestProofPreviewDialog> createState() => _RequestProofPreviewDialogState();
+}
+
+class _RequestProofPreviewDialogState extends State<_RequestProofPreviewDialog> {
+  late int _currentIndex;
+  late _PhotoProofRecord _currentRecord;
+  bool? _isBurnedWatermark;
+  bool? _manualOverlayOverride;
+  ImageStream? _imageStream;
+  ImageStreamListener? _listener;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = (widget.allProofs != null && widget.initialIndex >= 0 && widget.initialIndex < widget.allProofs!.length)
+        ? widget.initialIndex
+        : 0;
+    _setupCurrentProof();
+  }
+
+  void _setupCurrentProof() {
+    final currentProof = (widget.allProofs != null &&
+            _currentIndex >= 0 &&
+            _currentIndex < widget.allProofs!.length)
+        ? widget.allProofs![_currentIndex]
+        : null;
+
+    final activeUrl = currentProof?.proofUrl ?? widget.rawUrl;
+    final activeTime = currentProof?.proofTime ?? widget.proofTime;
+    final activeLoc = currentProof?.proofLocation ?? widget.proofLocation;
+    final activeId = currentProof?.proofId ?? widget.proofId;
+
+    final driveId = _RequestDetailModal._extractDriveFileId(activeUrl) ?? '';
+    _currentRecord = _PhotoProofRecord(
+      id: activeId ?? '',
+      photoUrl: activeUrl,
+      timestamp: activeTime ?? '',
+      timeDigits: '',
+      timePeriod: '',
+      dateFormatted: '',
+      dayFormatted: '',
+      locationText: activeLoc ?? '',
+      employeeName: widget.employeeName ?? '',
+      employeeId: widget.employeeId ?? '',
+      storeName: widget.storeName ?? '',
+      driveFileId: driveId,
+      driveWebViewLink: activeUrl,
+    );
+
+    _loadFromCloud();
+    _checkImageWatermark();
+  }
+
+  void _switchProof(int newIndex) {
+    if (widget.allProofs == null) return;
+    if (newIndex < 0 || newIndex >= widget.allProofs!.length) return;
+    setState(() {
+      _currentIndex = newIndex;
+      _isBurnedWatermark = null;
+      _manualOverlayOverride = null;
+    });
+    _setupCurrentProof();
+  }
+
+  void _loadFromCloud() async {
+    final proofId = _currentRecord.id;
+    final driveId = _currentRecord.driveFileId;
+    try {
+      final client = Supabase.instance.client;
+      Map<String, dynamic>? row;
+      if (proofId.isNotEmpty) {
+        final res = await client
+            .from('photo_proofs')
+            .select('*')
+            .eq('id', proofId)
+            .maybeSingle();
+        if (res != null) row = res;
+      }
+      if (row == null && driveId.isNotEmpty) {
+        final res = await client
+            .from('photo_proofs')
+            .select('*')
+            .or('drive_file_id.eq.$driveId,drive_web_view_link.ilike.%$driveId%,photo_url.ilike.%$driveId%')
+            .limit(1)
+            .maybeSingle();
+        if (res != null) row = res;
+      }
+      if (row != null && mounted) {
+        final cloudRecord = _PhotoProofRecord.fromMap(row);
+        setState(() {
+          _currentRecord = _PhotoProofRecord(
+            id: cloudRecord.id.isNotEmpty ? cloudRecord.id : _currentRecord.id,
+            photoUrl: cloudRecord.photoUrl.isNotEmpty ? cloudRecord.photoUrl : _currentRecord.photoUrl,
+            timestamp: cloudRecord.timestamp.isNotEmpty ? cloudRecord.timestamp : _currentRecord.timestamp,
+            timeDigits: cloudRecord.timeDigits.isNotEmpty ? cloudRecord.timeDigits : _currentRecord.timeDigits,
+            timePeriod: cloudRecord.timePeriod.isNotEmpty ? cloudRecord.timePeriod : _currentRecord.timePeriod,
+            dateFormatted: cloudRecord.dateFormatted.isNotEmpty ? cloudRecord.dateFormatted : _currentRecord.dateFormatted,
+            dayFormatted: cloudRecord.dayFormatted.isNotEmpty ? cloudRecord.dayFormatted : _currentRecord.dayFormatted,
+            locationText: cloudRecord.locationText.isNotEmpty ? cloudRecord.locationText : _currentRecord.locationText,
+            employeeName: cloudRecord.employeeName.isNotEmpty ? cloudRecord.employeeName : _currentRecord.employeeName,
+            employeeId: cloudRecord.employeeId.isNotEmpty ? cloudRecord.employeeId : _currentRecord.employeeId,
+            storeName: cloudRecord.storeName.isNotEmpty ? cloudRecord.storeName : _currentRecord.storeName,
+            driveFileId: cloudRecord.driveFileId.isNotEmpty ? cloudRecord.driveFileId : _currentRecord.driveFileId,
+            driveWebViewLink: cloudRecord.driveWebViewLink.isNotEmpty ? cloudRecord.driveWebViewLink : _currentRecord.driveWebViewLink,
+            latitude: cloudRecord.latitude ?? _currentRecord.latitude,
+            longitude: cloudRecord.longitude ?? _currentRecord.longitude,
+          );
+        });
+      }
+    } catch (e) {
+      debugPrint('[RequestProofPreview] Supabase fetch exception: $e');
+    }
+  }
+
+  void _checkImageWatermark() {
+    final directUrl = _RequestDetailModal._getDirectProofImageUrl(_currentRecord.photoUrl);
+    if (directUrl.isEmpty) return;
+    try {
+      final ImageProvider provider = NetworkImage(directUrl);
+      if (_imageStream != null && _listener != null) {
+        _imageStream!.removeListener(_listener!);
+      }
+      _imageStream = provider.resolve(ImageConfiguration.empty);
+      _listener = ImageStreamListener(
+        (ImageInfo info, bool synchronousCall) {
+          if (!mounted) return;
+          final w = info.image.width;
+          final burned = w > 0 && w <= 720;
+          if (synchronousCall) {
+            _isBurnedWatermark = burned;
+          } else {
+            setState(() {
+              _isBurnedWatermark = burned;
+            });
+          }
+        },
+        onError: (_, __) {},
+      );
+      _imageStream!.addListener(_listener!);
+    } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    if (_imageStream != null && _listener != null) {
+      _imageStream!.removeListener(_listener!);
+    }
+    super.dispose();
+  }
+
+  bool get showOverlay {
+    return _manualOverlayOverride ??
+        (_isBurnedWatermark == null ? true : !_isBurnedWatermark!);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final directUrl = _RequestDetailModal._getDirectProofImageUrl(
+      _currentRecord.resolvedPhotoUrl.isNotEmpty ? _currentRecord.resolvedPhotoUrl : widget.rawUrl,
+    );
+    final hasDetails = _currentRecord.displayTimeDigits.isNotEmpty ||
+        _currentRecord.displayLocationText.isNotEmpty ||
+        _currentRecord.displayDateFormatted.isNotEmpty;
+
+    final deptDisplay = [
+      if (widget.department != null && widget.department!.isNotEmpty) widget.department,
+      if (widget.storeName != null &&
+          widget.storeName!.isNotEmpty &&
+          widget.storeName != widget.department)
+        widget.storeName,
+    ].join(' • ');
+
+    final headerSubtitle = [
+      if (_currentRecord.formattedTimeLabel.isNotEmpty) _currentRecord.formattedTimeLabel,
+      if (_currentRecord.employeeName.isNotEmpty) _currentRecord.employeeName,
+      if (deptDisplay.isNotEmpty && _currentRecord.employeeName.isEmpty) deptDisplay,
+    ].join(' • ');
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+      child: Container(
+        width: 720,
+        constraints: const BoxConstraints(maxHeight: 820),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x33000000),
+              blurRadius: 24,
+              offset: Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Header Bar
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+              decoration: const BoxDecoration(
+                color: Color(0xFF0F172A),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(7),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0284C7).withValues(alpha: 0.25),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.photo_camera_outlined, color: Color(0xFF38BDF8), size: 18),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          (widget.allProofs != null && widget.allProofs!.length > 1)
+                              ? ((widget.title != null && widget.title!.contains('#'))
+                                  ? widget.title!.replaceAll(RegExp(r'Photo Proof\s*#\d+', caseSensitive: false), 'Photo Proof #${_currentIndex + 1}')
+                                  : '${widget.title ?? "Attached Photo Proof"} • Photo #${_currentIndex + 1}')
+                              : (widget.title ?? 'Attached Photo Proof'),
+                          style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (headerSubtitle.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            headerSubtitle,
+                            style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11.5, fontWeight: FontWeight.w500),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  if (widget.allProofs != null && widget.allProofs!.length > 1) ...[
+                    Container(
+                      margin: const EdgeInsets.only(right: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.chevron_left, color: Colors.white, size: 20),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                            tooltip: 'Previous Photo',
+                            onPressed: _currentIndex > 0 ? () => _switchProof(_currentIndex - 1) : null,
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            child: Text(
+                              '${_currentIndex + 1}/${widget.allProofs!.length}',
+                              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.chevron_right, color: Colors.white, size: 20),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                            tooltip: 'Next Photo',
+                            onPressed: _currentIndex < widget.allProofs!.length - 1 ? () => _switchProof(_currentIndex + 1) : null,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  if (hasDetails) ...[
+                    IconButton(
+                      icon: Icon(
+                        showOverlay ? Icons.layers : Icons.layers_outlined,
+                        color: showOverlay ? const Color(0xFF38BDF8) : Colors.white70,
+                        size: 20,
+                      ),
+                      tooltip: showOverlay ? 'Hide Details Overlay' : 'Show Details Overlay',
+                      onPressed: () {
+                        setState(() {
+                          _manualOverlayOverride = !showOverlay;
+                        });
+                      },
+                    ),
+                  ],
+                  IconButton(
+                    icon: const Icon(Icons.open_in_new, color: Colors.white70, size: 18),
+                    tooltip: 'Open in Browser',
+                    onPressed: () => _RequestDetailModal._launchUrlInBrowser(_currentRecord.photoUrl),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.copy, color: Colors.white70, size: 18),
+                    tooltip: 'Copy Link',
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: _currentRecord.photoUrl));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Proof URL copied to clipboard'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white70, size: 20),
+                    tooltip: 'Close',
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+            ),
+
+            // Image Preview Area with InteractiveViewer & Photo Proof Details Overlay
+            Flexible(
+              child: Container(
+                color: const Color(0xFF020617),
+                constraints: const BoxConstraints(minHeight: 280, maxHeight: 580),
+                child: Stack(
+                  fit: StackFit.passthrough,
+                  children: [
+                    Center(
+                      child: InteractiveViewer(
+                        panEnabled: true,
+                        boundaryMargin: const EdgeInsets.all(20),
+                        minScale: 0.8,
+                        maxScale: 4.0,
+                        child: Image.network(
+                          directUrl,
+                          fit: BoxFit.contain,
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            final total = loadingProgress.expectedTotalBytes;
+                            final current = loadingProgress.cumulativeBytesLoaded;
+                            return Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const CircularProgressIndicator(color: Color(0xFF0284C7)),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    total != null
+                                        ? 'Loading proof: ${(current / total * 100).toInt()}%'
+                                        : 'Loading photo proof...',
+                                    style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                          errorBuilder: (context, error, stackTrace) {
+                            return Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.broken_image_outlined, color: Color(0xFF94A3B8), size: 48),
+                                  const SizedBox(height: 12),
+                                  const Text(
+                                    'Unable to preview image directly in-app.',
+                                    style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  const Text(
+                                    'The image may be hosted on an external drive or require browser authentication.',
+                                    style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  ElevatedButton.icon(
+                                    onPressed: () => _RequestDetailModal._launchUrlInBrowser(widget.rawUrl),
+                                    icon: const Icon(Icons.open_in_new, size: 16),
+                                    label: const Text('Open Photo Proof in Browser'),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF0284C7),
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+
+                    // Smart Proof Details Watermark Overlay Banner (Bottom of Photo Area)
+                    if (hasDetails && showOverlay)
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        child: IgnorePointer(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  Colors.transparent,
+                                  Colors.black.withValues(alpha: 0.82),
+                                ],
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // Time digits & period + divider + Date & Day
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    Text.rich(
+                                      TextSpan(
+                                        children: [
+                                          TextSpan(
+                                            text: _currentRecord.displayTimeDigits,
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 26,
+                                              fontWeight: FontWeight.w300,
+                                              letterSpacing: -0.5,
+                                              height: 1.0,
+                                              shadows: [
+                                                Shadow(color: Colors.black, blurRadius: 4, offset: Offset(1, 1)),
+                                              ],
+                                            ),
+                                          ),
+                                          TextSpan(
+                                            text: ' ${_currentRecord.displayTimePeriod}',
+                                            style: const TextStyle(
+                                              color: Color(0xFFFACC15),
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w800,
+                                              letterSpacing: 0.2,
+                                              height: 1.0,
+                                              shadows: [
+                                                Shadow(color: Colors.black, blurRadius: 4, offset: Offset(1, 1)),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Container(
+                                      margin: const EdgeInsets.symmetric(horizontal: 10),
+                                      width: 1.5,
+                                      height: 24,
+                                      color: Colors.white.withValues(alpha: 0.65),
+                                    ),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          _currentRecord.displayDateFormatted,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 12.5,
+                                            fontWeight: FontWeight.w600,
+                                            height: 1.1,
+                                            shadows: [
+                                              Shadow(color: Colors.black, blurRadius: 3, offset: Offset(1, 1)),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(height: 1.5),
+                                        Text(
+                                          _currentRecord.displayDayFormatted,
+                                          style: TextStyle(
+                                            color: Colors.white.withValues(alpha: 0.95),
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w500,
+                                            height: 1.1,
+                                            shadows: [
+                                              Shadow(color: Colors.black, blurRadius: 3, offset: Offset(1, 1)),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                                if (_currentRecord.displayLocationText.isNotEmpty) ...[
+                                  const SizedBox(height: 6),
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Icon(Icons.location_on, size: 13, color: Color(0xFF38BDF8)),
+                                      const SizedBox(width: 4),
+                                      Expanded(
+                                        child: Text(
+                                          _currentRecord.displayLocationText,
+                                          style: const TextStyle(
+                                            color: Color(0xFFF1F5F9),
+                                            fontSize: 11.5,
+                                            fontWeight: FontWeight.w500,
+                                            height: 1.3,
+                                            shadows: [
+                                              Shadow(color: Colors.black, blurRadius: 4, offset: Offset(1, 1)),
+                                            ],
+                                          ),
+                                          maxLines: 3,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Location Strip below photo (if location is available)
+            if (_currentRecord.displayLocationText.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFF1F5F9),
+                  border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.location_on_outlined, size: 16, color: Color(0xFF0284C7)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _currentRecord.displayLocationText,
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          color: Color(0xFF334155),
+                          fontWeight: FontWeight.w500,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+            // Footer Bar
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: const BoxDecoration(
+                color: Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.vertical(bottom: Radius.circular(16)),
+                border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      widget.rawUrl,
+                      style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  OutlinedButton.icon(
+                    onPressed: () => _RequestDetailModal._launchUrlInBrowser(widget.rawUrl),
+                    icon: const Icon(Icons.open_in_new, size: 14),
+                    label: const Text('Open in Browser', style: TextStyle(fontSize: 12)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF0F172A),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0F172A),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    ),
+                    child: const Text('Close', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

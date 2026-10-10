@@ -438,6 +438,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
     RegisteredUserPreview user,
     double amount, [
     OffsetBalanceMode mode = OffsetBalanceMode.set,
+    String? reason,
   ]) async {
     try {
       switch (mode) {
@@ -445,6 +446,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
           await RegisteredUsersService.setOffsetBalance(
             userProfileId: user.userProfileId,
             balanceHours: amount,
+            reason: reason,
           );
           _showDepartmentMessage('Offset balance updated successfully.');
           break;
@@ -452,6 +454,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
           await RegisteredUsersService.addOffsetBalance(
             userProfileId: user.userProfileId,
             addHours: amount,
+            reason: reason,
           );
           _showDepartmentMessage('Offset balance added successfully.');
           break;
@@ -459,6 +462,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
           await RegisteredUsersService.deductOffsetBalance(
             userProfileId: user.userProfileId,
             deductHours: amount,
+            reason: reason,
           );
           _showDepartmentMessage('Offset balance deducted successfully.');
           break;

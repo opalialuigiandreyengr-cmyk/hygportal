@@ -404,6 +404,7 @@ class _RedemptionRequestsScreenState extends State<RedemptionRequestsScreen> {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: HygColors.border),
             boxShadow: const [
               BoxShadow(
                 color: Color(0x08000000),
@@ -443,7 +444,7 @@ class _RedemptionRequestsScreenState extends State<RedemptionRequestsScreen> {
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                          borderSide: const BorderSide(color: HygColors.border),
                         ),
                       ),
                     ),
@@ -453,7 +454,7 @@ class _RedemptionRequestsScreenState extends State<RedemptionRequestsScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     decoration: BoxDecoration(
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      border: Border.all(color: HygColors.border),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: DropdownButtonHideUnderline(
@@ -561,7 +562,7 @@ class _RedemptionRequestsScreenState extends State<RedemptionRequestsScreen> {
                   borderRadius: BorderRadius.circular(8),
                   child: Container(
                     decoration: BoxDecoration(
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      border: Border.all(color: HygColors.border),
                     ),
                     child: Column(
                       children: [
@@ -1055,6 +1056,7 @@ class _RedemptionRequestsScreenState extends State<RedemptionRequestsScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: HygColors.border),
         boxShadow: const [
           BoxShadow(
             color: Color(0x08000000),
@@ -1112,12 +1114,13 @@ class RedemptionRequestsHeader extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: const [
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: HygColors.border),
+        boxShadow: [
           BoxShadow(
-            color: Color(0x08000000),
-            blurRadius: 8,
-            offset: Offset(0, 2),
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
           ),
         ],
       ),

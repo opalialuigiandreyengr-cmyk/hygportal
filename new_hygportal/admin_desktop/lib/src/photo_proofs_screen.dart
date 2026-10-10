@@ -949,7 +949,14 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: HygColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
         children: [
@@ -1126,7 +1133,7 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: HygColors.border),
       ),
       child: Row(
         children: [
@@ -1519,7 +1526,7 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: HygColors.border),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
@@ -2009,7 +2016,7 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
+          border: Border.all(color: HygColors.border),
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(12),
@@ -2439,7 +2446,7 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: HygColors.border),
         boxShadow: const [
           BoxShadow(
             color: Color(0x05000000),
@@ -2605,7 +2612,7 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: HygColors.border),
         boxShadow: const [
           BoxShadow(
             color: Color(0x08000000),
@@ -2816,7 +2823,7 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: HygColors.border),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),

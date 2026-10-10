@@ -347,7 +347,14 @@ class _HygBirthdaysScreenState extends State<HygBirthdaysScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: HygColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
         children: [
@@ -637,7 +644,7 @@ class _HygBirthdaysScreenState extends State<HygBirthdaysScreen> {
   Widget _buildBirthdayCard(_BirthdayItem item, String monthName) {
     final emp = item.employee;
 
-    Color cardBorderColor = const Color(0xFFE2E8F0);
+    Color cardBorderColor = HygColors.border;
     Color cardBgColor = Colors.white;
 
     if (item.isToday) {

@@ -274,21 +274,6 @@ class EmployeeDirectoryService {
     final merged = Map<String, dynamic>.of(baseRow);
 
     try {
-      final cached = await LocalSyncService.loadCachedProfile(employeeId);
-      if (cached != null) {
-        for (final entry in cached.entries) {
-          final val = _nullableString(entry.value);
-          if (val != null && val.isNotEmpty) {
-            final existing = _nullableString(merged[entry.key]);
-            if (existing == null || existing.isEmpty) {
-              merged[entry.key] = val;
-            }
-          }
-        }
-      }
-    } catch (_) {}
-
-    try {
       final row = await _client
           .from('employee_profile_details')
           .select()
@@ -372,6 +357,7 @@ class EmployeeDirectoryService {
     required EmployeeProfilePayload payload,
   }) async {
     await _withNetworkTimeout(_updateEmployeeRemote(id: id, payload: payload));
+    await LocalSyncService.purgeCachedProfile(id);
     return 'Employee updated successfully.';
   }
 
@@ -467,7 +453,22 @@ class EmployeeDirectoryService {
       for (final row in cachedRows) {
         final rowId = (row['employee_id'] ?? row['id'])?.toString();
         if (rowId == id) {
+          row['first_name'] = payload.firstName;
+          row['last_name'] = payload.lastName;
+          row['middle_name'] = payload.middleName;
+          row['suffix'] = payload.suffix;
+          row['company_name'] = payload.company;
+          row['department_name'] = payload.department;
+          row['position_name'] = payload.position;
           row['employment_status'] = payload.employmentStatus.trim().toLowerCase();
+          row['phone'] = payload.phone;
+          row['email'] = payload.email;
+          if (payload.dateHired != null) {
+            row['hired_date'] = payload.dateHired;
+          }
+          if (payload.birthDate != null) {
+            row['birth_date'] = payload.birthDate;
+          }
           updatedInCache = true;
           break;
         }
@@ -515,16 +516,7 @@ class EmployeeDirectoryService {
     } catch (_) {}
 
     try {
-      final existing =
-          await LocalSyncService.loadCachedProfile(employeeId) ?? {};
-      final updated = Map<String, dynamic>.of(existing);
-      if (payload.employmentStatus.trim().isNotEmpty) {
-        updated['employment_status'] =
-            payload.employmentStatus.trim().toLowerCase();
-      }
-      updated['reason_of_inactivity'] = payload.reasonOfInactivity;
-      updated['date_inactive'] = payload.dateInactive;
-      await LocalSyncService.cacheProfile(employeeId, updated);
+      await LocalSyncService.purgeCachedProfile(employeeId);
     } catch (_) {}
   }
 
@@ -696,7 +688,9 @@ class EmployeeDirectoryService {
       otherPhone: _nullableString(row['other_phone'] ?? row['otherPhone']),
       presentAddress: _nullableString(row['present_address']),
       permanentAddress: _nullableString(row['permanent_address']),
-      dateHired: _nullableString(row['hired_date']),
+      dateHired: _nullableString(
+        row['hired_date'] ?? row['date_hired'] ?? row['effective_from'],
+      ),
       religion: _nullableString(row['religion']),
       height: _nullableString(row['height']),
       weight: _nullableString(row['weight']),
@@ -722,7 +716,9 @@ class EmployeeDirectoryService {
       departmentName: _nullableString(
         row['department_name'] ?? row['department'] ?? row['departmentName'],
       ),
-      storeName: storeName,
+      storeName:
+          storeName ??
+          _nullableString(row['store_name'] ?? row['store'] ?? row['storeName']),
       positionName: _nullableString(
         row['position_name'] ?? row['position'] ?? row['positionName'],
       ),
@@ -814,6 +810,8 @@ class EmployeeDirectoryService {
       initial: _initial(fullName),
       firstName: _nullableString(row['first_name']),
       middleName: _nullableString(row['middle_name']),
+      lastName: _nullableString(row['last_name']),
+      suffix: _nullableString(row['suffix']),
       email: _nullableString(row['email']),
       phone: _nullableString(row['phone']),
       photoUrl: _nullableString(row['photo_url']),
@@ -1590,6 +1588,7 @@ class RegisteredUsersService {
   static Future<String> deductLeaveCredits({
     required String userProfileId,
     required double deductDays,
+    String? reason,
   }) async {
     try {
       final response = await _client.rpc(
@@ -1597,39 +1596,19 @@ class RegisteredUsersService {
         params: {
           'p_user_profile_id': userProfileId,
           'p_deduct_days': deductDays,
+          'p_reason': reason ?? 'Admin deduction',
         },
       );
       return response.toString();
-    } catch (_) {
-      final user = await _client
-          .from('user_profiles')
-          .select('employee_id')
-          .eq('id', userProfileId)
-          .maybeSingle();
-      final empId = user?['employee_id']?.toString();
-      if (empId != null && empId.isNotEmpty) {
-        final bal = await _client
-            .from('leave_balances')
-            .select('annual_credit_days, used_days')
-            .eq('employee_id', empId)
-            .maybeSingle();
-        final annual = (bal?['annual_credit_days'] as num?)?.toDouble() ?? 7.0;
-        final used = (bal?['used_days'] as num?)?.toDouble() ?? 0.0;
-        final newUsed = used + deductDays;
-        await _client.from('leave_balances').upsert({
-          'employee_id': empId,
-          'annual_credit_days': annual,
-          'used_days': newUsed,
-          'updated_at': DateTime.now().toIso8601String(),
-        }, onConflict: 'employee_id');
-      }
-      return userProfileId;
+    } on PostgrestException catch (e) {
+      throw Exception(e.message);
     }
   }
 
   static Future<String> reimburseLeaveCredits({
     required String userProfileId,
     required double reimburseDays,
+    String? reason,
   }) async {
     try {
       final response = await _client.rpc(
@@ -1637,43 +1616,19 @@ class RegisteredUsersService {
         params: {
           'p_user_profile_id': userProfileId,
           'p_reimburse_days': reimburseDays,
+          'p_reason': reason ?? 'Admin reimbursement',
         },
       );
       return response.toString();
-    } catch (_) {
-      final user = await _client
-          .from('user_profiles')
-          .select('employee_id')
-          .eq('id', userProfileId)
-          .maybeSingle();
-      final empId = user?['employee_id']?.toString();
-      if (empId != null && empId.isNotEmpty) {
-        final bal = await _client
-            .from('leave_balances')
-            .select('annual_credit_days, used_days')
-            .eq('employee_id', empId)
-            .maybeSingle();
-        final annual = (bal?['annual_credit_days'] as num?)?.toDouble() ?? 7.0;
-        final used = (bal?['used_days'] as num?)?.toDouble() ?? 0.0;
-
-        final newUsed = used >= reimburseDays ? used - reimburseDays : 0.0;
-        final newAnnual =
-            used >= reimburseDays ? annual : annual + (reimburseDays - used);
-
-        await _client.from('leave_balances').upsert({
-          'employee_id': empId,
-          'annual_credit_days': newAnnual,
-          'used_days': newUsed,
-          'updated_at': DateTime.now().toIso8601String(),
-        }, onConflict: 'employee_id');
-      }
-      return userProfileId;
+    } on PostgrestException catch (e) {
+      throw Exception(e.message);
     }
   }
 
   static Future<String> setOffsetBalance({
     required String userProfileId,
     required double balanceHours,
+    String? reason,
   }) async {
     try {
       final response = await _client.rpc(
@@ -1681,9 +1636,12 @@ class RegisteredUsersService {
         params: {
           'p_user_profile_id': userProfileId,
           'p_balance_hours': balanceHours,
+          'p_reason': reason ?? 'Admin set balance',
         },
       );
       return response.toString();
+    } on PostgrestException catch (e) {
+      throw Exception(e.message);
     } catch (_) {
       final user = await _client
           .from('user_profiles')
@@ -1712,6 +1670,7 @@ class RegisteredUsersService {
   static Future<String> addOffsetBalance({
     required String userProfileId,
     required double addHours,
+    String? reason,
   }) async {
     try {
       final response = await _client.rpc(
@@ -1719,9 +1678,12 @@ class RegisteredUsersService {
         params: {
           'p_user_profile_id': userProfileId,
           'p_add_hours': addHours,
+          'p_reason': reason ?? 'Admin addition',
         },
       );
       return response.toString();
+    } on PostgrestException catch (e) {
+      throw Exception(e.message);
     } catch (_) {
       final user = await _client
           .from('user_profiles')
@@ -1758,6 +1720,7 @@ class RegisteredUsersService {
   static Future<String> deductOffsetBalance({
     required String userProfileId,
     required double deductHours,
+    String? reason,
   }) async {
     try {
       final response = await _client.rpc(
@@ -1765,9 +1728,12 @@ class RegisteredUsersService {
         params: {
           'p_user_profile_id': userProfileId,
           'p_deduct_hours': deductHours,
+          'p_reason': reason ?? 'Admin deduction',
         },
       );
       return response.toString();
+    } on PostgrestException catch (e) {
+      throw Exception(e.message);
     } catch (_) {
       final user = await _client
           .from('user_profiles')
@@ -1831,6 +1797,624 @@ class RegisteredUsersService {
     );
 
     return response.toString();
+  }
+
+  static Future<List<BalanceTransactionRecord>> fetchBalanceTransactions({
+    String? employeeId,
+    String? userProfileId,
+    String? balanceType,
+    int limit = 500,
+    List<RegisteredUserPreview>? registeredUsers,
+  }) async {
+    try {
+      final params = <String, dynamic>{
+        'p_limit': limit,
+      };
+      if (employeeId != null && employeeId.isNotEmpty) {
+        params['p_employee_id'] = employeeId;
+      }
+      if (userProfileId != null && userProfileId.isNotEmpty) {
+        params['p_user_profile_id'] = userProfileId;
+      }
+      if (balanceType != null &&
+          balanceType.isNotEmpty &&
+          balanceType != 'all') {
+        params['p_balance_type'] = balanceType;
+      }
+
+      final response = await _client.rpc(
+        'admin_get_balance_transactions',
+        params: params,
+      );
+
+      if (response is List && response.isNotEmpty) {
+        return response
+            .whereType<Map<String, dynamic>>()
+            .map(_transactionFromRow)
+            .toList();
+      }
+    } catch (_) {}
+
+    return _fetchBalanceTransactionsFallback(
+      employeeId: employeeId,
+      userProfileId: userProfileId,
+      balanceType: balanceType,
+      limit: limit,
+      registeredUsers: registeredUsers,
+    );
+  }
+
+  static BalanceTransactionRecord _transactionFromRow(
+    Map<String, dynamic> row,
+  ) {
+    final rawDate = EmployeeDirectoryService._stringValue(row['created_at']);
+    DateTime createdAt;
+    try {
+      createdAt = DateTime.parse(rawDate);
+    } catch (_) {
+      createdAt = DateTime.now();
+    }
+
+    return BalanceTransactionRecord(
+      id: EmployeeDirectoryService._stringValue(row['id']),
+      userProfileId: _nullableString(row['user_profile_id']),
+      employeeId: EmployeeDirectoryService._stringValue(row['employee_id']),
+      employeeNo: EmployeeDirectoryService._stringValue(
+        row['employee_no'],
+        fallback: '-',
+      ),
+      fullName: EmployeeDirectoryService._stringValue(
+        row['full_name'],
+        fallback: 'Unknown Employee',
+      ),
+      username: EmployeeDirectoryService._stringValue(
+        row['username'],
+        fallback: 'unlinked',
+      ),
+      photoUrl: _nullableString(row['photo_url']),
+      balanceType: EmployeeDirectoryService._stringValue(
+        row['balance_type'],
+        fallback: 'leave',
+      ),
+      category: EmployeeDirectoryService._stringValue(
+        row['category'],
+        fallback: 'allocation',
+      ),
+      title: EmployeeDirectoryService._stringValue(
+        row['title'],
+        fallback: 'Transaction',
+      ),
+      subtitle: EmployeeDirectoryService._stringValue(
+        row['subtitle'],
+        fallback: '',
+      ),
+      amount: _nullableDouble(row['amount']) ?? 0.0,
+      unit: EmployeeDirectoryService._stringValue(row['unit'], fallback: 'days'),
+      balanceAfter: _nullableDouble(row['balance_after']),
+      reason: _nullableString(row['reason']),
+      actorName: _nullableString(row['actor_name']),
+      requestId: _nullableString(row['request_id']),
+      requestStatus: _nullableString(row['request_status']),
+      createdAt: createdAt,
+      dateFrom: _nullableString(row['date_from']),
+      dateTo: _nullableString(row['date_to']),
+    );
+  }
+
+  static Future<List<BalanceTransactionRecord>>
+  _fetchBalanceTransactionsFallback({
+    String? employeeId,
+    String? userProfileId,
+    String? balanceType,
+    int limit = 500,
+    List<RegisteredUserPreview>? registeredUsers,
+  }) async {
+    final results = <BalanceTransactionRecord>[];
+    final seenIds = <String>{};
+    final seenReqIds = <String>{};
+
+    try {
+      // 1. Resolve registered users & employee mappings
+      List<RegisteredUserPreview> users = registeredUsers ?? [];
+      if (users.isEmpty) {
+        try {
+          users = await loadUsers();
+        } catch (_) {}
+      }
+
+      final empToUser = <String, RegisteredUserPreview>{};
+      final profileToUser = <String, RegisteredUserPreview>{};
+      final empNoToUser = <String, RegisteredUserPreview>{};
+
+      for (final u in users) {
+        if (u.employeeId != null && u.employeeId!.isNotEmpty) {
+          empToUser[u.employeeId!] = u;
+        }
+        if (u.userProfileId.isNotEmpty) {
+          profileToUser[u.userProfileId] = u;
+        }
+        if (u.employeeNo.isNotEmpty && u.employeeNo != '-') {
+          empNoToUser[u.employeeNo.trim().toLowerCase()] = u;
+        }
+      }
+
+      String? targetEmpId = employeeId;
+      if ((targetEmpId == null || targetEmpId.isEmpty) &&
+          userProfileId != null &&
+          userProfileId.isNotEmpty) {
+        targetEmpId = profileToUser[userProfileId]?.employeeId;
+        if (targetEmpId == null || targetEmpId.isEmpty) {
+          try {
+            final u = await _client
+                .from('user_profiles')
+                .select('employee_id')
+                .eq('id', userProfileId)
+                .maybeSingle();
+            targetEmpId = u?['employee_id']?.toString();
+          } catch (_) {}
+        }
+      }
+
+      bool matchesTarget(String? empId) {
+        if (targetEmpId == null || targetEmpId.isEmpty) return true;
+        return empId == targetEmpId;
+      }
+
+      final normalizedType = balanceType?.toLowerCase();
+      final wantsAll =
+          normalizedType == null || normalizedType == 'all' || normalizedType.isEmpty;
+      final wantsLeave = wantsAll || normalizedType == 'leave';
+      final wantsOffset = wantsAll || normalizedType == 'offset';
+
+      // 2. Query requests via admin_get_all_requests
+      try {
+        final reqResponse = await _client.rpc('admin_get_all_requests');
+        if (reqResponse is List) {
+          for (final raw in reqResponse) {
+            if (raw is! Map<String, dynamic>) continue;
+
+            final reqId = raw['request_id']?.toString() ?? '';
+            final reqEmpId = raw['employee_id']?.toString() ?? '';
+            final empNo = raw['employee_no']?.toString() ?? '-';
+            final empName = raw['employee_name']?.toString() ?? 'Employee';
+            final photoUrl = raw['employee_photo']?.toString();
+            final reqStatus =
+                raw['status']?.toString().toLowerCase() ?? 'approved';
+            final code =
+                (raw['request_type_code']?.toString() ?? '').toLowerCase();
+            final typeName =
+                (raw['request_type_name']?.toString() ?? '').toLowerCase();
+            final transType = raw['transaction_type']?.toString() ?? '';
+            final transTypeLower = transType.toLowerCase();
+            final leaveCat =
+                raw['leave_category']?.toString() ?? 'Paid Leave';
+            final reason = raw['reason']?.toString();
+            final dateFrom = raw['start_date']?.toString() ??
+                raw['date_from']?.toString();
+            final dateTo =
+                raw['end_date']?.toString() ?? raw['date_to']?.toString();
+
+            DateTime createdAt;
+            try {
+              createdAt =
+                  DateTime.parse(raw['submitted_at']?.toString() ?? '');
+            } catch (_) {
+              createdAt = DateTime.now();
+            }
+
+            final matchedUser = empToUser[reqEmpId] ??
+                empNoToUser[empNo.trim().toLowerCase()];
+            final username = matchedUser?.username ?? 'user';
+            final userProfId = matchedUser?.userProfileId;
+
+            if (!matchesTarget(reqEmpId)) continue;
+
+            // 2A. Leave Request Used (Paid Leave Deducted)
+            final isLeaveReq = code == 'leave' ||
+                typeName.contains('leave') ||
+                raw['paid_days'] != null;
+            if (wantsLeave && isLeaveReq) {
+              final paidDays =
+                  (raw['paid_days'] as num?)?.toDouble() ?? 0.0;
+              if (paidDays > 0 &&
+                  (reqStatus == 'approved' || reqStatus == 'validated')) {
+                final txId = 'leave_req_$reqId';
+                if (!seenIds.contains(txId)) {
+                  seenIds.add(txId);
+                  seenReqIds.add(reqId);
+                  results.add(
+                    BalanceTransactionRecord(
+                      id: txId,
+                      userProfileId: userProfId,
+                      employeeId: reqEmpId,
+                      employeeNo: empNo,
+                      fullName: empName,
+                      username: username,
+                      photoUrl: photoUrl ?? matchedUser?.photoUrl,
+                      balanceType: 'leave',
+                      category: 'use',
+                      title: '$leaveCat (Paid)',
+                      subtitle: 'Approved paid leave',
+                      amount: -paidDays.abs(),
+                      unit: 'days',
+                      balanceAfter: null,
+                      reason: reason ?? 'Paid leave days used',
+                      actorName: empName,
+                      requestId: reqId,
+                      requestStatus: reqStatus,
+                      createdAt: createdAt,
+                      dateFrom: dateFrom,
+                      dateTo: dateTo,
+                      sourceTable: 'requests',
+                    ),
+                  );
+                }
+              }
+            }
+
+            // 2B. Offset Request Used (Offset Deducted)
+            final isOffsetUse = code == 'use_offset' ||
+                typeName.contains('use offset') ||
+                transTypeLower.contains('use offset');
+            if (wantsOffset && isOffsetUse) {
+              final hours =
+                  (raw['total_hours'] as num?)?.toDouble() ?? 0.0;
+              if (hours > 0) {
+                final txId = 'offset_use_$reqId';
+                if (!seenIds.contains(txId)) {
+                  seenIds.add(txId);
+                  seenReqIds.add(reqId);
+                  results.add(
+                    BalanceTransactionRecord(
+                      id: txId,
+                      userProfileId: userProfId,
+                      employeeId: reqEmpId,
+                      employeeNo: empNo,
+                      fullName: empName,
+                      username: username,
+                      photoUrl: photoUrl ?? matchedUser?.photoUrl,
+                      balanceType: 'offset',
+                      category: 'use',
+                      title: 'Offset Deducted',
+                      subtitle: transType.isNotEmpty
+                          ? transType
+                          : 'Use Offset Request',
+                      amount: -hours.abs(),
+                      unit: 'hours',
+                      balanceAfter: null,
+                      reason: reason ?? 'Offset hours used',
+                      actorName: empName,
+                      requestId: reqId,
+                      requestStatus: reqStatus,
+                      createdAt: createdAt,
+                      dateFrom: dateFrom,
+                      dateTo: dateTo,
+                      sourceTable: 'requests',
+                    ),
+                  );
+                }
+              }
+            }
+
+            // 2C. Offset Request Earned (ESARF / OB)
+            final isOffsetEarn = (code == 'offset_earn' ||
+                    (typeName.contains('offset') &&
+                        !typeName.contains('use')) ||
+                    (transTypeLower.contains('ob') ||
+                        (transTypeLower.contains('offset') &&
+                            !transTypeLower.contains('use')))) &&
+                !isOffsetUse;
+            if (wantsOffset && isOffsetEarn) {
+              final hours =
+                  (raw['total_hours'] as num?)?.toDouble() ?? 0.0;
+              if (hours > 0 &&
+                  (reqStatus == 'approved' ||
+                      reqStatus == 'validated' ||
+                      reqStatus == 'pending')) {
+                final txId = 'offset_earn_$reqId';
+                if (!seenIds.contains(txId)) {
+                  seenIds.add(txId);
+                  seenReqIds.add(reqId);
+                  results.add(
+                    BalanceTransactionRecord(
+                      id: txId,
+                      userProfileId: userProfId,
+                      employeeId: reqEmpId,
+                      employeeNo: empNo,
+                      fullName: empName,
+                      username: username,
+                      photoUrl: photoUrl ?? matchedUser?.photoUrl,
+                      balanceType: 'offset',
+                      category: 'earn',
+                      title: 'Offset Earned',
+                      subtitle: transType.isNotEmpty
+                          ? transType
+                          : 'ESARF Offset Credit',
+                      amount: hours.abs(),
+                      unit: 'hours',
+                      balanceAfter: null,
+                      reason: reason ?? 'Earned offset hours',
+                      actorName: empName,
+                      requestId: reqId,
+                      requestStatus: reqStatus,
+                      createdAt: createdAt,
+                      dateFrom: dateFrom,
+                      dateTo: dateTo,
+                      sourceTable: 'requests',
+                    ),
+                  );
+                }
+              }
+            }
+          }
+        }
+      } catch (_) {}
+
+      // 3. Initial Leave Credit Grants (Policy Allocations)
+      if (wantsLeave) {
+        for (final user in users) {
+          final empId = user.employeeId;
+          if (empId == null || empId.isEmpty) continue;
+          if (!matchesTarget(empId)) continue;
+
+          final creditDays = user.leaveCreditDays ?? 0.0;
+          if (creditDays > 0) {
+            final txId = 'initial_leave_grant_$empId';
+            if (!seenIds.contains(txId)) {
+              seenIds.add(txId);
+              DateTime regDate;
+              try {
+                regDate = DateTime.parse(user.registeredAt);
+              } catch (_) {
+                regDate = DateTime(DateTime.now().year, 1, 1);
+              }
+              results.add(
+                BalanceTransactionRecord(
+                  id: txId,
+                  userProfileId: user.userProfileId,
+                  employeeId: empId,
+                  employeeNo: user.employeeNo,
+                  fullName: user.fullName,
+                  username: user.username,
+                  photoUrl: user.photoUrl,
+                  balanceType: 'leave',
+                  category: 'allocation',
+                  title: 'Annual Leave Credits Granted',
+                  subtitle: 'Policy leave entitlement',
+                  amount: creditDays,
+                  unit: 'days',
+                  balanceAfter: creditDays,
+                  reason: 'Annual policy leave credit entitlement',
+                  actorName: 'System Policy',
+                  requestStatus: 'approved',
+                  createdAt: regDate,
+                  sourceTable: 'leave_balances',
+                ),
+              );
+            }
+          }
+        }
+      }
+
+      // 4. Initial Offset Balance Allocations
+      if (wantsOffset) {
+        for (final user in users) {
+          final empId = user.employeeId;
+          if (empId == null || empId.isEmpty) continue;
+          if (!matchesTarget(empId)) continue;
+
+          final offsetHours = user.offsetBalanceHours ?? 0.0;
+          if (offsetHours > 0) {
+            final txId = 'initial_offset_alloc_$empId';
+            if (!seenIds.contains(txId)) {
+              seenIds.add(txId);
+              DateTime regDate;
+              try {
+                regDate = DateTime.parse(user.registeredAt);
+              } catch (_) {
+                regDate = DateTime(DateTime.now().year, 1, 1);
+              }
+              results.add(
+                BalanceTransactionRecord(
+                  id: txId,
+                  userProfileId: user.userProfileId,
+                  employeeId: empId,
+                  employeeNo: user.employeeNo,
+                  fullName: user.fullName,
+                  username: user.username,
+                  photoUrl: user.photoUrl,
+                  balanceType: 'offset',
+                  category: 'allocation',
+                  title: 'Offset Balance Allocation',
+                  subtitle: 'Initial offset balance grant',
+                  amount: offsetHours,
+                  unit: 'hours',
+                  balanceAfter: offsetHours,
+                  reason: 'Allocated offset balance',
+                  actorName: 'Super Admin',
+                  requestStatus: 'approved',
+                  createdAt: regDate,
+                  sourceTable: 'offset_balances',
+                ),
+              );
+            }
+          }
+        }
+      }
+
+      // 5. Query leave_transactions table for direct ledger adjustments
+      if (wantsLeave) {
+        try {
+          var ltQuery = _client.from('leave_transactions').select(
+                'id, employee_id, request_id, transaction_type, days, balance_after, created_at',
+              );
+          if (targetEmpId != null && targetEmpId.isNotEmpty) {
+            ltQuery = ltQuery.eq('employee_id', targetEmpId);
+          }
+          final ltRows = await ltQuery
+              .order('created_at', ascending: false)
+              .limit(limit);
+          for (final row in ltRows) {
+            final eId = row['employee_id']?.toString() ?? '';
+            final reqId = row['request_id']?.toString();
+            final txId = 'lt_${row['id']}';
+            if (seenIds.contains(txId)) continue;
+            if (reqId != null && seenReqIds.contains(reqId)) continue;
+
+            final user = empToUser[eId];
+            final days = (row['days'] as num?)?.toDouble() ?? 0.0;
+            final txType =
+                (row['transaction_type']?.toString() ?? '').toLowerCase();
+
+            final isDeduct =
+                days < 0 || txType == 'use_paid' || txType.contains('deduct');
+            final isReimburse = txType == 'reimburse' || txType == 'refund';
+            final hasReq = reqId != null;
+
+            final category = isDeduct
+                ? (hasReq ? 'use' : 'deduction')
+                : (isReimburse ? 'refund' : 'allocation');
+            final title = isDeduct
+                ? (hasReq ? 'Paid Leave Deducted' : 'Leave Deducted (Admin)')
+                : (isReimburse
+                    ? 'Credit Reimbursed (Admin)'
+                    : 'Leave Credits Allocated');
+            final subtitle = isDeduct
+                ? (hasReq ? 'Approved paid leave' : 'Admin deduction')
+                : (isReimburse
+                    ? 'Admin reimbursement'
+                    : 'Admin allocation');
+
+            DateTime createdAt;
+            try {
+              createdAt =
+                  DateTime.parse(row['created_at']?.toString() ?? '');
+            } catch (_) {
+              createdAt = DateTime.now();
+            }
+
+            seenIds.add(txId);
+            results.add(
+              BalanceTransactionRecord(
+                id: txId,
+                userProfileId: user?.userProfileId,
+                employeeId: eId,
+                employeeNo: user?.employeeNo ?? '-',
+                fullName: user?.fullName ?? 'Employee',
+                username: user?.username ?? 'unlinked',
+                photoUrl: user?.photoUrl,
+                balanceType: 'leave',
+                category: category,
+                title: title,
+                subtitle: subtitle,
+                amount: isDeduct ? -days.abs() : days.abs(),
+                unit: 'days',
+                balanceAfter: (row['balance_after'] as num?)?.toDouble(),
+                reason: subtitle,
+                actorName: hasReq
+                    ? (user?.fullName ?? 'Employee')
+                    : 'Super Admin',
+                requestId: reqId,
+                createdAt: createdAt,
+                sourceTable: 'leave_transactions',
+              ),
+            );
+          }
+        } catch (_) {}
+      }
+
+      // 6. Query offset_transactions table for direct ledger adjustments
+      if (wantsOffset) {
+        try {
+          var otQuery = _client.from('offset_transactions').select(
+                'id, employee_id, request_id, transaction_type, hours, balance_after, created_at',
+              );
+          if (targetEmpId != null && targetEmpId.isNotEmpty) {
+            otQuery = otQuery.eq('employee_id', targetEmpId);
+          }
+          final otRows = await otQuery
+              .order('created_at', ascending: false)
+              .limit(limit);
+          for (final row in otRows) {
+            final eId = row['employee_id']?.toString() ?? '';
+            final reqId = row['request_id']?.toString();
+            final txId = 'ot_${row['id']}';
+            if (seenIds.contains(txId)) continue;
+            if (reqId != null && seenReqIds.contains(reqId)) continue;
+
+            final user = empToUser[eId];
+            final hours = (row['hours'] as num?)?.toDouble() ?? 0.0;
+            final txType =
+                (row['transaction_type']?.toString() ?? '').toLowerCase();
+            final hasReq = reqId != null;
+
+            final isDeduct =
+                hours < 0 || txType == 'use' || txType.contains('deduct');
+            final isRefund =
+                txType == 'refund' || (txType == 'adjustment' && hasReq);
+
+            final category = isDeduct
+                ? (hasReq ? 'use' : 'deduction')
+                : (isRefund ? 'refund' : (hasReq ? 'earn' : 'allocation'));
+            final title = isDeduct
+                ? (hasReq ? 'Offset Deducted' : 'Offset Deducted (Admin)')
+                : (isRefund
+                    ? 'Offset Refunded'
+                    : (hasReq ? 'Offset Earned' : 'Offset Added (Admin)'));
+            final subtitle = isDeduct
+                ? (hasReq ? 'Use Offset Request' : 'Admin deduction')
+                : (isRefund
+                    ? 'Credited back upon rejection'
+                    : (hasReq
+                        ? 'ESARF Offset Credit'
+                        : 'Admin credit adjustment'));
+
+            DateTime createdAt;
+            try {
+              createdAt =
+                  DateTime.parse(row['created_at']?.toString() ?? '');
+            } catch (_) {
+              createdAt = DateTime.now();
+            }
+
+            seenIds.add(txId);
+            results.add(
+              BalanceTransactionRecord(
+                id: txId,
+                userProfileId: user?.userProfileId,
+                employeeId: eId,
+                employeeNo: user?.employeeNo ?? '-',
+                fullName: user?.fullName ?? 'Employee',
+                username: user?.username ?? 'unlinked',
+                photoUrl: user?.photoUrl,
+                balanceType: 'offset',
+                category: category,
+                title: title,
+                subtitle: subtitle,
+                amount: isDeduct ? -hours.abs() : hours.abs(),
+                unit: 'hours',
+                balanceAfter: (row['balance_after'] as num?)?.toDouble(),
+                reason: subtitle,
+                actorName: hasReq
+                    ? (user?.fullName ?? 'Employee')
+                    : 'Super Admin',
+                requestId: reqId,
+                createdAt: createdAt,
+                sourceTable: 'offset_transactions',
+              ),
+            );
+          }
+        } catch (_) {}
+      }
+
+      // 7. Sort all combined descending by date
+      results.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      if (results.length > limit) {
+        return results.sublist(0, limit);
+      }
+    } catch (_) {}
+
+    return results;
   }
 
   static RegisteredUserPreview _fromRow(Map<String, dynamic> row) {
@@ -2599,6 +3183,17 @@ class LocalSyncService {
       'payload': jsonEncode(row),
       'updated_at': DateTime.now().toIso8601String(),
     }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  static Future<void> purgeCachedProfile(String employeeId) async {
+    try {
+      final db = await _database;
+      await db.delete(
+        'employee_profile_cache',
+        where: 'employee_id = ?',
+        whereArgs: [employeeId],
+      );
+    } catch (_) {}
   }
 
   static Future<Map<String, dynamic>?> loadCachedProfile(

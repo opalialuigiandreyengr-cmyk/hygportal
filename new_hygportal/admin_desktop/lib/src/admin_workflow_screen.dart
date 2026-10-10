@@ -19,6 +19,14 @@ class AdminWorkflowHeader extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: HygColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
         children: [
@@ -432,6 +440,7 @@ class _AdminWorkflowPanelState extends State<AdminWorkflowPanel> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
+        border: Border.all(color: HygColors.border),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Column(

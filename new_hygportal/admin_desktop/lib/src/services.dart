@@ -276,17 +276,17 @@ class EmployeeDirectoryService {
     try {
       final row = await _client
           .from('employee_profile_details')
-          .select()
+          .select('employee_id, tin, sss, pagibig, philhealth, bank_type, account_no')
           .eq('employee_id', employeeId)
           .maybeSingle();
       if (row != null) {
         for (final entry in row.entries) {
-          final value = _nullableString(entry.value);
+          // employee_profile_details is the source used by the Expo app.
+          // Prefer it over stale/null placeholder values returned by the HR
+          // directory RPC, especially for government and bank information.
+          final value = _profileValue(entry.value);
           if (value != null && value.isNotEmpty) {
-            final existing = _nullableString(merged[entry.key]);
-            if (existing == null || existing.isEmpty) {
-              merged[entry.key] = value;
-            }
+            merged[entry.key] = value;
           }
         }
       }
@@ -853,6 +853,17 @@ class EmployeeDirectoryService {
   static String? _nullableString(dynamic value) {
     final text = value?.toString().trim() ?? '';
     return text.isEmpty ? null : text;
+  }
+
+  static String? _profileValue(dynamic value) {
+    final text = value?.toString().trim() ?? '';
+    if (text.isEmpty ||
+        text.toLowerCase() == 'none' ||
+        text.toLowerCase() == 'null' ||
+        text.toLowerCase() == 'n/a') {
+      return null;
+    }
+    return text;
   }
 
   static DateTime? _dateTimeValue(dynamic value) {

@@ -229,6 +229,229 @@ class _UsersPanelState extends State<UsersPanel> {
     }
   }
 
+  Future<void> _confirmDeleteTransaction(BalanceTransactionRecord record) async {
+    final amountPrefix = record.amount >= 0 ? '+' : '';
+    final amountStr =
+        '$amountPrefix${record.amount.toStringAsFixed(record.amount.truncateToDouble() == record.amount ? 0 : 2)} ${record.unit}';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+        contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEE2E2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.delete_outline_rounded,
+                color: Color(0xFFDC2626),
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'Remove Transaction',
+              style: HygTypography.pageTitle.copyWith(fontSize: 16),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 8),
+            Text(
+              'Are you sure you want to remove this transaction from the table?',
+              style: HygTypography.body.copyWith(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF1E293B),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: HygColors.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          record.fullName,
+                          overflow: TextOverflow.ellipsis,
+                          style: HygTypography.tablePrimary.copyWith(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        amountStr,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          color: record.amount >= 0
+                              ? const Color(0xFF16A34A)
+                              : const Color(0xFFDC2626),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${record.title}${record.subtitle.isNotEmpty ? " • ${record.subtitle}" : ""}',
+                    overflow: TextOverflow.ellipsis,
+                    style: HygTypography.body.copyWith(
+                      fontSize: 12,
+                      color: HygColors.muted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFF6FF),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFBFDBFE)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline, size: 16, color: Color(0xFF2563EB)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Soft delete: This transaction will only be removed from the table view. It will NOT be deleted from the database.',
+                      style: HygTypography.body.copyWith(
+                        fontSize: 11,
+                        color: const Color(0xFF1E40AF),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          OutlinedButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            icon: const Icon(Icons.delete_outline_rounded, size: 16),
+            label: const Text('Remove from Table'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await _deleteTransaction(record);
+    }
+  }
+
+  Future<void> _deleteTransaction(BalanceTransactionRecord record) async {
+    final removedIndex = _transactions.indexOf(record);
+    setState(() {
+      _transactions.removeWhere((t) => t.id == record.id);
+    });
+
+    await RegisteredUsersService.softDeleteTransaction(record.id);
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).clearSnackBars();
+    final controller = ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Removed "${record.title}" for ${record.fullName} from table (preserved in database).',
+        ),
+        backgroundColor: const Color(0xFF1E293B),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        action: SnackBarAction(
+          label: 'Undo',
+          textColor: const Color(0xFFF6C400),
+          onPressed: () async {
+            setState(() {
+              if (removedIndex >= 0 && removedIndex <= _transactions.length) {
+                _transactions.insert(removedIndex, record);
+              } else {
+                _transactions.add(record);
+              }
+            });
+            await RegisteredUsersService.restoreTransaction(record.id);
+          },
+        ),
+        duration: const Duration(seconds: 5),
+      ),
+    );
+    Future.delayed(const Duration(seconds: 5), () {
+      try {
+        controller.close();
+      } catch (_) {}
+    });
+  }
+
+  Future<void> _openSoftDeletedTransactionsDialog() async {
+    final changed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => SoftDeletedTransactionsDialog(
+        registeredUsers: widget.users,
+      ),
+    );
+    if ((changed == true || mounted) && mounted) {
+      await _loadTransactions();
+    }
+  }
+
+  Future<void> _restoreAllHiddenTransactions() async {
+    await RegisteredUsersService.restoreAllHiddenTransactions();
+    await _loadTransactions();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).clearSnackBars();
+    final controller = ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('All soft-deleted transactions have been restored to the table.'),
+        backgroundColor: const Color(0xFF15803D),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        duration: const Duration(seconds: 5),
+      ),
+    );
+    Future.delayed(const Duration(seconds: 5), () {
+      try {
+        controller.close();
+      } catch (_) {}
+    });
+  }
+
   List<BalanceTransactionRecord> get _filteredTransactions {
     final query = _txQuery.trim().toLowerCase();
     return _transactions.where((t) {
@@ -679,6 +902,46 @@ class _UsersPanelState extends State<UsersPanel> {
                   ),
                 ),
               ),
+              FutureBuilder<Set<String>>(
+                future: RegisteredUsersService.getHiddenTransactionIds(),
+                builder: (context, snapshot) {
+                  final hiddenCount = snapshot.data?.length ?? 0;
+                  if (hiddenCount == 0) return const SizedBox.shrink();
+                  return Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox(width: 10),
+                      Tooltip(
+                        message:
+                            'View and manage $hiddenCount soft-deleted transaction(s)',
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFF64748B),
+                            side: const BorderSide(color: HygColors.border),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 8,
+                            ),
+                            textStyle: HygTypography.body.copyWith(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          onPressed: _openSoftDeletedTransactionsDialog,
+                          icon: const Icon(
+                            Icons.restore_from_trash_outlined,
+                            size: 16,
+                          ),
+                          label: Text('Restore ($hiddenCount)'),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
             ],
           ),
         ),
@@ -751,6 +1014,7 @@ class _UsersPanelState extends State<UsersPanel> {
           _TransactionsTable(
             items: _visibleTransactions,
             onTapRow: _openTransactionDetail,
+            onDeleteRow: _confirmDeleteTransaction,
           ),
           const SizedBox(height: 14),
           EmployeePagination(
@@ -4790,10 +5054,12 @@ class _TransactionsTable extends StatefulWidget {
   const _TransactionsTable({
     required this.items,
     required this.onTapRow,
+    required this.onDeleteRow,
   });
 
   final List<BalanceTransactionRecord> items;
   final void Function(BalanceTransactionRecord) onTapRow;
+  final void Function(BalanceTransactionRecord) onDeleteRow;
 
   @override
   State<_TransactionsTable> createState() => _TransactionsTableState();
@@ -5024,7 +5290,7 @@ class _TransactionsTableState extends State<_TransactionsTable> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final availableWidth = constraints.maxWidth;
-        final rowWidth = math.max(availableWidth, 1220.0);
+        final rowWidth = math.max(availableWidth, 1240.0);
         final needsHorizontalScroll = rowWidth > availableWidth;
 
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -5059,6 +5325,7 @@ class _TransactionsTableState extends State<_TransactionsTable> {
                         (item) => TransactionRow(
                           record: item,
                           onTap: () => widget.onTapRow(item),
+                          onDelete: () => widget.onDeleteRow(item),
                         ),
                       ),
                     ],
@@ -5113,8 +5380,11 @@ class TransactionsTableHeader extends StatelessWidget {
           SizedBox(width: 115, child: HeaderLabel('BALANCE AFTER')),
           Expanded(child: HeaderLabel('REASON / ACTOR')),
           SizedBox(
-            width: 44,
-            child: Icon(Icons.tune, size: 16, color: Color(0xFF475569)),
+            width: 60,
+            child: Align(
+              alignment: Alignment.center,
+              child: HeaderLabel('ACTION'),
+            ),
           ),
         ],
       ),
@@ -5126,11 +5396,13 @@ class TransactionRow extends StatefulWidget {
   const TransactionRow({
     required this.record,
     required this.onTap,
+    required this.onDelete,
     super.key,
   });
 
   final BalanceTransactionRecord record;
   final VoidCallback onTap;
+  final VoidCallback onDelete;
 
   @override
   State<TransactionRow> createState() => _TransactionRowState();
@@ -5144,7 +5416,7 @@ class _TransactionRowState extends State<TransactionRow> {
     final record = widget.record;
     final rowColor = _isHovered ? const Color(0xFFF8FAFC) : Colors.white;
 
-    final dateStr = record.createdAt.toIso8601String().replaceFirst('T', ' ').substring(0, 16);
+    final dateStr = record.createdAt.toLocal().toIso8601String().replaceFirst('T', ' ').substring(0, 16);
     final isPos = record.amount >= 0;
     final amountPrefix = isPos ? '+' : '';
     final amountStr = '$amountPrefix${record.amount.toStringAsFixed(record.amount.truncateToDouble() == record.amount ? 0 : 2)} ${record.unit}';
@@ -5301,18 +5573,22 @@ class _TransactionRowState extends State<TransactionRow> {
                   ],
                 ),
               ),
-              // 8. Action button
+              // 8. Action column (Remove / Delete)
               SizedBox(
-                width: 44,
+                width: 60,
                 child: Center(
                   child: IconButton(
                     icon: const Icon(
-                      Icons.chevron_right,
-                      size: 20,
-                      color: Color(0xFF64748B),
+                      Icons.delete_outline_rounded,
+                      size: 18,
+                      color: Color(0xFFEF4444),
                     ),
-                    tooltip: 'View details',
-                    onPressed: widget.onTap,
+                    tooltip: 'Remove from table (soft delete)',
+                    hoverColor: const Color(0xFFFEE2E2),
+                    splashRadius: 16,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    onPressed: widget.onDelete,
                   ),
                 ),
               ),
@@ -5619,6 +5895,207 @@ class _UserTransactionHistoryDialogState
         backgroundColor: const Color(0xFF15803D),
       ),
     );
+  }
+
+  Future<void> _openSoftDeletedTransactionsDialog() async {
+    final changed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => SoftDeletedTransactionsDialog(
+        registeredUsers: [widget.user],
+        filterEmployeeId: widget.user.employeeId,
+        filterUserProfileId: widget.user.userProfileId,
+        employeeDisplayName: widget.user.fullName,
+      ),
+    );
+    if ((changed == true || mounted) && mounted) {
+      await _loadUserTransactions();
+    }
+  }
+
+  Future<void> _confirmDeleteUserTransaction(
+    BalanceTransactionRecord record,
+  ) async {
+    final amountPrefix = record.amount >= 0 ? '+' : '';
+    final amountStr =
+        '$amountPrefix${record.amount.toStringAsFixed(record.amount.truncateToDouble() == record.amount ? 0 : 2)} ${record.unit}';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+        contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEE2E2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.delete_outline_rounded,
+                color: Color(0xFFDC2626),
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'Remove Transaction',
+              style: HygTypography.pageTitle.copyWith(fontSize: 16),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 8),
+            Text(
+              'Are you sure you want to remove this transaction from the table?',
+              style: HygTypography.body.copyWith(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF1E293B),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: HygColors.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          record.fullName,
+                          overflow: TextOverflow.ellipsis,
+                          style: HygTypography.tablePrimary.copyWith(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        amountStr,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          color: record.amount >= 0
+                              ? const Color(0xFF16A34A)
+                              : const Color(0xFFDC2626),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${record.title}${record.subtitle.isNotEmpty ? " • ${record.subtitle}" : ""}',
+                    overflow: TextOverflow.ellipsis,
+                    style: HygTypography.body.copyWith(
+                      fontSize: 12,
+                      color: HygColors.muted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFF6FF),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFBFDBFE)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline, size: 16, color: Color(0xFF2563EB)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Soft delete: This transaction will only be removed from the table view. It will NOT be deleted from the database.',
+                      style: HygTypography.body.copyWith(
+                        fontSize: 11,
+                        color: const Color(0xFF1E40AF),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          OutlinedButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            icon: const Icon(Icons.delete_outline_rounded, size: 16),
+            label: const Text('Remove from Table'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      final removedIndex = _transactions.indexOf(record);
+      setState(() {
+        _transactions.removeWhere((t) => t.id == record.id);
+      });
+      await RegisteredUsersService.softDeleteTransaction(record.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).clearSnackBars();
+      final controller = ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Removed "${record.title}" from history (preserved in database).',
+          ),
+          backgroundColor: const Color(0xFF1E293B),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          action: SnackBarAction(
+            label: 'Undo',
+            textColor: const Color(0xFFF6C400),
+            onPressed: () async {
+              setState(() {
+                if (removedIndex >= 0 && removedIndex <= _transactions.length) {
+                  _transactions.insert(removedIndex, record);
+                } else {
+                  _transactions.add(record);
+                }
+              });
+              await RegisteredUsersService.restoreTransaction(record.id);
+            },
+          ),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      Future.delayed(const Duration(seconds: 5), () {
+        try {
+          controller.close();
+        } catch (_) {}
+      });
+    }
   }
 
   Future<void> _openLeaveAllocationDialog() async {
@@ -6004,6 +6481,45 @@ class _UserTransactionHistoryDialogState
                       ),
                     ),
                   ),
+                  FutureBuilder<List<BalanceTransactionRecord>>(
+                    future: RegisteredUsersService.fetchHiddenBalanceTransactions(
+                      employeeId: widget.user.employeeId,
+                      userProfileId: widget.user.userProfileId,
+                      registeredUsers: [widget.user],
+                    ),
+                    builder: (context, snapshot) {
+                      final count = snapshot.data?.length ?? 0;
+                      if (count == 0) return const SizedBox.shrink();
+                      return Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(width: 8),
+                          Tooltip(
+                            message: 'View & restore $count soft-deleted transaction(s)',
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: const Color(0xFF64748B),
+                                side: const BorderSide(color: HygColors.border),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 8,
+                                ),
+                              ),
+                              onPressed: _openSoftDeletedTransactionsDialog,
+                              icon: const Icon(
+                                Icons.restore_from_trash_outlined,
+                                size: 16,
+                              ),
+                              label: Text('Restore ($count)'),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
                   const SizedBox(width: 8),
                   IconButton(
                     tooltip: 'Export to CSV',
@@ -6112,6 +6628,8 @@ class _UserTransactionHistoryDialogState
                                 final tx = list[index];
                                 return _UserTransactionTile(
                                   record: tx,
+                                  onDelete: () =>
+                                      _confirmDeleteUserTransaction(tx),
                                   onTap: () {
                                     showDialog<void>(
                                       context: context,
@@ -6221,15 +6739,18 @@ class _UserTransactionTile extends StatelessWidget {
   const _UserTransactionTile({
     required this.record,
     required this.onTap,
+    this.onDelete,
   });
 
   final BalanceTransactionRecord record;
   final VoidCallback onTap;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
     final isPos = record.amount >= 0;
     final dateStr = record.createdAt
+        .toLocal()
         .toIso8601String()
         .replaceFirst('T', ' ')
         .substring(0, 16);
@@ -6342,7 +6863,22 @@ class _UserTransactionTile extends StatelessWidget {
                 ],
               ],
             ),
-            const SizedBox(width: 6),
+            if (onDelete != null) ...[
+              const SizedBox(width: 6),
+              IconButton(
+                icon: const Icon(
+                  Icons.delete_outline_rounded,
+                  size: 18,
+                  color: Color(0xFFEF4444),
+                ),
+                tooltip: 'Remove from table (soft delete)',
+                splashRadius: 16,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                onPressed: onDelete,
+              ),
+            ],
+            const SizedBox(width: 4),
             const Icon(
               Icons.chevron_right,
               size: 18,
@@ -6384,6 +6920,7 @@ class _TransactionDetailDialogState extends State<TransactionDetailDialog> {
     final record = widget.record;
     final isPos = record.amount >= 0;
     final dateStr = record.createdAt
+        .toLocal()
         .toIso8601String()
         .replaceFirst('T', ' ')
         .substring(0, 19);
@@ -7003,5 +7540,932 @@ class _TransactionDetailDialogState extends State<TransactionDetailDialog> {
       ),
     );
   }
+}
+
+class SoftDeletedTransactionsDialog extends StatefulWidget {
+  const SoftDeletedTransactionsDialog({
+    this.registeredUsers,
+    this.filterEmployeeId,
+    this.filterUserProfileId,
+    this.employeeDisplayName,
+    super.key,
+  });
+
+  final List<RegisteredUserPreview>? registeredUsers;
+  final String? filterEmployeeId;
+  final String? filterUserProfileId;
+  final String? employeeDisplayName;
+
+  @override
+  State<SoftDeletedTransactionsDialog> createState() =>
+      _SoftDeletedTransactionsDialogState();
+}
+
+class _SoftDeletedTransactionsDialogState
+    extends State<SoftDeletedTransactionsDialog> {
+  bool _isLoading = true;
+  String? _error;
+  List<BalanceTransactionRecord> _hiddenItems = [];
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+  bool _hasChanges = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHiddenItems();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadHiddenItems() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    try {
+      final items =
+          await RegisteredUsersService.fetchHiddenBalanceTransactions(
+        employeeId: widget.filterEmployeeId,
+        userProfileId: widget.filterUserProfileId,
+        registeredUsers: widget.registeredUsers,
+      );
+      if (!mounted) return;
+      setState(() {
+        _hiddenItems = items;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _error = e.toString().replaceFirst('Exception: ', '');
+      });
+    }
+  }
+
+  List<BalanceTransactionRecord> get _filteredList {
+    final q = _searchQuery.trim().toLowerCase();
+    if (q.isEmpty) return _hiddenItems;
+    return _hiddenItems.where((t) {
+      return t.fullName.toLowerCase().contains(q) ||
+          t.employeeNo.toLowerCase().contains(q) ||
+          t.username.toLowerCase().contains(q) ||
+          t.title.toLowerCase().contains(q) ||
+          t.subtitle.toLowerCase().contains(q) ||
+          (t.reason?.toLowerCase().contains(q) ?? false);
+    }).toList();
+  }
+
+  Future<void> _confirmRestoreItem(BalanceTransactionRecord record) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+        contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+        actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+        title: const Row(
+          children: [
+            Icon(Icons.restore_from_trash_outlined,
+                color: Color(0xFF2563EB), size: 22),
+            SizedBox(width: 10),
+            Text(
+              'Restore Transaction',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
+        content: Text(
+          'Restore "${record.title}" for ${record.fullName} back to the active table view?',
+          style: HygTypography.body.copyWith(
+            fontSize: 13,
+            color: const Color(0xFF334155),
+          ),
+        ),
+        actions: [
+          OutlinedButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF2563EB),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            icon: const Icon(Icons.check, size: 16),
+            label: const Text('Restore to Table'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      setState(() {
+        _hiddenItems.removeWhere((t) => t.id == record.id);
+        _hasChanges = true;
+      });
+      await RegisteredUsersService.restoreTransaction(record.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).clearSnackBars();
+      final controller = ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Restored "${record.title}" for ${record.fullName} to table.',
+          ),
+          backgroundColor: const Color(0xFF15803D),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      Future.delayed(const Duration(seconds: 5), () {
+        try {
+          controller.close();
+        } catch (_) {}
+      });
+    }
+  }
+
+  Future<void> _confirmRestoreAll() async {
+    if (_hiddenItems.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+        contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+        actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+        title: const Row(
+          children: [
+            Icon(Icons.restore_from_trash_outlined,
+                color: Color(0xFF2563EB), size: 22),
+            SizedBox(width: 10),
+            Text(
+              'Restore All Transactions',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to restore all ${_hiddenItems.length} soft-deleted transaction(s) back to the table view?',
+          style: HygTypography.body.copyWith(
+            fontSize: 13,
+            color: const Color(0xFF334155),
+          ),
+        ),
+        actions: [
+          OutlinedButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF2563EB),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            icon: const Icon(Icons.done_all, size: 16),
+            label: const Text('Restore All'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      setState(() {
+        _hiddenItems.clear();
+        _hasChanges = true;
+      });
+      await RegisteredUsersService.restoreAllHiddenTransactions();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).clearSnackBars();
+      final controller = ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('All soft-deleted transactions restored to the table.'),
+          backgroundColor: const Color(0xFF15803D),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      Future.delayed(const Duration(seconds: 5), () {
+        try {
+          controller.close();
+        } catch (_) {}
+      });
+      Navigator.of(context).pop(true);
+    }
+  }
+
+  Future<void> _confirmHardDeleteItem(BalanceTransactionRecord record) async {
+    final amountPrefix = record.amount >= 0 ? '+' : '';
+    final amountStr =
+        '$amountPrefix${record.amount.toStringAsFixed(record.amount.truncateToDouble() == record.amount ? 0 : 2)} ${record.unit}';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+        contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF2F2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.warning_amber_rounded,
+                color: Color(0xFFDC2626),
+                size: 22,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Text(
+              'Hard Delete (Permanent)',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFFDC2626),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Are you sure you want to permanently delete this transaction from the database?',
+              style: HygTypography.body.copyWith(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF1E293B),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: HygColors.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          record.fullName,
+                          style: HygTypography.tablePrimary.copyWith(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        amountStr,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          color: record.amount >= 0
+                              ? const Color(0xFF16A34A)
+                              : const Color(0xFFDC2626),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${record.title}${record.subtitle.isNotEmpty ? " • ${record.subtitle}" : ""}',
+                    style: HygTypography.body.copyWith(
+                      fontSize: 12,
+                      color: HygColors.muted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF2F2),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFFECACA)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.error_outline,
+                      size: 18, color: Color(0xFFDC2626)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'CRITICAL WARNING: This action is permanent and CANNOT be undone. The underlying record will be purged from the database entirely.',
+                      style: HygTypography.body.copyWith(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF991B1B),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          OutlinedButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            icon: const Icon(Icons.delete_forever, size: 16),
+            label: const Text('Delete Permanently'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      setState(() {
+        _hiddenItems.removeWhere((t) => t.id == record.id);
+        _hasChanges = true;
+      });
+      await RegisteredUsersService.hardDeleteTransaction(record.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).clearSnackBars();
+      final controller = ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Permanently deleted "${record.title}" for ${record.fullName} from the database.',
+          ),
+          backgroundColor: const Color(0xFFDC2626),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      Future.delayed(const Duration(seconds: 5), () {
+        try {
+          controller.close();
+        } catch (_) {}
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final list = _filteredList;
+
+    return Dialog(
+      backgroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 32),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            maxWidth: 920,
+            maxHeight: 740,
+            minWidth: 680,
+          ),
+          child: Column(
+            children: [
+              // Modal Header
+              Container(
+                padding: const EdgeInsets.fromLTRB(20, 18, 16, 16),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                  border: Border(bottom: BorderSide(color: HygColors.border)),
+                ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEE2E2),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.delete_sweep_outlined,
+                      color: Color(0xFFDC2626),
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              widget.employeeDisplayName != null
+                                  ? 'Soft-Deleted: ${widget.employeeDisplayName}'
+                                  : 'Soft-Deleted Transactions',
+                              style: HygTypography.pageTitle.copyWith(
+                                fontSize: 18,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(6),
+                                border:
+                                    Border.all(color: const Color(0xFFCBD5E1)),
+                              ),
+                              child: Text(
+                                '${_hiddenItems.length} hidden',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF475569),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          widget.employeeDisplayName != null
+                              ? 'Transactions hidden for this employee. Restore them to the table or delete permanently.'
+                              : 'These transactions are hidden from the table. You can restore them or permanently delete them.',
+                          style: HygTypography.body.copyWith(
+                            color: HygColors.muted,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (_hiddenItems.isNotEmpty) ...[
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF2563EB),
+                        side: const BorderSide(color: Color(0xFFBFDBFE)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                      ),
+                      onPressed: _confirmRestoreAll,
+                      icon: const Icon(Icons.done_all, size: 16),
+                      label: const Text('Restore All'),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Color(0xFF475569)),
+                    tooltip: 'Close',
+                    onPressed: () => Navigator.of(context).pop(_hasChanges),
+                  ),
+                ],
+              ),
+            ),
+
+            // Search Bar on top
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
+              child: SizedBox(
+                height: 38,
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: (val) => setState(() => _searchQuery = val),
+                  style: HygTypography.body.copyWith(fontSize: 12),
+                  decoration: InputDecoration(
+                    hintText: 'Search hidden items by employee, reason...',
+                    hintStyle: HygTypography.body.copyWith(
+                      color: HygColors.muted,
+                      fontSize: 12,
+                    ),
+                    prefixIcon: const Icon(Icons.search, size: 16, color: Color(0xFF64748B)),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, size: 14),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() => _searchQuery = '');
+                              },
+                            )
+                          : null,
+                      contentPadding:
+                          const EdgeInsets.symmetric(horizontal: 10),
+                      filled: true,
+                      fillColor: const Color(0xFFF8FAFC),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: HygColors.border),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: HygColors.border),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+            // Content Area
+            Expanded(
+              child: _isLoading
+                  ? const Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          CircularProgressIndicator(strokeWidth: 2.5),
+                          SizedBox(height: 12),
+                          Text(
+                            'Loading soft-deleted transactions...',
+                            style: TextStyle(
+                              color: HygColors.muted,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : _error != null
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(
+                                  Icons.error_outline,
+                                  color: Color(0xFFDC2626),
+                                  size: 36,
+                                ),
+                                const SizedBox(height: 10),
+                                Text(
+                                  _error!,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    color: Color(0xFFDC2626),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                ElevatedButton(
+                                  onPressed: _loadHiddenItems,
+                                  child: const Text('Retry'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : list.isEmpty
+                          ? Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    _hiddenItems.isEmpty
+                                        ? Icons.check_circle_outline
+                                        : Icons.search_off,
+                                    size: 44,
+                                    color: _hiddenItems.isEmpty
+                                        ? const Color(0xFF16A34A)
+                                        : const Color(0xFF94A3B8),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  Text(
+                                    _hiddenItems.isEmpty
+                                        ? 'No soft-deleted transactions'
+                                        : 'No matching transactions',
+                                    style:
+                                        HygTypography.tablePrimary.copyWith(
+                                      color: const Color(0xFF334155),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    _hiddenItems.isEmpty
+                                        ? 'All transaction history records are currently active in the table.'
+                                        : 'Try clearing your search term.',
+                                    style: HygTypography.body.copyWith(
+                                      color: HygColors.muted,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : ListView.separated(
+                              padding: const EdgeInsets.all(20),
+                              itemCount: list.length,
+                              separatorBuilder: (context, index) =>
+                                  const SizedBox(height: 10),
+                              itemBuilder: (context, index) {
+                                final item = list[index];
+                                final isPos = item.amount >= 0;
+                                final dateStr = item.createdAt
+                                    .toLocal()
+                                    .toIso8601String()
+                                    .replaceFirst('T', ' ')
+                                    .substring(0, 16);
+                                final amtPrefix = isPos ? '+' : '';
+                                final amtStr =
+                                    '$amtPrefix${item.amount.toStringAsFixed(item.amount.truncateToDouble() == item.amount ? 0 : 2)} ${item.unit}';
+
+                                return Container(
+                                  padding: const EdgeInsets.all(14),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: const Color(0xFFE2E8F0),
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black
+                                            .withValues(alpha: 0.02),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 1),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.center,
+                                    children: [
+                                      // Indicator
+                                      Container(
+                                        width: 36,
+                                        height: 36,
+                                        decoration: BoxDecoration(
+                                          color: isPos
+                                              ? const Color(0xFFDCFCE7)
+                                              : const Color(0xFFFFE4E6),
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                        child: Icon(
+                                          isPos
+                                              ? Icons.arrow_downward_rounded
+                                              : Icons.arrow_upward_rounded,
+                                          size: 18,
+                                          color: isPos
+                                              ? const Color(0xFF16A34A)
+                                              : const Color(0xFFDC2626),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      // Details
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                Flexible(
+                                                  child: Text(
+                                                    item.fullName,
+                                                    overflow: TextOverflow.ellipsis,
+                                                    style: HygTypography
+                                                        .tablePrimary
+                                                        .copyWith(
+                                                      fontSize: 13,
+                                                      fontWeight: FontWeight.w700,
+                                                    ),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Text(
+                                                  item.employeeNo.isNotEmpty
+                                                      ? item.employeeNo
+                                                      : '@${item.username}',
+                                                  style: HygTypography.body
+                                                      .copyWith(
+                                                    fontSize: 11,
+                                                    color: HygColors.muted,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 10),
+                                                _BalanceTypeBadge(
+                                                    balanceType:
+                                                        item.balanceType),
+                                                const SizedBox(width: 6),
+                                                _CategoryBadge(
+                                                  category: item.category,
+                                                  isPositive: isPos,
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                  child: Text(
+                                                    item.reason
+                                                                ?.trim()
+                                                                .isNotEmpty ==
+                                                            true
+                                                        ? item.reason!
+                                                        : item.title,
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    style: HygTypography.body
+                                                        .copyWith(
+                                                      fontSize: 12,
+                                                      color: const Color(
+                                                          0xFF334155),
+                                                    ),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Text(
+                                                  dateStr,
+                                                  style: HygTypography.body
+                                                      .copyWith(
+                                                    fontSize: 11,
+                                                    color: HygColors.muted,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 16),
+                                      // Amount
+                                      Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.end,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Text(
+                                            amtStr,
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w800,
+                                              color: isPos
+                                                  ? (item.isLeave
+                                                      ? const Color(0xFFD97706)
+                                                      : const Color(0xFF0D9488))
+                                                  : const Color(0xFFDC2626),
+                                            ),
+                                          ),
+                                          if (item.balanceAfter != null)
+                                            Text(
+                                              'After: ${item.balanceAfter!.toStringAsFixed(item.balanceAfter!.truncateToDouble() == item.balanceAfter! ? 0 : 2)} ${item.unit}',
+                                              style: HygTypography.body.copyWith(
+                                                fontSize: 10.5,
+                                                color: HygColors.muted,
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                      const SizedBox(width: 16),
+                                      // Buttons
+                                      // Action Buttons (Icons only, with tooltips)
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Tooltip(
+                                            message: 'Restore to table view',
+                                            child: Material(
+                                              color: Colors.transparent,
+                                              child: InkWell(
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                                onTap: () =>
+                                                    _confirmRestoreItem(item),
+                                                child: Container(
+                                                  padding:
+                                                      const EdgeInsets.all(8),
+                                                  decoration: BoxDecoration(
+                                                    color:
+                                                        const Color(0xFFEFF6FF),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            8),
+                                                    border: Border.all(
+                                                      color: const Color(
+                                                          0xFFBFDBFE),
+                                                    ),
+                                                  ),
+                                                  child: const Icon(
+                                                    Icons.undo_rounded,
+                                                    size: 16,
+                                                    color: Color(0xFF2563EB),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Tooltip(
+                                            message:
+                                                'Permanently delete from database',
+                                            child: Material(
+                                              color: Colors.transparent,
+                                              child: InkWell(
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                                onTap: () =>
+                                                    _confirmHardDeleteItem(item),
+                                                child: Container(
+                                                  padding:
+                                                      const EdgeInsets.all(8),
+                                                  decoration: BoxDecoration(
+                                                    color:
+                                                        const Color(0xFFDC2626),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            8),
+                                                  ),
+                                                  child: const Icon(
+                                                    Icons
+                                                        .delete_forever_rounded,
+                                                    size: 16,
+                                                    color: Colors.white,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+            ),
+
+            // Footer
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius:
+                    BorderRadius.vertical(bottom: Radius.circular(16)),
+                border: Border(top: BorderSide(color: HygColors.border)),
+              ),
+              child: Row(
+                children: [
+                  Text(
+                    'Showing ${list.length} of ${_hiddenItems.length} soft-deleted items',
+                    style: HygTypography.body.copyWith(
+                      color: HygColors.muted,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const Spacer(),
+                  FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF0F172A),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    onPressed: () => Navigator.of(context).pop(_hasChanges),
+                    child: const Text('Close'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
 }
 

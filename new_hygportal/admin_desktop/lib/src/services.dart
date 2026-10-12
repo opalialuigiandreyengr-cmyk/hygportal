@@ -1810,12 +1810,220 @@ class RegisteredUsersService {
     return response.toString();
   }
 
+  static final Set<String> _hiddenTransactionIds = <String>{};
+  static final Set<String> _hardDeletedTransactionIds = <String>{};
+  static bool _hiddenDbInitialized = false;
+
+  static Future<void> _initHiddenTransactionsDb() async {
+    if (_hiddenDbInitialized) return;
+    try {
+      final db = await LocalSyncService._database;
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS hidden_balance_transactions (
+          transaction_id TEXT PRIMARY KEY,
+          hidden_at TEXT NOT NULL,
+          is_hard_deleted INTEGER NOT NULL DEFAULT 0
+        )
+      ''');
+      try {
+        await db.execute(
+          'ALTER TABLE hidden_balance_transactions ADD COLUMN is_hard_deleted INTEGER NOT NULL DEFAULT 0;',
+        );
+      } catch (_) {}
+      final rows = await db.query('hidden_balance_transactions');
+      for (final r in rows) {
+        final id = r['transaction_id']?.toString();
+        final isHard = (r['is_hard_deleted'] as int? ?? 0) == 1;
+        if (id != null && id.isNotEmpty) {
+          _hiddenTransactionIds.add(id);
+          if (isHard) {
+            _hardDeletedTransactionIds.add(id);
+          }
+        }
+      }
+      _hiddenDbInitialized = true;
+    } catch (e) {
+      debugPrint('RegisteredUsersService: error init hidden DB: $e');
+    }
+
+    try {
+      final remoteRows = await _client
+          .from('hidden_balance_transactions')
+          .select('transaction_id, is_hard_deleted');
+      if (remoteRows is List) {
+        for (final r in remoteRows) {
+          final id = r['transaction_id']?.toString();
+          final isHard = r['is_hard_deleted'] == true;
+          if (id != null && id.isNotEmpty) {
+            _hiddenTransactionIds.add(id);
+            if (isHard) {
+              _hardDeletedTransactionIds.add(id);
+            } else {
+              _hardDeletedTransactionIds.remove(id);
+            }
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  static Future<Set<String>> getHiddenTransactionIds({
+    bool excludeHardDeleted = true,
+  }) async {
+    await _initHiddenTransactionsDb();
+    if (excludeHardDeleted) {
+      return Set<String>.from(
+        _hiddenTransactionIds.difference(_hardDeletedTransactionIds),
+      );
+    }
+    return Set<String>.from(_hiddenTransactionIds);
+  }
+
+  static Future<void> softDeleteTransaction(String transactionId) async {
+    await _initHiddenTransactionsDb();
+    _hiddenTransactionIds.add(transactionId);
+    _hardDeletedTransactionIds.remove(transactionId);
+
+    try {
+      final db = await LocalSyncService._database;
+      await db.insert(
+        'hidden_balance_transactions',
+        {
+          'transaction_id': transactionId,
+          'hidden_at': DateTime.now().toIso8601String(),
+          'is_hard_deleted': 0,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (e) {
+      debugPrint('Error saving local hidden transaction: $e');
+    }
+
+    try {
+      await _client.from('hidden_balance_transactions').upsert({
+        'transaction_id': transactionId,
+        'is_hard_deleted': false,
+      });
+    } catch (_) {}
+  }
+
+  static Future<void> restoreTransaction(String transactionId) async {
+    await _initHiddenTransactionsDb();
+    _hiddenTransactionIds.remove(transactionId);
+    _hardDeletedTransactionIds.remove(transactionId);
+
+    try {
+      final db = await LocalSyncService._database;
+      await db.delete(
+        'hidden_balance_transactions',
+        where: 'transaction_id = ?',
+        whereArgs: [transactionId],
+      );
+    } catch (e) {
+      debugPrint('Error deleting local hidden transaction: $e');
+    }
+
+    try {
+      await _client
+          .from('hidden_balance_transactions')
+          .delete()
+          .eq('transaction_id', transactionId);
+    } catch (_) {}
+  }
+
+  static Future<void> restoreAllHiddenTransactions() async {
+    await _initHiddenTransactionsDb();
+    _hiddenTransactionIds.clear();
+    _hardDeletedTransactionIds.clear();
+
+    try {
+      final db = await LocalSyncService._database;
+      await db.delete('hidden_balance_transactions');
+    } catch (_) {}
+
+    try {
+      await _client
+          .from('hidden_balance_transactions')
+          .delete()
+          .neq('transaction_id', '');
+    } catch (_) {}
+  }
+
+  static Future<bool> hardDeleteTransaction(String transactionId) async {
+    await _initHiddenTransactionsDb();
+    _hiddenTransactionIds.add(transactionId);
+    _hardDeletedTransactionIds.add(transactionId);
+
+    try {
+      final db = await LocalSyncService._database;
+      await db.insert(
+        'hidden_balance_transactions',
+        {
+          'transaction_id': transactionId,
+          'hidden_at': DateTime.now().toIso8601String(),
+          'is_hard_deleted': 1,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (_) {}
+
+    try {
+      final res = await _client.rpc(
+        'admin_hard_delete_balance_transaction',
+        params: {'p_transaction_id': transactionId},
+      );
+      return res == true;
+    } catch (e) {
+      debugPrint('admin_hard_delete_balance_transaction rpc error: $e');
+      try {
+        if (transactionId.startsWith('offset_') || transactionId.startsWith('ot_')) {
+          final rawId = transactionId.startsWith('offset_')
+              ? transactionId.substring(7)
+              : transactionId.substring(3);
+          await _client.from('offset_transactions').delete().eq('id', rawId);
+        } else if (transactionId.startsWith('leave_')) {
+          final rawId = transactionId.substring(6);
+          await _client.from('leave_transactions').delete().eq('id', rawId);
+        } else if (transactionId.startsWith('audit_')) {
+          final rawId = transactionId.substring(6);
+          await _client.from('audit_logs').delete().eq('id', rawId);
+        } else if (transactionId.startsWith('req_')) {
+          final rawId = transactionId.substring(4);
+          await _client.from('requests').delete().eq('id', rawId);
+        }
+        return true;
+      } catch (err) {
+        debugPrint('Direct delete fallback error: $err');
+        return false;
+      }
+    }
+  }
+
+  static Future<List<BalanceTransactionRecord>> fetchHiddenBalanceTransactions({
+    String? employeeId,
+    String? userProfileId,
+    List<RegisteredUserPreview>? registeredUsers,
+  }) async {
+    final hiddenIds = await getHiddenTransactionIds(excludeHardDeleted: true);
+    if (hiddenIds.isEmpty) return [];
+
+    final all = await fetchBalanceTransactions(
+      employeeId: employeeId,
+      userProfileId: userProfileId,
+      limit: 5000,
+      registeredUsers: registeredUsers,
+      includeHidden: true,
+    );
+    return all.where((t) => hiddenIds.contains(t.id)).toList();
+  }
+
   static Future<List<BalanceTransactionRecord>> fetchBalanceTransactions({
     String? employeeId,
     String? userProfileId,
     String? balanceType,
-    int limit = 500,
+    int limit = 5000,
     List<RegisteredUserPreview>? registeredUsers,
+    bool includeHidden = false,
   }) async {
     try {
       final params = <String, dynamic>{
@@ -1838,13 +2046,18 @@ class RegisteredUsersService {
         params: params,
       );
 
-      if (response is List && response.isNotEmpty) {
-        return response
+      if (response is List) {
+        final list = response
             .whereType<Map<String, dynamic>>()
             .map(_transactionFromRow)
             .toList();
+        if (includeHidden) return list;
+        final hiddenIds = await getHiddenTransactionIds(excludeHardDeleted: false);
+        return list.where((t) => !hiddenIds.contains(t.id)).toList();
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('admin_get_balance_transactions failed: $e');
+    }
 
     return _fetchBalanceTransactionsFallback(
       employeeId: employeeId,
@@ -1852,6 +2065,7 @@ class RegisteredUsersService {
       balanceType: balanceType,
       limit: limit,
       registeredUsers: registeredUsers,
+      includeHidden: includeHidden,
     );
   }
 
@@ -1861,7 +2075,7 @@ class RegisteredUsersService {
     final rawDate = EmployeeDirectoryService._stringValue(row['created_at']);
     DateTime createdAt;
     try {
-      createdAt = DateTime.parse(rawDate);
+      createdAt = DateTime.parse(rawDate).toLocal();
     } catch (_) {
       createdAt = DateTime.now();
     }
@@ -1917,8 +2131,9 @@ class RegisteredUsersService {
     String? employeeId,
     String? userProfileId,
     String? balanceType,
-    int limit = 500,
+    int limit = 5000,
     List<RegisteredUserPreview>? registeredUsers,
+    bool includeHidden = false,
   }) async {
     final results = <BalanceTransactionRecord>[];
     final seenIds = <String>{};
@@ -2008,7 +2223,8 @@ class RegisteredUsersService {
             DateTime createdAt;
             try {
               createdAt =
-                  DateTime.parse(raw['submitted_at']?.toString() ?? '');
+                  DateTime.parse(raw['submitted_at']?.toString() ?? '')
+                      .toLocal();
             } catch (_) {
               createdAt = DateTime.now();
             }
@@ -2066,11 +2282,15 @@ class RegisteredUsersService {
             // 2B. Offset Request Used (Offset Deducted)
             final isOffsetUse = code == 'use_offset' ||
                 typeName.contains('use offset') ||
-                transTypeLower.contains('use offset');
+                transTypeLower == 'use_offset' ||
+                transTypeLower == 'use offset' ||
+                (transTypeLower.contains('offset') &&
+                    transTypeLower.contains('use'));
             if (wantsOffset && isOffsetUse) {
               final hours =
                   (raw['total_hours'] as num?)?.toDouble() ?? 0.0;
-              if (hours > 0) {
+              if (hours > 0 &&
+                  (reqStatus == 'approved' || reqStatus == 'validated')) {
                 final txId = 'offset_use_$reqId';
                 if (!seenIds.contains(txId)) {
                   seenIds.add(txId);
@@ -2107,21 +2327,29 @@ class RegisteredUsersService {
               }
             }
 
-            // 2C. Offset Request Earned (ESARF / OB)
+            final reasonLower = (reason ?? '').toLowerCase();
+            final hasOffsetInReasonTag = RegExp(
+              r'\([^)]*offset[^)]*\)',
+              caseSensitive: false,
+            ).hasMatch(reason ?? '');
+
+            // 2C. Offset Request Earned (Includes combined types like FIO/OB/OT/Offset, FIO/OB/Offset)
             final isOffsetEarn = (code == 'offset_earn' ||
                     (typeName.contains('offset') &&
                         !typeName.contains('use')) ||
-                    (transTypeLower.contains('ob') ||
+                    (transTypeLower == 'offset_earn' ||
+                        transTypeLower == 'offset earn' ||
                         (transTypeLower.contains('offset') &&
-                            !transTypeLower.contains('use')))) &&
+                            !transTypeLower.contains('use'))) ||
+                    (hasOffsetInReasonTag &&
+                        !reasonLower.contains('use offset') &&
+                        !reasonLower.contains('use_offset'))) &&
                 !isOffsetUse;
             if (wantsOffset && isOffsetEarn) {
               final hours =
                   (raw['total_hours'] as num?)?.toDouble() ?? 0.0;
               if (hours > 0 &&
-                  (reqStatus == 'approved' ||
-                      reqStatus == 'validated' ||
-                      reqStatus == 'pending')) {
+                  (reqStatus == 'approved' || reqStatus == 'validated')) {
                 final txId = 'offset_earn_$reqId';
                 if (!seenIds.contains(txId)) {
                   seenIds.add(txId);
@@ -2173,12 +2401,10 @@ class RegisteredUsersService {
             final txId = 'initial_leave_grant_$empId';
             if (!seenIds.contains(txId)) {
               seenIds.add(txId);
-              DateTime regDate;
-              try {
-                regDate = DateTime.parse(user.registeredAt);
-              } catch (_) {
-                regDate = DateTime(DateTime.now().year, 1, 1);
-              }
+              final rawDate = user.rawRegisteredAt ?? '';
+              final regDate = DateTime.tryParse(rawDate) ??
+                  DateTime.tryParse(user.registeredAt) ??
+                  DateTime.now();
               results.add(
                 BalanceTransactionRecord(
                   id: txId,
@@ -2219,12 +2445,10 @@ class RegisteredUsersService {
             final txId = 'initial_offset_alloc_$empId';
             if (!seenIds.contains(txId)) {
               seenIds.add(txId);
-              DateTime regDate;
-              try {
-                regDate = DateTime.parse(user.registeredAt);
-              } catch (_) {
-                regDate = DateTime(DateTime.now().year, 1, 1);
-              }
+              final rawDate = user.rawRegisteredAt ?? '';
+              final regDate = DateTime.tryParse(rawDate) ??
+                  DateTime.tryParse(user.registeredAt) ??
+                  DateTime.now();
               results.add(
                 BalanceTransactionRecord(
                   id: txId,
@@ -2299,7 +2523,7 @@ class RegisteredUsersService {
             DateTime createdAt;
             try {
               createdAt =
-                  DateTime.parse(row['created_at']?.toString() ?? '');
+                  DateTime.parse(row['created_at']?.toString() ?? '').toLocal();
             } catch (_) {
               createdAt = DateTime.now();
             }
@@ -2383,7 +2607,7 @@ class RegisteredUsersService {
             DateTime createdAt;
             try {
               createdAt =
-                  DateTime.parse(row['created_at']?.toString() ?? '');
+                  DateTime.parse(row['created_at']?.toString() ?? '').toLocal();
             } catch (_) {
               createdAt = DateTime.now();
             }
@@ -2420,11 +2644,24 @@ class RegisteredUsersService {
 
       // 7. Sort all combined descending by date
       results.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      if (!includeHidden) {
+        final hiddenIds = await getHiddenTransactionIds(excludeHardDeleted: false);
+        final filtered = results.where((t) => !hiddenIds.contains(t.id)).toList();
+        if (filtered.length > limit) {
+          return filtered.sublist(0, limit);
+        }
+        return filtered;
+      }
       if (results.length > limit) {
         return results.sublist(0, limit);
       }
+      return results;
     } catch (_) {}
 
+    if (!includeHidden) {
+      final hiddenIds = await getHiddenTransactionIds(excludeHardDeleted: false);
+      return results.where((t) => !hiddenIds.contains(t.id)).toList();
+    }
     return results;
   }
 
@@ -2481,6 +2718,7 @@ class RegisteredUsersService {
       leaveRemainingDays: _nullableDouble(row['leave_remaining_days']),
       offsetBalanceHours: _nullableDouble(row['offset_balance_hours']),
       registeredAt: DepartmentDirectoryService._formatDate(registeredAt),
+      rawRegisteredAt: registeredAt.isNotEmpty && registeredAt != '-' ? registeredAt : null,
       emailConfirmedAt: DepartmentDirectoryService._formatDate(
         emailConfirmedAt,
       ),

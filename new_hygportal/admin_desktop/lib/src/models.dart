@@ -395,6 +395,7 @@ class RegisteredUserPreview {
     required this.leaveRemainingDays,
     this.offsetBalanceHours,
     required this.registeredAt,
+    this.rawRegisteredAt,
     required this.emailConfirmedAt,
     required this.lastSignInAt,
   });
@@ -416,6 +417,7 @@ class RegisteredUserPreview {
   final double? leaveRemainingDays;
   final double? offsetBalanceHours;
   final String registeredAt;
+  final String? rawRegisteredAt;
   final String emailConfirmedAt;
   final String lastSignInAt;
 }

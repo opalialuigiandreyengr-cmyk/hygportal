@@ -541,9 +541,7 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
     });
 
     _updateAgeFromBirthDate(_birthDateController.text);
-    if (widget.employee == null) {
-      _updateEmployeeTypeFromDateHired(_dateHiredController.text);
-    }
+    _updateEmployeeTypeFromDateHired(_dateHiredController.text);
   }
 
   void _updateAgeFromBirthDate(String dateText) {

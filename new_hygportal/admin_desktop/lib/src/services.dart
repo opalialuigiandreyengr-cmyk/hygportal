@@ -1326,6 +1326,40 @@ class DepartmentDirectoryService {
 
 class PositionDirectoryService {
   static final _client = Supabase.instance.client;
+  static final Map<String, int> _authorityLevelByName = {};
+
+  static bool get isCacheEmpty => _authorityLevelByName.isEmpty;
+
+  static int? lookupAuthorityLevel(String? positionName) {
+    if (positionName == null) return null;
+    final cleaned = positionName.trim().toLowerCase();
+    if (cleaned.isEmpty) return null;
+    final exact = _authorityLevelByName[cleaned];
+    if (exact != null && exact > 0) return exact;
+    for (final entry in _authorityLevelByName.entries) {
+      if (entry.key == cleaned) return entry.value;
+    }
+    return null;
+  }
+
+  static void cachePositions(Iterable<PositionPreview> positions) {
+    for (final p in positions) {
+      final name = p.name.trim().toLowerCase();
+      if (name.isNotEmpty && p.authorityLevel > 0) {
+        _authorityLevelByName[name] = p.authorityLevel;
+      }
+    }
+  }
+
+  static void cachePositionAuthorities(Iterable<AdminPositionAuthorityPreview> items) {
+    for (final p in items) {
+      final name = p.positionName.trim().toLowerCase();
+      final level = p.authorityLevel;
+      if (name.isNotEmpty && level != null && level > 0) {
+        _authorityLevelByName[name] = level;
+      }
+    }
+  }
 
   static Future<List<PositionPreview>> loadPositions() async {
     final response = await _client.rpc(
@@ -1340,10 +1374,12 @@ class PositionDirectoryService {
       return const [];
     }
 
-    return response
+    final list = response
         .whereType<Map<String, dynamic>>()
         .map(PositionDirectoryService._fromRow)
         .toList();
+    cachePositions(list);
+    return list;
   }
 
   static Future<String> createPosition(String name) async {
@@ -3052,10 +3088,12 @@ class AdminWorkflowService {
       params: _credentials,
     );
     if (response is! List) return const [];
-    return response
+    final list = response
         .whereType<Map<String, dynamic>>()
         .map(_positionAuthorityFromRow)
         .toList();
+    PositionDirectoryService.cachePositionAuthorities(list);
+    return list;
   }
 
   static Future<String> setPositionAuthorityLevel({
@@ -3938,6 +3976,12 @@ class AdminRequestsService {
   static final _client = Supabase.instance.client;
 
   static Future<List<AdminRequestItem>> loadAllRequests() async {
+    if (PositionDirectoryService.isCacheEmpty) {
+      try {
+        await PositionDirectoryService.loadPositions();
+      } catch (_) {}
+    }
+
     final response = await _client.rpc('admin_get_all_requests');
     if (response is! List) {
       return const [];

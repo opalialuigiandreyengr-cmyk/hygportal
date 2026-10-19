@@ -3766,7 +3766,9 @@ class _UserLeaveCreditsDialogState extends State<UserLeaveCreditsDialog> {
     }
     final isManager = posName.contains('manager');
     final empType = _employeeType?.trim().toLowerCase() ?? '';
-    final isRegular = empType == 'regular';
+    final isRegular = empType == 'regular' ||
+        (hasCompletedOneYear &&
+            (empType == 'probationary' || empType == 'trainee'));
     if (!isManager && !isRegular) {
       return 0;
     }

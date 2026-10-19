@@ -9,6 +9,8 @@ alter table public.leave_transactions add constraint leave_transactions_type_che
 );
 
 -- 2. Update admin_deduct_employee_leave_credits to also write to leave_transactions
+drop function if exists public.admin_deduct_employee_leave_credits(uuid, numeric, text);
+drop function if exists public.admin_deduct_employee_leave_credits(uuid, numeric);
 create or replace function public.admin_deduct_employee_leave_credits(
   p_user_profile_id uuid,
   p_deduct_days numeric,
@@ -126,6 +128,8 @@ $$;
 grant execute on function public.admin_deduct_employee_leave_credits(uuid, numeric, text) to authenticated, anon, service_role;
 
 -- 3. Update admin_reimburse_employee_leave_credits to also write to leave_transactions
+drop function if exists public.admin_reimburse_employee_leave_credits(uuid, numeric, text);
+drop function if exists public.admin_reimburse_employee_leave_credits(uuid, numeric);
 create or replace function public.admin_reimburse_employee_leave_credits(
   p_user_profile_id uuid,
   p_reimburse_days numeric,
@@ -267,6 +271,7 @@ $$;
 grant execute on function public.admin_reimburse_employee_leave_credits(uuid, numeric, text) to authenticated, anon, service_role;
 
 -- 4. Update admin_set_employee_leave_credits to also write to leave_transactions
+drop function if exists public.admin_set_employee_leave_credits(uuid, numeric);
 create or replace function public.admin_set_employee_leave_credits(
   p_user_profile_id uuid,
   p_annual_credit_days numeric
@@ -369,12 +374,125 @@ $$;
 
 grant execute on function public.admin_set_employee_leave_credits(uuid, numeric) to authenticated, anon, service_role;
 
+-- 4b. Ensure sync_employee_leave_credits enforces 0 credits for employees under 1-year tenure (Migration 0192)
+create or replace function public.sync_employee_leave_credits(
+  p_employee_id uuid,
+  p_target_date date default current_date
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_target_date date := coalesce(p_target_date, current_date);
+  v_policy record;
+  v_lb public.leave_balances;
+  v_target_year int := extract(year from v_target_date)::int;
+begin
+  if p_employee_id is null then
+    return;
+  end if;
+
+  select * into v_policy
+  from public.calculate_policy_leave_credits(p_employee_id, v_target_date)
+  limit 1;
+
+  select * into v_lb
+  from public.leave_balances
+  where employee_id = p_employee_id;
+
+  if v_lb.id is null then
+    insert into public.leave_balances (
+      employee_id,
+      annual_credit_days,
+      used_days,
+      usable_credit_days,
+      allocated_year,
+      last_allocated_at,
+      updated_at
+    )
+    values (
+      p_employee_id,
+      coalesce(v_policy.allocated_days, 0),
+      0,
+      coalesce(v_policy.usable_days, 0),
+      v_target_year,
+      now(),
+      now()
+    )
+    on conflict (employee_id) do nothing;
+    return;
+  end if;
+
+  -- If not eligible or excluded: ensure 0 credits (cannot be granted in advance)
+  if not coalesce(v_policy.is_eligible, false) then
+    update public.leave_balances
+    set annual_credit_days = 0,
+        usable_credit_days = 0,
+        allocated_year = v_target_year,
+        updated_at = now()
+    where employee_id = p_employee_id
+      and (annual_credit_days <> 0 or usable_credit_days <> 0 or allocated_year is distinct from v_target_year);
+    return;
+  end if;
+
+  -- 1. Year rollover: Annual reset / refresh in full!
+  if v_lb.allocated_year is null or v_lb.allocated_year < v_target_year then
+    update public.leave_balances
+    set annual_credit_days = coalesce(v_policy.allocated_days, 0),
+        used_days = 0,
+        usable_credit_days = coalesce(v_policy.usable_days, 0),
+        allocated_year = v_target_year,
+        last_allocated_at = now(),
+        updated_at = now()
+    where employee_id = p_employee_id;
+    return;
+  end if;
+
+  -- 2. Within the same year:
+  -- If currently 0 and now completed 1-year tenure, auto-allocate credits
+  if v_lb.allocated_year = v_target_year then
+    if coalesce(v_lb.annual_credit_days, 0) = 0 and coalesce(v_policy.allocated_days, 0) > 0 then
+      update public.leave_balances
+      set annual_credit_days = v_policy.allocated_days,
+          usable_credit_days = v_policy.usable_days,
+          last_allocated_at = now(),
+          updated_at = now()
+      where employee_id = p_employee_id;
+    else
+      -- Update monthly usable credit cap according to the current month's bracket
+      update public.leave_balances
+      set usable_credit_days = least(coalesce(v_lb.annual_credit_days, 0), coalesce(v_policy.usable_days, 0)),
+          updated_at = now()
+      where employee_id = p_employee_id;
+    end if;
+  end if;
+end;
+$$;
+
+grant execute on function public.sync_employee_leave_credits(uuid, date) to anon, authenticated, service_role;
+
+-- Immediately synchronize all employee leave balances with Migration 0192 rules
+do $$
+declare
+  r record;
+begin
+  for r in select id from public.employees loop
+    perform public.sync_employee_leave_credits(r.id, current_date);
+  end loop;
+end;
+$$;
+
 -- 5. Create unified public.admin_get_balance_transactions
+drop function if exists public.admin_get_balance_transactions(uuid, uuid, text, integer);
+drop function if exists public.admin_get_balance_transactions(uuid, uuid, text, int);
+drop function if exists public.admin_get_balance_transactions;
 create or replace function public.admin_get_balance_transactions(
   p_employee_id uuid default null,
   p_user_profile_id uuid default null,
   p_balance_type text default null,
-  p_limit int default 500
+  p_limit int default 5000
 )
 returns table (
   id text,
@@ -403,6 +521,7 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+#variable_conflict use_column
 declare
   v_target_emp_id uuid := p_employee_id;
 begin
@@ -631,12 +750,14 @@ begin
     union all
 
     -- ==========================================
-    -- 4. INITIAL ANNUAL POLICY GRANT FROM leave_balances
+    -- 4. ANNUAL POLICY LEAVE CREDIT ENTITLEMENT (per Migration 0192)
     -- ==========================================
+    -- Credits are NOT granted in advance.
+    -- Credited ONLY once employee reaches 1 year tenure (anniversary_date <= current_date).
     select
-      ('policy_grant_' || lb.employee_id::text) as id,
+      ('policy_grant_' || e.id::text) as id,
       up.id as user_profile_id,
-      lb.employee_id,
+      e.id as employee_id,
       coalesce(e.employee_no, '-') as employee_no,
       coalesce(trim(concat_ws(' ', e.first_name, e.last_name)), up.username, 'Unknown Employee') as full_name,
       coalesce(up.username, 'unlinked') as username,
@@ -645,37 +766,44 @@ begin
       'allocation'::text as category,
       'Annual Leave Credits Granted'::text as title,
       'Policy leave entitlement'::text as subtitle,
-      coalesce(lb.annual_credit_days, 0) as amount,
+      pol.allocated_days as amount,
       'days'::text as unit,
-      round(coalesce(lb.annual_credit_days, 0) - coalesce(lb.used_days, 0), 2) as balance_after,
+      pol.allocated_days as balance_after,
       'Annual leave policy credit entitlement'::text as reason,
       'System Policy'::text as actor_name,
       null::uuid as request_id,
       'approved'::text as request_status,
-      coalesce(lb.updated_at, e.created_at, now()) as created_at,
+      case
+        -- If completed 1 year tenure in the current year, credited on their exact anniversary date (never in future)
+        when pol.anniversary_year = extract(year from current_date)::int
+          then make_timestamptz(
+            extract(year from (ea_hire.hire_date + interval '1 year'))::int,
+            extract(month from (ea_hire.hire_date + interval '1 year'))::int,
+            extract(day from (ea_hire.hire_date + interval '1 year'))::int,
+            8, 0, 0
+          )
+        -- If completed 1 year in a prior year, renewed on Jan 1st of the current year
+        else make_timestamptz(extract(year from current_date)::int, 1, 1, 8, 0, 0)
+      end as created_at,
       null::text as date_from,
       null::text as date_to
-    from public.leave_balances lb
-    left join public.employees e on e.id = lb.employee_id
-    left join public.user_profiles up on up.employee_id = lb.employee_id
-    where coalesce(lb.annual_credit_days, 0) > 0
-      and not exists (
-        select 1 from public.leave_transactions lt3
-        where lt3.employee_id = lb.employee_id
-          and lt3.transaction_type in ('grant', 'credit', 'annual_credit', 'allocation', 'set', 'set_credits')
-      )
-      and not exists (
-        select 1 from public.audit_logs al3
-        where (al3.entity_id = lb.employee_id or al3.metadata->>'employee_id' = lb.employee_id::text)
-          and al3.action in ('admin_set_employee_leave_credits', 'set_leave_credits')
-      )
+    from public.employees e
+    left join public.user_profiles up on up.employee_id = e.id
+    left join lateral (
+      select coalesce(min(ea.effective_from), e.created_at::date) as hire_date
+      from public.employee_assignments ea
+      where ea.employee_id = e.id
+    ) ea_hire on true
+    cross join lateral public.calculate_policy_leave_credits(e.id, current_date) pol
+    where pol.is_eligible = true
+      and pol.allocated_days > 0
   )
-  select *
-  from raw_records
-  where (v_target_emp_id is null or employee_id = v_target_emp_id)
-    and (p_balance_type is null or balance_type = p_balance_type)
-  order by created_at desc
-  limit coalesce(p_limit, 500);
+  select rr.*
+  from raw_records rr
+  where (v_target_emp_id is null or rr.employee_id = v_target_emp_id)
+    and (p_balance_type is null or rr.balance_type = p_balance_type)
+  order by rr.created_at desc
+  limit coalesce(p_limit, 5000);
 end;
 $$;
 

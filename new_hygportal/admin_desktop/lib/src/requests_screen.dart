@@ -106,6 +106,88 @@ List<String> _getEsarfTypes(AdminRequestItem item) {
   return types;
 }
 
+/// Formats a date string (e.g. "2026-10-18T00:00:00Z" or "10/18/2026") into "YYYY-MM-DD" or "YYYY-MM-DD HH:mm".
+String? _formatDateString(String? dateStr, {bool includeTime = false}) {
+  if (dateStr == null || dateStr.trim().isEmpty) return null;
+  final trimmed = dateStr.trim();
+  try {
+    if (trimmed.contains('/')) {
+      final parts = trimmed.split('/');
+      if (parts.length == 3 && parts[2].length == 4) {
+        final y = parts[2];
+        final m = parts[0].padLeft(2, '0');
+        final d = parts[1].padLeft(2, '0');
+        return '$y-$m-$d';
+      }
+    }
+    final dt = DateTime.parse(trimmed).toLocal();
+    final y = dt.year;
+    final m = dt.month.toString().padLeft(2, '0');
+    final d = dt.day.toString().padLeft(2, '0');
+    if (includeTime) {
+      final hh = dt.hour.toString().padLeft(2, '0');
+      final mm = dt.minute.toString().padLeft(2, '0');
+      return '$y-$m-$d $hh:$mm';
+    }
+    return '$y-$m-$d';
+  } catch (_) {
+    return trimmed;
+  }
+}
+
+List<String> _getEsarfDates(AdminRequestItem item) {
+  final List<String> dates = [];
+
+  if (item.entries.isNotEmpty) {
+    for (final e in item.entries) {
+      final df = e.dateFrom?.trim();
+      final dt = e.dateTo?.trim();
+      final formattedFrom = _formatDateString(df);
+      final formattedTo = _formatDateString(dt);
+
+      String dStr = '';
+      if (formattedFrom != null &&
+          formattedFrom.isNotEmpty &&
+          formattedTo != null &&
+          formattedTo.isNotEmpty &&
+          formattedFrom != formattedTo) {
+        dStr = '$formattedFrom - $formattedTo';
+      } else if (formattedFrom != null && formattedFrom.isNotEmpty) {
+        dStr = formattedFrom;
+      } else if (formattedTo != null && formattedTo.isNotEmpty) {
+        dStr = formattedTo;
+      } else if (e.datesText.trim().isNotEmpty) {
+        dStr = _formatDateString(e.datesText.trim()) ?? e.datesText.trim();
+      }
+
+      if (dStr.isNotEmpty && !dates.contains(dStr)) {
+        dates.add(dStr);
+      }
+    }
+  }
+
+  if (dates.isEmpty) {
+    final df = item.dateFrom?.trim();
+    final dt = item.dateTo?.trim();
+    final formattedFrom = _formatDateString(df);
+    final formattedTo = _formatDateString(dt);
+
+    if (formattedFrom != null &&
+        formattedFrom.isNotEmpty &&
+        formattedTo != null &&
+        formattedTo.isNotEmpty &&
+        formattedFrom != formattedTo) {
+      dates.add('$formattedFrom - $formattedTo');
+    } else if (formattedFrom != null && formattedFrom.isNotEmpty) {
+      dates.add(formattedFrom);
+    } else if (formattedTo != null && formattedTo.isNotEmpty) {
+      dates.add(formattedTo);
+    }
+  }
+
+  return dates;
+}
+
 String _getDisplayTransactionType(AdminRequestItem item) {
   if (item.category == AdminRequestCategory.esarf) {
     final types = _getEsarfTypes(item);
@@ -386,6 +468,10 @@ class _RequestsPanelState extends State<RequestsPanel>
             (r.employeeNo ?? '').toLowerCase().contains(q) ||
             (r.departmentName ?? '').toLowerCase().contains(q) ||
             (r.storeName ?? '').toLowerCase().contains(q) ||
+            (r.dateFrom ?? '').toLowerCase().contains(q) ||
+            (r.dateTo ?? '').toLowerCase().contains(q) ||
+            (r.startDate ?? '').toLowerCase().contains(q) ||
+            (r.endDate ?? '').toLowerCase().contains(q) ||
             r.requestTypeName.toLowerCase().contains(q) ||
             (r.leaveCategory ?? '').toLowerCase().contains(q) ||
             (r.perkProductName ?? '').toLowerCase().contains(q) ||
@@ -1424,23 +1510,6 @@ class _RequestsPanelState extends State<RequestsPanel>
     }
   }
 
-  static String? _formatDateString(String? dateStr, {bool includeTime = false}) {
-    if (dateStr == null || dateStr.isEmpty) return null;
-    try {
-      final dt = DateTime.parse(dateStr).toLocal();
-      final y = dt.year;
-      final m = dt.month.toString().padLeft(2, '0');
-      final d = dt.day.toString().padLeft(2, '0');
-      if (includeTime) {
-        final hh = dt.hour.toString().padLeft(2, '0');
-        final mm = dt.minute.toString().padLeft(2, '0');
-        return '$y-$m-$d $hh:$mm';
-      }
-      return '$y-$m-$d';
-    } catch (_) {
-      return dateStr;
-    }
-  }
 
   static List<int> _postProcessExcelBytes(List<int> encodedBytes) {
     try {
@@ -1587,7 +1656,7 @@ class _RequestsPanelState extends State<RequestsPanel>
                       onChanged: (v) => setState(() { _searchQuery = v; _currentPage = 1; }),
                       style: HygTypography.input.copyWith(fontSize: 13),
                       decoration: InputDecoration(
-                        hintText: 'Search employee, department, store, type...',
+                        hintText: 'Search employee, department, store, date, type...',
                         prefixIcon: const Icon(
                           Icons.search,
                           color: Color(0xFF94A3B8),
@@ -2242,6 +2311,7 @@ class _RequestsTableState extends State<_RequestsTable> {
           const _RequestColDef(title: 'Employee', width: 200),
           const _RequestColDef(title: 'Department', width: 140),
           const _RequestColDef(title: 'Store', width: 110),
+          const _RequestColDef(title: 'Date', width: 130),
           const _RequestColDef(title: 'Type', width: 150),
           const _RequestColDef(title: 'Approver', width: 240),
           const _RequestColDef(title: 'Status', width: 120),
@@ -2547,6 +2617,152 @@ class _RequestCardRowState extends State<_RequestCardRow> {
     }
 
     return Text(leaveType, style: HygTypography.tableBody);
+  }
+
+  Widget _buildEsarfDateCell(AdminRequestItem item) {
+    final dates = _getEsarfDates(item);
+
+    if (dates.isEmpty) {
+      return const Text('—', style: HygTypography.tableBody);
+    }
+
+    final entryCount = item.entries.length;
+    final firstDate = dates.first;
+    final otherDates = dates.skip(1).toList();
+
+    // Time subtitle if available
+    String timeSubtitle = '';
+    final tf = (item.entries.isNotEmpty ? item.entries.first.timeFrom : item.timeFrom)?.trim();
+    final tt = (item.entries.isNotEmpty ? item.entries.first.timeTo : item.timeTo)?.trim();
+    if (tf != null && tf.isNotEmpty && tt != null && tt.isNotEmpty) {
+      final fmtF = _format12HourTime(tf);
+      final fmtT = _format12HourTime(tt);
+      timeSubtitle = (fmtF.isNotEmpty && fmtT.isNotEmpty) ? '$fmtF - $fmtT' : '$tf - $tt';
+    } else if (tf != null && tf.isNotEmpty) {
+      final fmtF = _format12HourTime(tf);
+      timeSubtitle = fmtF.isNotEmpty ? fmtF : tf;
+    } else if (item.totalHours != null && item.totalHours! > 0) {
+      final hrs = item.totalHours!;
+      timeSubtitle = '${hrs.toStringAsFixed(hrs == hrs.roundToDouble() ? 0 : 1)} hrs';
+    }
+
+    // Build rich tooltip
+    final String tooltipText;
+    if (entryCount > 1 && item.entries.isNotEmpty) {
+      final lines = <String>[];
+      for (int i = 0; i < item.entries.length; i++) {
+        final e = item.entries[i];
+        final d = _formatDateString(e.dateFrom?.trim()) ?? e.dateFrom?.trim() ?? firstDate;
+        final t = (e.timeFrom != null && e.timeFrom!.isNotEmpty && e.timeTo != null && e.timeTo!.isNotEmpty)
+            ? '${_format12HourTime(e.timeFrom)} - ${_format12HourTime(e.timeTo)}'
+            : (e.timeFrom != null && e.timeFrom!.isNotEmpty ? _format12HourTime(e.timeFrom) : '');
+        final h = e.totalHours != null && e.totalHours! > 0
+            ? '${e.totalHours!.toStringAsFixed(e.totalHours! == e.totalHours!.roundToDouble() ? 0 : 1)} hrs'
+            : '';
+        final details = [if (t.isNotEmpty) t, if (h.isNotEmpty) h].join(', ');
+        lines.add('Entry #${i + 1}: $d${details.isNotEmpty ? ' ($details)' : ''}');
+      }
+      tooltipText = lines.join('\n');
+    } else if (dates.length > 1) {
+      tooltipText = dates.join(', ');
+    } else if (timeSubtitle.isNotEmpty) {
+      tooltipText = '$firstDate ($timeSubtitle)';
+    } else {
+      tooltipText = firstDate;
+    }
+
+    return Tooltip(
+      message: tooltipText,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minWidth: 0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: double.infinity,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      firstDate,
+                      style: HygTypography.tableBody.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                  ),
+                  if (dates.length > 1) ...[
+                    const SizedBox(width: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEFF6FF),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        '${dates.length} dates',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1D4ED8),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (otherDates.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              ...otherDates.take(2).map(
+                (d) => SizedBox(
+                  width: double.infinity,
+                  child: Text(
+                    d,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF64748B),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                ),
+              ),
+              if (otherDates.length > 2)
+                Padding(
+                  padding: const EdgeInsets.only(top: 1),
+                  child: Text(
+                    '+${otherDates.length - 2} more',
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF94A3B8),
+                    ),
+                  ),
+                ),
+            ] else if (timeSubtitle.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              SizedBox(
+                width: double.infinity,
+                child: Text(
+                  timeSubtitle,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF64748B),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildEsarfTypeCell(AdminRequestItem item) {
@@ -2912,7 +3128,14 @@ class _RequestCardRowState extends State<_RequestCardRow> {
           }
           final name = rawName.isEmpty ? 'Unknown' : rawName;
           final status = (entry['status'] ?? 'pending').toString().toLowerCase();
-          final level = (entry['required_level'] ?? entry['approver_level'] ?? entry['level'])?.toString();
+          final posName = entry['approver_position_name']?.toString();
+          final fallbackPosLevel = PositionDirectoryService.lookupAuthorityLevel(posName);
+          final level = (entry['position_level'] ??
+                  fallbackPosLevel ??
+                  entry['approver_level'] ??
+                  entry['level'] ??
+                  entry['required_level'])
+              ?.toString();
           final stepId = (entry['step_id'] ?? entry['id'])?.toString();
           return _ApproverEntry(name: name, status: status, level: level, stepId: stepId);
         }).toList(growable: false);
@@ -3061,6 +3284,7 @@ class _RequestCardRowState extends State<_RequestCardRow> {
             overflow: TextOverflow.ellipsis,
           ),
           _buildStoreCell(item),
+          _buildEsarfDateCell(item),
           _buildEsarfTypeCell(item),
           _buildApproverCell(item),
           _buildStatusCell(item),
@@ -5634,9 +5858,13 @@ class _RequestDetailModal extends StatelessWidget {
   }
 
   String _formatApprovalLevel(Map<String, dynamic> raw, int fallbackIdx) {
-    final rawLevel = raw['required_level'] ??
+    final posName = raw['approver_position_name']?.toString();
+    final fallbackPosLevel = PositionDirectoryService.lookupAuthorityLevel(posName);
+    final rawLevel = raw['position_level'] ??
+        fallbackPosLevel ??
         raw['approver_level'] ??
         raw['level'] ??
+        raw['required_level'] ??
         raw['route_level'];
 
     if (rawLevel != null) {
@@ -6021,6 +6249,10 @@ class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
             (r.employeeNo ?? '').toLowerCase().contains(q) ||
             (r.departmentName ?? '').toLowerCase().contains(q) ||
             (r.storeName ?? '').toLowerCase().contains(q) ||
+            (r.dateFrom ?? '').toLowerCase().contains(q) ||
+            (r.dateTo ?? '').toLowerCase().contains(q) ||
+            (r.startDate ?? '').toLowerCase().contains(q) ||
+            (r.endDate ?? '').toLowerCase().contains(q) ||
             r.requestTypeName.toLowerCase().contains(q) ||
             (r.leaveCategory ?? '').toLowerCase().contains(q) ||
             (r.perkProductName ?? '').toLowerCase().contains(q) ||
@@ -6320,7 +6552,7 @@ class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
                                 }),
                                 style: HygTypography.input.copyWith(fontSize: 13),
                                 decoration: InputDecoration(
-                                  hintText: 'Search employee, department, store, type...',
+                                  hintText: 'Search employee, department, store, date, type...',
                                   prefixIcon: const Icon(
                                     Icons.search,
                                     color: Color(0xFF94A3B8),

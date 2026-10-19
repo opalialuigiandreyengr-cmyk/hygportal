@@ -886,9 +886,13 @@ class AdminRequestItem {
     if (approvalSummary.isEmpty) return 'No approvals recorded.';
     return approvalSummary
         .map((entry) {
-          final rawLevel = entry['required_level'] ??
+          final posName = entry['approver_position_name']?.toString();
+          final fallbackPosLevel = PositionDirectoryService.lookupAuthorityLevel(posName);
+          final rawLevel = entry['position_level'] ??
+              fallbackPosLevel ??
               entry['approver_level'] ??
               entry['level'] ??
+              entry['required_level'] ??
               entry['route_level'];
           String level = '?';
           if (rawLevel != null) {
@@ -906,6 +910,10 @@ class AdminRequestItem {
               .toString()
               .trim();
           final status = (entry['status'] ?? 'pending').toString().trim();
+          if (name.toLowerCase() == 'hyg portal system' ||
+              name.toLowerCase().contains('email code')) {
+            return '$name ($status)';
+          }
           return 'L$level: $name ($status)';
         })
         .join('\n');
@@ -979,6 +987,19 @@ class AdminRequestItem {
     if (approvalRaw is List) {
       approvalList = approvalRaw
           .whereType<Map<String, dynamic>>()
+          .map((rawStep) {
+            final rawPosName = rawStep['approver_position_name']?.toString();
+            final fallbackPosLevel = PositionDirectoryService.lookupAuthorityLevel(rawPosName);
+            final resolvedLevel = rawStep['position_level'] ?? fallbackPosLevel;
+            if (resolvedLevel != null) {
+              final copy = Map<String, dynamic>.from(rawStep);
+              copy['position_level'] = resolvedLevel;
+              copy['approver_level'] = resolvedLevel;
+              copy['level'] = resolvedLevel;
+              return copy;
+            }
+            return rawStep;
+          })
           .toList(growable: false);
     }
 

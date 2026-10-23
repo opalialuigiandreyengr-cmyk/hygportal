@@ -7410,15 +7410,18 @@ class _TransactionDetailDialogState extends State<TransactionDetailDialog> {
                     const SizedBox(height: 8),
                     InkWell(
                       onTap: () {
+                        final pItem = entry.proofs[pIdx];
+                        final isGal = pItem.isGallery;
                         _RequestDetailModal._showProofPreviewDialog(
                           context,
-                          entry.proofs[pIdx].proofUrl,
+                          pItem.proofUrl,
                           title: entry.proofs.length > 1
                               ? 'Photo Proof #${pIdx + 1} • Entry #$index'
                               : 'Photo Proof • Entry #$index',
-                          proofTime: entry.proofs[pIdx].proofTime ?? entry.proofTime,
-                          proofLocation: entry.proofs[pIdx].proofLocation ?? entry.proofLocation,
-                          proofId: entry.proofs[pIdx].proofId ?? entry.proofId,
+                          proofTime: isGal ? null : pItem.proofTime,
+                          proofLocation: isGal ? null : pItem.proofLocation,
+                          proofId: isGal ? null : pItem.proofId,
+                          proofSource: isGal ? 'gallery' : pItem.proofSource,
                           employeeName: record.fullName,
                           employeeId: record.employeeId,
                           allProofs: entry.proofs,
@@ -7459,13 +7462,15 @@ class _TransactionDetailDialogState extends State<TransactionDetailDialog> {
                   const SizedBox(height: 10),
                   InkWell(
                     onTap: () {
+                      final isGal = entry.isGallery;
                       _RequestDetailModal._showProofPreviewDialog(
                         context,
                         entry.proofUrl!,
                         title: 'Photo Proof • Entry #$index',
-                        proofTime: entry.proofTime,
-                        proofLocation: entry.proofLocation,
-                        proofId: entry.proofId,
+                        proofTime: isGal ? null : entry.proofTime,
+                        proofLocation: isGal ? null : entry.proofLocation,
+                        proofId: isGal ? null : entry.proofId,
+                        proofSource: isGal ? 'gallery' : entry.proofSource,
                         employeeName: record.fullName,
                         employeeId: record.employeeId,
                       );

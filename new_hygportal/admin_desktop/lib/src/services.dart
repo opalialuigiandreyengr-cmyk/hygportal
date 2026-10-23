@@ -250,9 +250,33 @@ class EmployeeDirectoryService {
         return _profileFromRow(
           mergedRow,
           storeName: await _loadEmployeeStoreName(employeeId),
+          additionalStores: await _loadEmployeeAssignedStores(employeeId),
         );
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[EmployeeDirectoryService] hr_employee_profile_detail RPC error: $e');
+    }
+
+    // Direct table fetch fallback if RPC failed:
+    try {
+      final empRow = await _client
+          .from('employees')
+          .select('id, employee_no, first_name, middle_name, last_name, suffix, birth_date, gender, civil_status, email, phone, photo_url, employment_status')
+          .eq('id', employeeId)
+          .maybeSingle();
+      if (empRow != null) {
+        final merged = await _mergeSupplementalProfileDetails(employeeId, empRow);
+        await LocalSyncService.cacheProfile(employeeId, merged);
+        return _profileFromRow(
+          merged,
+          storeName: await _loadEmployeeStoreName(employeeId),
+          additionalStores: await _loadEmployeeAssignedStores(employeeId),
+        );
+      }
+    } catch (e) {
+      debugPrint('[EmployeeDirectoryService] direct employee table fallback error: $e');
+    }
+
     final cached = await LocalSyncService.loadCachedProfile(employeeId);
     if (cached == null) {
       return null;
@@ -264,6 +288,7 @@ class EmployeeDirectoryService {
     return _profileFromRow(
       mergedCached,
       storeName: await _loadEmployeeStoreName(employeeId),
+      additionalStores: await _loadEmployeeAssignedStores(employeeId),
     );
   }
 
@@ -276,21 +301,28 @@ class EmployeeDirectoryService {
     try {
       final row = await _client
           .from('employee_profile_details')
-          .select('employee_id, tin, sss, pagibig, philhealth, bank_type, account_no')
+          .select('*')
           .eq('employee_id', employeeId)
           .maybeSingle();
       if (row != null) {
         for (final entry in row.entries) {
           // employee_profile_details is the source used by the Expo app.
           // Prefer it over stale/null placeholder values returned by the HR
-          // directory RPC, especially for government and bank information.
+          // directory RPC, especially for government, bank, and family information.
           final value = _profileValue(entry.value);
           if (value != null && value.isNotEmpty) {
             merged[entry.key] = value;
+            if (entry.key == 'day_off') {
+              merged['day_off_day'] = value;
+            } else if (entry.key == 'time_schedule') {
+              merged['schedule'] = value;
+            }
           }
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[EmployeeDirectoryService] _mergeSupplementalProfileDetails error: $e');
+    }
 
     return merged;
   }
@@ -479,7 +511,11 @@ class EmployeeDirectoryService {
     } catch (_) {}
 
     await _updateEmployeeSupplementalDetails(employeeId: id, payload: payload);
-    await _setEmployeeStore(employeeId: id, payload: payload);
+    try {
+      await _setEmployeeStore(employeeId: id, payload: payload);
+    } catch (e) {
+      debugPrint('[EmployeeDirectoryService] _setEmployeeStore non-fatal error: $e');
+    }
     return response.toString();
   }
 
@@ -524,16 +560,53 @@ class EmployeeDirectoryService {
     required String employeeId,
     required EmployeeProfilePayload payload,
   }) async {
-    await _client.rpc(
-      'hr_set_employee_store',
-      params: {
-        'p_username': AppConfig.hrUsername,
-        'p_password': AppConfig.hrPassword,
-        'p_employee_id': employeeId,
-        'p_company_name': payload.company,
-        'p_store_name': payload.store,
-      },
-    );
+    try {
+      await _client.rpc(
+        'hr_set_employee_stores',
+        params: {
+          'p_username': AppConfig.hrUsername,
+          'p_password': AppConfig.hrPassword,
+          'p_employee_id': employeeId,
+          'p_company_name': payload.company,
+          'p_primary_store_name': payload.store,
+          'p_additional_store_names': payload.additionalStores,
+        },
+      );
+    } catch (e) {
+      // Fallback to legacy single-store RPC if hr_set_employee_stores is not yet available
+      await _client.rpc(
+        'hr_set_employee_store',
+        params: {
+          'p_username': AppConfig.hrUsername,
+          'p_password': AppConfig.hrPassword,
+          'p_employee_id': employeeId,
+          'p_company_name': payload.company,
+          'p_store_name': payload.store,
+        },
+      );
+    }
+  }
+
+  static Future<List<String>> _loadEmployeeAssignedStores(String employeeId) async {
+    try {
+      final response = await _client.rpc(
+        'hr_get_employee_assigned_stores',
+        params: {
+          'p_username': AppConfig.hrUsername,
+          'p_password': AppConfig.hrPassword,
+          'p_employee_id': employeeId,
+        },
+      );
+      if (response is List) {
+        return response
+            .whereType<Map<String, dynamic>>()
+            .where((row) => row['is_primary'] != true)
+            .map((row) => row['store_name']?.toString().trim() ?? '')
+            .where((name) => name.isNotEmpty)
+            .toList();
+      }
+    } catch (_) {}
+    return const [];
   }
 
   static Future<String?> _loadEmployeeStoreName(String employeeId) async {
@@ -670,6 +743,7 @@ class EmployeeDirectoryService {
   static EmployeeProfileDetails _profileFromRow(
     Map<String, dynamic> row, {
     String? storeName,
+    List<String> additionalStores = const [],
   }) {
     return EmployeeProfileDetails(
       idNumber: _nullableString(row['employee_no']),
@@ -719,6 +793,13 @@ class EmployeeDirectoryService {
       storeName:
           storeName ??
           _nullableString(row['store_name'] ?? row['store'] ?? row['storeName']),
+      additionalStores: additionalStores.isNotEmpty
+          ? additionalStores
+          : ((row['additional_stores'] as List?)
+                  ?.map((e) => e.toString().trim())
+                  .where((e) => e.isNotEmpty)
+                  .toList() ??
+              const []),
       positionName: _nullableString(
         row['position_name'] ?? row['position'] ?? row['positionName'],
       ),

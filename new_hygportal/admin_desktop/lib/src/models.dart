@@ -66,6 +66,7 @@ class EmployeeProfilePayload {
     required this.company,
     required this.department,
     required this.store,
+    this.additionalStores = const [],
     required this.position,
     required this.dateHired,
     required this.employeeType,
@@ -125,6 +126,7 @@ class EmployeeProfilePayload {
   final String? company;
   final String? department;
   final String? store;
+  final List<String> additionalStores;
   final String? position;
   final String? dateHired;
   final String employeeType;
@@ -205,6 +207,7 @@ class EmployeeProfileDetails {
     this.companyName,
     this.departmentName,
     this.storeName,
+    this.additionalStores = const [],
     this.positionName,
     this.tin,
     this.sss,
@@ -265,6 +268,7 @@ class EmployeeProfileDetails {
   final String? companyName;
   final String? departmentName;
   final String? storeName;
+  final List<String> additionalStores;
   final String? positionName;
   final String? tin;
   final String? sss;
@@ -849,6 +853,55 @@ class AdminRequestItem {
                     'HYG Portal System'));
   }
 
+  bool get isAppliedForPassedDays {
+    final sub = submittedDateTime;
+    if (sub == null) return false;
+
+    try {
+      final subPh = sub.isUtc ? sub.add(const Duration(hours: 8)) : sub;
+      final subDateStr =
+          '${subPh.year.toString().padLeft(4, '0')}-${subPh.month.toString().padLeft(2, '0')}-${subPh.day.toString().padLeft(2, '0')}';
+      final subMins = subPh.hour * 60 + subPh.minute;
+
+      // If we have entries, check if all OT entries were for passed dates/times
+      final otEntries = entries.where((e) {
+        final tx = (e.transactionType ?? '').toLowerCase();
+        return tx.contains('ot') || tx.contains('overtime');
+      }).toList();
+
+      if (otEntries.isNotEmpty) {
+        final anyScheduledInFuture = otEntries.any((e) {
+          final df = (e.dateFrom ?? '').trim();
+          if (df.isEmpty) return false;
+          if (df.compareTo(subDateStr) > 0) return true; // Scheduled in future
+          if (df == subDateStr && e.timeFrom != null && e.timeFrom!.trim().isNotEmpty) {
+            final parts = e.timeFrom!.trim().split(':');
+            final tfHour = int.tryParse(parts[0]) ?? 0;
+            final tfMin = parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0;
+            return (tfHour * 60 + tfMin) > subMins; // Scheduled later today
+          }
+          return false;
+        });
+        return !anyScheduledInFuture;
+      }
+
+      final df = (dateFrom ?? '').trim();
+      if (df.isEmpty) return false;
+      if (df.compareTo(subDateStr) < 0) {
+        return true; // Applied on a date AFTER the request date
+      }
+      if (df == subDateStr && timeFrom != null && timeFrom!.trim().isNotEmpty) {
+        final parts = timeFrom!.trim().split(':');
+        final tfHour = int.tryParse(parts[0]) ?? 0;
+        final tfMin = parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0;
+        if (subMins >= (tfHour * 60 + tfMin)) {
+          return true; // Applied after OT start time
+        }
+      }
+    } catch (_) {}
+    return false;
+  }
+
   String get statusLabel {
     final s = status.toLowerCase().trim();
     if (s == 'validated') return 'Validated';
@@ -860,6 +913,12 @@ class AdminRequestItem {
     if (s == 'pending') return 'Pending';
     if (s == 'approved') return 'Approved';
     if (s == 'needs_admin_review') return 'Needs Review';
+    if (s == 'pre_approved' || s == 'pre-approved') {
+      if (isAppliedForPassedDays) {
+        return 'Pending';
+      }
+      return 'Pre-approved';
+    }
     return status;
   }
 
@@ -942,7 +1001,12 @@ class AdminRequestItem {
 
   String? get proofTime {
     final all = proofs;
-    if (all.isNotEmpty) return all.first.proofTime;
+    if (all.isNotEmpty) {
+      if (all.first.isGallery) return null;
+      return all.first.proofTime;
+    }
+    final rawSource = rawRow['proof_source']?.toString().toLowerCase().trim();
+    if (rawSource == 'gallery') return null;
     final direct = rawRow['proof_time'] ?? rawRow['timestamp'];
     if (direct != null && direct.toString().trim().isNotEmpty) return direct.toString().trim();
     return null;
@@ -950,7 +1014,12 @@ class AdminRequestItem {
 
   String? get proofLocation {
     final all = proofs;
-    if (all.isNotEmpty) return all.first.proofLocation;
+    if (all.isNotEmpty) {
+      if (all.first.isGallery) return null;
+      return all.first.proofLocation;
+    }
+    final rawSource = rawRow['proof_source']?.toString().toLowerCase().trim();
+    if (rawSource == 'gallery') return null;
     final direct = rawRow['proof_location'] ?? rawRow['location_text'];
     if (direct != null && direct.toString().trim().isNotEmpty) return direct.toString().trim();
     return null;
@@ -958,10 +1027,32 @@ class AdminRequestItem {
 
   String? get proofId {
     final all = proofs;
-    if (all.isNotEmpty) return all.first.proofId;
+    if (all.isNotEmpty) {
+      if (all.first.isGallery) return null;
+      return all.first.proofId;
+    }
+    final rawSource = rawRow['proof_source']?.toString().toLowerCase().trim();
+    if (rawSource == 'gallery') return null;
     final direct = rawRow['proof_id'] ?? rawRow['photo_proof_id'];
     if (direct != null && direct.toString().trim().isNotEmpty) return direct.toString().trim();
     return null;
+  }
+
+  String? get proofSource {
+    final all = proofs;
+    if (all.isNotEmpty) return all.first.proofSource;
+    return rawRow['proof_source']?.toString() ?? rawRow['source']?.toString();
+  }
+
+  bool get isGallery {
+    final all = proofs;
+    if (all.isNotEmpty) return all.every((p) => p.isGallery);
+    final src = proofSource?.toLowerCase().trim();
+    if (src == 'gallery') return true;
+    if (proofTime == null && proofLocation == null && proofId == null && src != 'camera' && src != 'photo_proof') {
+      return true;
+    }
+    return false;
   }
 
   String? get department => departmentName;
@@ -975,6 +1066,7 @@ class AdminRequestItem {
         .replaceAll(RegExp(r'\[ProofTime:\s*([^\]]+)\]', caseSensitive: false), '')
         .replaceAll(RegExp(r'\[ProofLoc(?:ation)?:\s*([^\]]+)\]', caseSensitive: false), '')
         .replaceAll(RegExp(r'\[ProofId:\s*([^\]]+)\]', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\[ProofSource:\s*([^\]]+)\]', caseSensitive: false), '')
         .replaceAll('[REJECTED]', '')
         .replaceAll('[APPROVED]', '')
         .trim();
@@ -1072,57 +1164,97 @@ class RequestProofItem {
   final String? proofTime;
   final String? proofLocation;
   final String? proofId;
+  final String? proofSource;
 
   const RequestProofItem({
     required this.proofUrl,
     this.proofTime,
     this.proofLocation,
     this.proofId,
+    this.proofSource,
   });
+
+  bool get isGallery {
+    final src = proofSource?.toLowerCase().trim();
+    if (src == 'gallery') return true;
+    if (proofTime == null && proofLocation == null && proofId == null && src != 'camera' && src != 'photo_proof') {
+      return true;
+    }
+    return false;
+  }
 
   static List<RequestProofItem> parseProofsFromText(String? rawReason, {Map<String, dynamic>? rawRow}) {
     final List<RequestProofItem> list = [];
     final text = rawReason ?? '';
 
     if (text.isNotEmpty) {
-      final proofMatches = RegExp(r'\[Proof:\s*([^Suggested\]]+)\]', caseSensitive: false).allMatches(text).toList();
-      final allProofMatches = proofMatches.isNotEmpty
-          ? proofMatches
+      final proofRegex = RegExp(r'\[Proof:\s*([^Suggested\]]+)\]', caseSensitive: false);
+      final matches = proofRegex.allMatches(text).toList();
+      final allProofMatches = matches.isNotEmpty
+          ? matches
           : RegExp(r'\[Proof:\s*([^\]]+)\]', caseSensitive: false).allMatches(text).toList();
 
-      final timeMatches = RegExp(r'\[ProofTime:\s*([^\]]+)\]', caseSensitive: false).allMatches(text).toList();
-      final locMatches = RegExp(r'\[ProofLoc(?:ation)?:\s*([^\]]+)\]', caseSensitive: false).allMatches(text).toList();
-      final idMatches = RegExp(r'\[ProofId:\s*([^\]]+)\]', caseSensitive: false).allMatches(text).toList();
-
       for (int i = 0; i < allProofMatches.length; i++) {
-        final url = allProofMatches[i].group(1)?.trim();
-        if (url != null && url.isNotEmpty) {
-          final time = (i < timeMatches.length) ? timeMatches[i].group(1)?.trim() : null;
-          final loc = (i < locMatches.length) ? locMatches[i].group(1)?.trim() : null;
-          final id = (i < idMatches.length) ? idMatches[i].group(1)?.trim() : null;
+        final currentMatch = allProofMatches[i];
+        final url = currentMatch.group(1)?.trim();
+        if (url == null || url.isEmpty) continue;
 
-          list.add(RequestProofItem(
-            proofUrl: url,
-            proofTime: (time != null && time.isNotEmpty) ? time : null,
-            proofLocation: (loc != null && loc.isNotEmpty) ? loc : null,
-            proofId: (id != null && id.isNotEmpty) ? id : null,
-          ));
-        }
+        final startIndex = currentMatch.end;
+        final nextIndex = (i + 1 < allProofMatches.length)
+            ? allProofMatches[i + 1].start
+            : text.length;
+        final segment = text.substring(startIndex, nextIndex);
+
+        final sourceMatch = RegExp(r'\[ProofSource:\s*([^\]]+)\]', caseSensitive: false).firstMatch(segment);
+        final timeMatch = RegExp(r'\[ProofTime:\s*([^\]]+)\]', caseSensitive: false).firstMatch(segment);
+        final locMatch = RegExp(r'\[ProofLoc(?:ation)?:\s*([^\]]+)\]', caseSensitive: false).firstMatch(segment);
+        final idMatch = RegExp(r'\[ProofId:\s*([^\]]+)\]', caseSensitive: false).firstMatch(segment);
+
+        final rawSource = sourceMatch?.group(1)?.trim().toLowerCase();
+        final isExplicitGallery = rawSource == 'gallery' || RegExp(r'\[ProofSource:\s*gallery\]', caseSensitive: false).hasMatch(segment);
+        final hasCameraDetails = (timeMatch != null || locMatch != null || idMatch != null);
+        final isGallery = isExplicitGallery || (!hasCameraDetails && rawSource != 'camera' && rawSource != 'photo_proof');
+
+        final time = isGallery ? null : timeMatch?.group(1)?.trim();
+        final loc = isGallery ? null : locMatch?.group(1)?.trim();
+        final id = isGallery ? null : idMatch?.group(1)?.trim();
+        final source = isGallery ? 'gallery' : (rawSource ?? 'photo_proof');
+
+        list.add(RequestProofItem(
+          proofUrl: url,
+          proofTime: (time != null && time.isNotEmpty) ? time : null,
+          proofLocation: (loc != null && loc.isNotEmpty) ? loc : null,
+          proofId: (id != null && id.isNotEmpty) ? id : null,
+          proofSource: source,
+        ));
       }
     }
 
     if (list.isEmpty && rawRow != null) {
       final directUrl = rawRow['proof_url'] ?? rawRow['attachment_url'] ?? rawRow['photo_url'];
       if (directUrl != null && directUrl.toString().trim().isNotEmpty) {
+        final rawSource = (rawRow['proof_source'] ?? rawRow['source'])?.toString().trim().toLowerCase();
         final directTime = rawRow['proof_time'] ?? rawRow['timestamp'];
         final directLoc = rawRow['proof_location'] ?? rawRow['location_text'];
         final directId = rawRow['proof_id'] ?? rawRow['photo_proof_id'];
 
+        final isExplicitGallery = rawSource == 'gallery';
+        final hasCameraDetails = (directTime != null && directTime.toString().trim().isNotEmpty) ||
+            (directLoc != null && directLoc.toString().trim().isNotEmpty) ||
+            (directId != null && directId.toString().trim().isNotEmpty);
+        final isGallery = isExplicitGallery || (!hasCameraDetails && rawSource != 'camera' && rawSource != 'photo_proof');
+
+        final time = isGallery ? null : (directTime?.toString().trim().isNotEmpty == true ? directTime.toString().trim() : null);
+        final loc = isGallery ? null : (directLoc?.toString().trim().isNotEmpty == true ? directLoc.toString().trim() : null);
+        final id = isGallery ? null : (directId?.toString().trim().isNotEmpty == true ? directId.toString().trim() : null);
+        final source = isGallery ? 'gallery' : (rawSource ?? 'photo_proof');
+
         list.add(RequestProofItem(
           proofUrl: directUrl.toString().trim(),
-          proofTime: directTime?.toString().trim().isNotEmpty == true ? directTime.toString().trim() : null,
-          proofLocation: directLoc?.toString().trim().isNotEmpty == true ? directLoc.toString().trim() : null,
-          proofId: directId?.toString().trim().isNotEmpty == true ? directId.toString().trim() : null,
+          proofTime: time,
+          proofLocation: loc,
+          proofId: id,
+          proofSource: source,
         ));
       }
     }
@@ -1150,6 +1282,7 @@ class EsarfEntryItem {
     this.proofTime,
     this.proofLocation,
     this.proofId,
+    this.proofSource,
     this.actualHours,
     this.proofs = const [],
   });
@@ -1171,8 +1304,21 @@ class EsarfEntryItem {
   final String? proofTime;
   final String? proofLocation;
   final String? proofId;
+  final String? proofSource;
   final String? actualHours;
   final List<RequestProofItem> proofs;
+
+  bool get isGallery {
+    if (proofs.isNotEmpty) {
+      return proofs.every((p) => p.isGallery);
+    }
+    final s = proofSource?.toLowerCase().trim();
+    if (s == 'gallery') return true;
+    if (proofTime == null && proofLocation == null && proofId == null && s != 'camera' && s != 'photo_proof') {
+      return true;
+    }
+    return false;
+  }
 
   String get txAbbr {
     final t = transactionType ?? '';
@@ -1196,6 +1342,7 @@ class EsarfEntryItem {
         .replaceAll(RegExp(r'\[ProofTime:\s*([^\]]+)\]', caseSensitive: false), '')
         .replaceAll(RegExp(r'\[ProofLoc(?:ation)?:\s*([^\]]+)\]', caseSensitive: false), '')
         .replaceAll(RegExp(r'\[ProofId:\s*([^\]]+)\]', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\[ProofSource:\s*([^\]]+)\]', caseSensitive: false), '')
         .replaceAll('[REJECTED]', '')
         .replaceAll('[APPROVED]', '')
         .trim();
@@ -1206,6 +1353,10 @@ class EsarfEntryItem {
     final rawReason = row['reason']?.toString() ?? '';
     final entryProofs = RequestProofItem.parseProofsFromText(rawReason, rawRow: row);
 
+    final isFirstGallery = entryProofs.isNotEmpty
+        ? entryProofs.first.isGallery
+        : (row['proof_source']?.toString().toLowerCase().trim() == 'gallery');
+
     final proofUrl = entryProofs.isNotEmpty
         ? entryProofs.first.proofUrl
         : (row['proof_url']?.toString() ??
@@ -1214,15 +1365,19 @@ class EsarfEntryItem {
 
     final proofTime = entryProofs.isNotEmpty
         ? entryProofs.first.proofTime
-        : row['proof_time']?.toString();
+        : (isFirstGallery ? null : row['proof_time']?.toString());
 
     final proofLocation = entryProofs.isNotEmpty
         ? entryProofs.first.proofLocation
-        : (row['proof_location']?.toString() ?? row['location_text']?.toString());
+        : (isFirstGallery ? null : (row['proof_location']?.toString() ?? row['location_text']?.toString()));
 
     final proofId = entryProofs.isNotEmpty
         ? entryProofs.first.proofId
-        : (row['proof_id']?.toString() ?? row['photo_proof_id']?.toString());
+        : (isFirstGallery ? null : (row['proof_id']?.toString() ?? row['photo_proof_id']?.toString()));
+
+    final proofSource = entryProofs.isNotEmpty
+        ? entryProofs.first.proofSource
+        : (isFirstGallery ? 'gallery' : (row['proof_source']?.toString() ?? 'photo_proof'));
 
     final actualMatch = RegExp(r'\[Actual:\s*([\d.]+)\s*hrs?\]', caseSensitive: false).firstMatch(rawReason);
     final actualHours = actualMatch?.group(1)?.trim();
@@ -1234,6 +1389,7 @@ class EsarfEntryItem {
         .replaceAll(RegExp(r'\[ProofTime:\s*([^\]]+)\]', caseSensitive: false), '')
         .replaceAll(RegExp(r'\[ProofLoc(?:ation)?:\s*([^\]]+)\]', caseSensitive: false), '')
         .replaceAll(RegExp(r'\[ProofId:\s*([^\]]+)\]', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\[ProofSource:\s*([^\]]+)\]', caseSensitive: false), '')
         .replaceAll('[REJECTED]', '')
         .replaceAll('[APPROVED]', '')
         .trim();
@@ -1256,6 +1412,7 @@ class EsarfEntryItem {
       proofTime: (proofTime != null && proofTime.isNotEmpty) ? proofTime : null,
       proofLocation: (proofLocation != null && proofLocation.isNotEmpty) ? proofLocation : null,
       proofId: (proofId != null && proofId.isNotEmpty) ? proofId : null,
+      proofSource: proofSource,
       actualHours: (actualHours != null && actualHours.isNotEmpty) ? actualHours : null,
       proofs: entryProofs,
     );
@@ -1319,10 +1476,23 @@ class EsarfEntryItem {
         final entryProofs = RequestProofItem.parseProofsFromText(reasonText);
         final effectiveProofs = entryProofs.isNotEmpty ? entryProofs : defaultEntry.proofs;
 
+        final isEntryGallery = effectiveProofs.isNotEmpty
+            ? effectiveProofs.first.isGallery
+            : defaultEntry.proofSource == 'gallery';
+
         final entryProofUrl = effectiveProofs.isNotEmpty ? effectiveProofs.first.proofUrl : defaultEntry.proofUrl;
-        final entryProofTime = effectiveProofs.isNotEmpty ? effectiveProofs.first.proofTime : defaultEntry.proofTime;
-        final entryProofLocation = effectiveProofs.isNotEmpty ? effectiveProofs.first.proofLocation : defaultEntry.proofLocation;
-        final entryProofId = effectiveProofs.isNotEmpty ? effectiveProofs.first.proofId : defaultEntry.proofId;
+        final entryProofTime = effectiveProofs.isNotEmpty
+            ? effectiveProofs.first.proofTime
+            : (isEntryGallery ? null : defaultEntry.proofTime);
+        final entryProofLocation = effectiveProofs.isNotEmpty
+            ? effectiveProofs.first.proofLocation
+            : (isEntryGallery ? null : defaultEntry.proofLocation);
+        final entryProofId = effectiveProofs.isNotEmpty
+            ? effectiveProofs.first.proofId
+            : (isEntryGallery ? null : defaultEntry.proofId);
+        final entryProofSource = effectiveProofs.isNotEmpty
+            ? effectiveProofs.first.proofSource
+            : defaultEntry.proofSource;
 
         final actualMatch = RegExp(r'\[Actual:\s*([\d.]+)\s*hrs?\]', caseSensitive: false).firstMatch(reasonText);
         final entryActualHours = actualMatch?.group(1)?.trim() ?? defaultEntry.actualHours;
@@ -1336,6 +1506,7 @@ class EsarfEntryItem {
             .replaceAll(RegExp(r'\[ProofTime:\s*([^\]]+)\]', caseSensitive: false), '')
             .replaceAll(RegExp(r'\[ProofLoc(?:ation)?:\s*([^\]]+)\]', caseSensitive: false), '')
             .replaceAll(RegExp(r'\[ProofId:\s*([^\]]+)\]', caseSensitive: false), '')
+            .replaceAll(RegExp(r'\[ProofSource:\s*([^\]]+)\]', caseSensitive: false), '')
             .replaceAll('[REJECTED]', '')
             .replaceAll('[APPROVED]', '')
             .trim();
@@ -1366,6 +1537,7 @@ class EsarfEntryItem {
             proofTime: (entryProofTime != null && entryProofTime.isNotEmpty) ? entryProofTime : null,
             proofLocation: (entryProofLocation != null && entryProofLocation.isNotEmpty) ? entryProofLocation : null,
             proofId: (entryProofId != null && entryProofId.isNotEmpty) ? entryProofId : null,
+            proofSource: entryProofSource,
             actualHours: (entryActualHours != null && entryActualHours.isNotEmpty) ? entryActualHours : null,
             proofs: effectiveProofs,
           ),

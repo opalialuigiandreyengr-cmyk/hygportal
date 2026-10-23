@@ -189,6 +189,7 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
   var _companyOptions = <String>[];
   var _departmentOptions = <String>[];
   var _stores = <StorePreview>[];
+  var _additionalStores = <String>[];
   var _positionOptions = <String>[];
   String? _companyLoadError;
   String? _departmentLoadError;
@@ -198,6 +199,8 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
   bool _isLoadingDepartmentOptions = true;
   bool _isLoadingStoreOptions = true;
   bool _isLoadingPositionOptions = true;
+  bool _isLoadingProfileDetails = false;
+  String? _profileLoadError;
   bool _isSaving = false;
   bool _isSeedingBodyMetrics = false;
   String? _formError;
@@ -214,6 +217,9 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
   @override
   void initState() {
     super.initState();
+    if (widget.employee != null) {
+      _isLoadingProfileDetails = true;
+    }
     _childNameControllers = List.generate(
       _maxChildRows,
       (_) => TextEditingController(),
@@ -252,10 +258,8 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
         _loadDepartmentOptions(),
         _loadStoreOptions(),
         _loadPositionOptions(),
+        if (widget.employee != null) _loadEmployeeProfileForEdit(),
       ]);
-      if (mounted) {
-        await _loadEmployeeProfileForEdit();
-      }
     });
   }
 
@@ -417,16 +421,37 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
       return;
     }
 
+    setState(() {
+      _isLoadingProfileDetails = true;
+      _profileLoadError = null;
+    });
+
     try {
       final details = await EmployeeDirectoryService.loadEmployeeProfile(
         employee.id,
       );
-      if (!mounted || details == null) {
+      if (!mounted) {
         return;
       }
-      _applyProfileDetails(details);
-    } catch (_) {
-      // Keep modal usable even if detailed profile fetch is unavailable.
+      if (details != null) {
+        _applyProfileDetails(details);
+        setState(() {
+          _isLoadingProfileDetails = false;
+        });
+      } else {
+        setState(() {
+          _isLoadingProfileDetails = false;
+          _profileLoadError =
+              'Could not load complete profile details from the database. Saving is disabled to protect existing records.';
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingProfileDetails = false;
+        _profileLoadError =
+            'Failed to load full profile details: $e. Saving is disabled to protect existing records.';
+      });
     }
   }
 
@@ -511,6 +536,7 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
       if (details.storeName != null && details.storeName!.isNotEmpty) {
         _store = _resolveLoadedOption(details.storeName!, _storeOptions);
       }
+      _additionalStores = List<String>.from(details.additionalStores);
       if (details.positionName != null && details.positionName!.isNotEmpty) {
         _position = _resolveLoadedOption(
           details.positionName!,
@@ -994,12 +1020,18 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
       )) {
         _store = 'Select';
       }
+      _additionalStores.removeWhere(
+        (s) => !_storeOptions.any((opt) => _normalizeOption(opt) == _normalizeOption(s)),
+      );
     });
   }
 
   void _selectStore(String value) {
     setState(() {
       _store = value;
+      _additionalStores.removeWhere(
+        (s) => _normalizeOption(s) == _normalizeOption(value),
+      );
       if (_company == 'Select' && value != 'Select') {
         for (final store in _stores) {
           if (_normalizeOption(store.name) == _normalizeOption(value)) {
@@ -1018,6 +1050,25 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
         }
       }
     });
+  }
+
+  bool get _isOperationsDepartment {
+    return _normalizeOption(_department) == _normalizeOption('Operations');
+  }
+
+  List<String> get _availableAdditionalStoreOptions {
+    final normalizedPrimary = _normalizeOption(_store);
+    final normalizedAdditional = _additionalStores.map(_normalizeOption).toSet();
+    return _storeOptions
+        .where((name) {
+          final norm = _normalizeOption(name);
+          return norm.isNotEmpty &&
+              norm != _normalizeOption('Select') &&
+              norm != _normalizeOption('N/A') &&
+              norm != normalizedPrimary &&
+              !normalizedAdditional.contains(norm);
+        })
+        .toList();
   }
 
   String _resolveLoadedOption(String currentValue, List<String> options) {
@@ -1044,6 +1095,15 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
   }
 
   Future<void> _saveEmployee() async {
+    if (_isLoadingProfileDetails) {
+      setState(() => _formError = 'Please wait for employee details to finish loading.');
+      return;
+    }
+    if (_profileLoadError != null) {
+      setState(() => _formError = 'Cannot save because employee profile details failed to load. Please click Retry.');
+      return;
+    }
+
     final payload = _employeePayload();
     if (payload == null) {
       return;
@@ -1226,6 +1286,7 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
       company: _selectedValue(_company),
       department: _selectedValue(_department),
       store: _selectedValue(_store),
+      additionalStores: _isOperationsDepartment ? _additionalStores : const [],
       position: _selectedValue(_position),
       dateHired: dateHired,
       employeeType: _employeeType,
@@ -1379,8 +1440,10 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
                 borderRadius: BorderRadius.circular(10),
               ),
             ),
-            onPressed: _isSaving ? null : _saveEmployee,
-            icon: _isSaving
+            onPressed: (_isSaving || _isLoadingProfileDetails || _profileLoadError != null)
+                ? null
+                : _saveEmployee,
+            icon: (_isSaving || _isLoadingProfileDetails)
                 ? const SizedBox(
                     width: 18,
                     height: 18,
@@ -1390,6 +1453,8 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
             label: Text(
               _isSaving
                   ? 'Saving...'
+                  : _isLoadingProfileDetails
+                  ? 'Loading Profile...'
                   : widget.employee == null
                   ? 'Save Employee'
                   : 'Update Employee',
@@ -1411,6 +1476,60 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
               children: [
                 if (_formError != null) ...[
                   FormErrorBanner(message: _formError!),
+                  const FormSectionGap(),
+                ],
+                if (_profileLoadError != null) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF2F2),
+                      border: Border.all(color: const Color(0xFFF87171)),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 20),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            _profileLoadError!,
+                            style: HygTypography.body.copyWith(color: const Color(0xFFB91C1C), fontSize: 13),
+                          ),
+                        ),
+                        TextButton.icon(
+                          onPressed: _loadEmployeeProfileForEdit,
+                          icon: const Icon(Icons.refresh, size: 16),
+                          label: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const FormSectionGap(),
+                ] else if (_isLoadingProfileDetails) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FF),
+                      border: Border.all(color: const Color(0xFF93C5FD)),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      children: [
+                        const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          'Loading complete employee profile from database...',
+                          style: HygTypography.body.copyWith(color: const Color(0xFF1D4ED8), fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
                   const FormSectionGap(),
                 ],
                 ProfileFormSection(
@@ -1794,6 +1913,10 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
                           ),
                         ],
                       ),
+                      if (_isOperationsDepartment) ...[
+                        const SizedBox(height: 14),
+                        _buildMultiStoreAssignmentSection(),
+                      ],
                     ],
                   ),
                 ),
@@ -1972,6 +2095,173 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildMultiStoreAssignmentSection() {
+    final available = _availableAdditionalStoreOptions;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.store_mall_directory_outlined,
+                  size: 16,
+                  color: Color(0xFF2563EB),
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Multi-Store Assignments (Operations)',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF1E293B),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: _additionalStores.isNotEmpty
+                      ? const Color(0xFFDBEAFE)
+                      : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '${_additionalStores.length} additional',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: _additionalStores.isNotEmpty
+                        ? const Color(0xFF1D4ED8)
+                        : const Color(0xFF64748B),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Assign this Store Manager to 2 or more stores. They will automatically be the approver for requests from these stores and reflect in Approval Routes.',
+            style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+          ),
+          const SizedBox(height: 10),
+          if (_additionalStores.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Text(
+                'No additional stores assigned yet. Select a store from the dropdown below to assign.',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontStyle: FontStyle.italic,
+                  color: Colors.grey.shade500,
+                ),
+              ),
+            )
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _additionalStores.map((storeName) {
+                return Chip(
+                  avatar: const Icon(
+                    Icons.storefront_outlined,
+                    size: 15,
+                    color: Color(0xFF1E40AF),
+                  ),
+                  label: Text(
+                    storeName,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF1E3A8A),
+                    ),
+                  ),
+                  backgroundColor: const Color(0xFFEFF6FF),
+                  side: const BorderSide(color: Color(0xFFBFDBFE)),
+                  deleteIcon: const Icon(Icons.close, size: 14),
+                  deleteIconColor: const Color(0xFF1E40AF),
+                  onDeleted: () {
+                    setState(() {
+                      _additionalStores.removeWhere(
+                        (s) => _normalizeOption(s) == _normalizeOption(storeName),
+                      );
+                    });
+                  },
+                );
+              }).toList(),
+            ),
+          const SizedBox(height: 10),
+          if (available.isNotEmpty)
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    value: null,
+                    hint: const Text(
+                      '+ Add another store assignment...',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                    ),
+                    isDense: true,
+                    decoration: InputDecoration(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                      ),
+                      filled: true,
+                      fillColor: Colors.white,
+                    ),
+                    items: available.map((store) {
+                      return DropdownMenuItem<String>(
+                        value: store,
+                        child: Text(
+                          store,
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (selected) {
+                      if (selected != null && selected.isNotEmpty) {
+                        setState(() {
+                          if (!_additionalStores.any((s) => _normalizeOption(s) == _normalizeOption(selected))) {
+                            _additionalStores.add(selected);
+                          }
+                        });
+                      }
+                    },
+                  ),
+                ),
+              ],
+            )
+          else
+            const Text(
+              'All stores for this company have been assigned or selected.',
+              style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
+            ),
+        ],
       ),
     );
   }
@@ -2474,8 +2764,9 @@ class _ModalMultiSelectFieldState extends State<ModalMultiSelectField> {
                       onChanged: (bool? checked) {
                         setStateDialog(() {
                           if (checked == true) {
-                            if (!selected.contains(option))
+                            if (!selected.contains(option)) {
                               selected.add(option);
+                            }
                           } else {
                             selected.remove(option);
                           }

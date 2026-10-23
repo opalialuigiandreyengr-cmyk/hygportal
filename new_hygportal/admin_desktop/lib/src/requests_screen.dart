@@ -2316,12 +2316,11 @@ class _RequestsTableState extends State<_RequestsTable> {
           const _RequestColDef(title: 'Approver', width: 240),
           const _RequestColDef(title: 'Status', width: 120),
           const _RequestColDef(title: 'Submitted', width: 140),
-          if (widget.showDelete || widget.onValidate != null)
-            _RequestColDef(
-              title: 'Actions',
-              width: widget.isValidatedScreen ? 130 : 90,
-              alignment: Alignment.center,
-            ),
+          _RequestColDef(
+            title: 'Actions',
+            width: widget.isValidatedScreen ? 165 : 120,
+            alignment: Alignment.center,
+          ),
         ];
       case AdminRequestCategory.leave:
         return [
@@ -2338,12 +2337,11 @@ class _RequestsTableState extends State<_RequestsTable> {
           const _RequestColDef(title: 'Approver', width: 240),
           const _RequestColDef(title: 'Status', width: 120),
           const _RequestColDef(title: 'Submitted', width: 140),
-          if (widget.showDelete || widget.onValidate != null)
-            _RequestColDef(
-              title: 'Actions',
-              width: widget.isValidatedScreen ? 130 : 90,
-              alignment: Alignment.center,
-            ),
+          _RequestColDef(
+            title: 'Actions',
+            width: widget.isValidatedScreen ? 165 : 120,
+            alignment: Alignment.center,
+          ),
         ];
       case AdminRequestCategory.perk:
         return [
@@ -2899,16 +2897,25 @@ class _RequestCardRowState extends State<_RequestCardRow> {
   Widget _buildStatusCell(AdminRequestItem item) {
     final rawStatus = item.status.trim().toLowerCase();
     final isBirthdayLeave = item.isAutoApprovedBirthdayGrant;
-    final statusKey = rawStatus == 'validated'
+    final isAppliedPassed = item.isAppliedForPassedDays;
+
+    final resolvedStatus = (isAppliedPassed &&
+            (rawStatus == 'pre_approved' || rawStatus == 'pre-approved'))
+        ? 'pending'
+        : rawStatus;
+
+    final statusKey = resolvedStatus == 'validated'
         ? 'validated'
-        : (isBirthdayLeave ? 'approved' : rawStatus);
+        : (isBirthdayLeave ? 'approved' : resolvedStatus);
 
     final color = switch (statusKey) {
       'approved' || 'validated' => const Color(0xFF166534),
       'rejected' => const Color(0xFFB91C1C),
       'cancelled' => const Color(0xFF64748B),
       'needs_admin_review' => const Color(0xFFB45309),
-      _ => const Color(0xFF1E40AF),
+      'pending' || 'submitted' || 'waiting' => const Color(0xFFB45309),
+      'pre_approved' || 'pre-approved' => const Color(0xFF1E40AF),
+      _ => const Color(0xFF475569),
     };
 
     final bgColor = switch (statusKey) {
@@ -2916,7 +2923,9 @@ class _RequestCardRowState extends State<_RequestCardRow> {
       'rejected' => const Color(0xFFFEE2E2),
       'cancelled' => const Color(0xFFF1F5F9),
       'needs_admin_review' => const Color(0xFFFEF3C7),
-      _ => const Color(0xFFDBEAFE),
+      'pending' || 'submitted' || 'waiting' => const Color(0xFFFEF3C7),
+      'pre_approved' || 'pre-approved' => const Color(0xFFDBEAFE),
+      _ => const Color(0xFFF1F5F9),
     };
 
     return Container(
@@ -2962,10 +2971,36 @@ class _RequestCardRowState extends State<_RequestCardRow> {
         status == 'validated' ||
         (isAutoApproved && status != 'rejected' && status != 'cancelled');
     final isRevalidate = widget.isValidatedScreen || status == 'validated';
+    final isEsarfOrLeave = item.category == AdminRequestCategory.esarf ||
+        item.category == AdminRequestCategory.leave;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (isEsarfOrLeave) ...[
+          Tooltip(
+            message: 'Download Request (PDF)',
+            child: InkWell(
+              borderRadius: BorderRadius.circular(6),
+              onTap: () => RequestPdfService.downloadRequestPdf(context: context, item: item),
+              child: Container(
+                padding: const EdgeInsets.all(5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF2F2),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: const Color(0xFFFECACA), width: 0.8),
+                ),
+                child: const Icon(
+                  Icons.picture_as_pdf_outlined,
+                  size: 16,
+                  color: Color(0xFFDC2626),
+                ),
+              ),
+            ),
+          ),
+          if ((isApproved && widget.onValidate != null) || widget.showDelete)
+            const SizedBox(width: 8),
+        ],
         if (isApproved && widget.onValidate != null) ...[
           if (isRevalidate) ...[
             Tooltip(
@@ -3289,7 +3324,7 @@ class _RequestCardRowState extends State<_RequestCardRow> {
           _buildApproverCell(item),
           _buildStatusCell(item),
           _buildSubmittedCell(item),
-          if (widget.showDelete || widget.onValidate != null) _buildActionsCell(context, item),
+          _buildActionsCell(context, item),
         ];
 
       case AdminRequestCategory.leave:
@@ -3327,7 +3362,7 @@ class _RequestCardRowState extends State<_RequestCardRow> {
           _buildApproverCell(item),
           _buildStatusCell(item),
           _buildSubmittedCell(item),
-          if (widget.showDelete || widget.onValidate != null) _buildActionsCell(context, item),
+          _buildActionsCell(context, item),
         ];
 
       case AdminRequestCategory.perk:
@@ -4846,6 +4881,11 @@ class _RequestDetailModal extends StatelessWidget {
                           item,
                           item.cleanReasonText.isNotEmpty ? item.cleanReasonText : (item.reason ?? item.remarks ?? '—'),
                           item.proofs,
+                          fallbackProofUrl: item.proofUrl,
+                          fallbackProofTime: item.isGallery ? null : item.proofTime,
+                          fallbackProofLocation: item.isGallery ? null : item.proofLocation,
+                          fallbackProofId: item.isGallery ? null : item.proofId,
+                          fallbackProofSource: item.proofSource,
                         ),
                       ],
 
@@ -4872,6 +4912,21 @@ class _RequestDetailModal extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
+                  if (isEsarf || item.category == AdminRequestCategory.leave) ...[
+                    ElevatedButton.icon(
+                      onPressed: () => RequestPdfService.downloadRequestPdf(context: context, item: item),
+                      icon: const Icon(Icons.picture_as_pdf_outlined, size: 15, color: Colors.white),
+                      label: const Text('Download Request (PDF)'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFDC2626),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                        textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   ElevatedButton(
                     onPressed: () => Navigator.of(context).pop(),
                     style: ElevatedButton.styleFrom(
@@ -4981,9 +5036,10 @@ class _RequestDetailModal extends StatelessWidget {
                       list[i].proofs,
                       photoTitlePrefix: 'Request #${i + 1} (${list[i].txAbbr})',
                       fallbackProofUrl: list[i].proofUrl,
-                      fallbackProofTime: list[i].proofTime,
-                      fallbackProofLocation: list[i].proofLocation,
-                      fallbackProofId: list[i].proofId,
+                      fallbackProofTime: list[i].isGallery ? null : list[i].proofTime,
+                      fallbackProofLocation: list[i].isGallery ? null : list[i].proofLocation,
+                      fallbackProofId: list[i].isGallery ? null : list[i].proofId,
+                      fallbackProofSource: list[i].proofSource,
                     ),
                   ],
                   if (item.approvalSummary.isNotEmpty) ...[
@@ -5047,9 +5103,10 @@ class _RequestDetailModal extends StatelessWidget {
             singleProofs,
             photoTitlePrefix: 'Request #1 (${entry.txAbbr})',
             fallbackProofUrl: singleProofUrl,
-            fallbackProofTime: entry.proofTime ?? item.proofTime,
-            fallbackProofLocation: entry.proofLocation ?? item.proofLocation,
-            fallbackProofId: entry.proofId ?? item.proofId,
+            fallbackProofTime: (entry.isGallery || item.isGallery) ? null : (entry.proofTime ?? (entry.proofs.isNotEmpty ? null : item.proofTime)),
+            fallbackProofLocation: (entry.isGallery || item.isGallery) ? null : (entry.proofLocation ?? (entry.proofs.isNotEmpty ? null : item.proofLocation)),
+            fallbackProofId: (entry.isGallery || item.isGallery) ? null : (entry.proofId ?? (entry.proofs.isNotEmpty ? null : item.proofId)),
+            fallbackProofSource: entry.proofSource ?? item.proofSource,
           ),
         ],
 
@@ -5136,17 +5193,21 @@ class _RequestDetailModal extends StatelessWidget {
     String? fallbackProofTime,
     String? fallbackProofLocation,
     String? fallbackProofId,
+    String? fallbackProofSource,
   }) {
     final hasReason = reasonText.trim().isNotEmpty;
+    final isFallbackGallery = fallbackProofSource == 'gallery' ||
+        (fallbackProofTime == null && fallbackProofLocation == null && fallbackProofId == null && fallbackProofSource != 'camera' && fallbackProofSource != 'photo_proof');
     final allProofs = proofs.isNotEmpty
         ? proofs
         : (fallbackProofUrl != null && fallbackProofUrl.isNotEmpty
             ? [
                 RequestProofItem(
                   proofUrl: fallbackProofUrl,
-                  proofTime: fallbackProofTime ?? item.proofTime,
-                  proofLocation: fallbackProofLocation ?? item.proofLocation,
-                  proofId: fallbackProofId ?? item.proofId,
+                  proofTime: isFallbackGallery ? null : (fallbackProofTime ?? item.proofTime),
+                  proofLocation: isFallbackGallery ? null : (fallbackProofLocation ?? item.proofLocation),
+                  proofId: isFallbackGallery ? null : (fallbackProofId ?? item.proofId),
+                  proofSource: isFallbackGallery ? 'gallery' : (fallbackProofSource ?? item.proofSource),
                 )
               ]
             : <RequestProofItem>[]);
@@ -5201,9 +5262,10 @@ class _RequestDetailModal extends StatelessWidget {
                 title: allProofs.length > 1
                     ? 'Photo Proof #${pIdx + 1} • ${photoTitlePrefix ?? item.requestTypeName}'
                     : 'Photo Proof • ${photoTitlePrefix ?? item.requestTypeName}',
-                proofTime: allProofs[pIdx].proofTime ?? item.proofTime,
-                proofLocation: allProofs[pIdx].proofLocation ?? item.proofLocation,
-                proofId: allProofs[pIdx].proofId ?? item.proofId,
+                proofTime: allProofs[pIdx].isGallery ? null : (allProofs[pIdx].proofTime ?? item.proofTime),
+                proofLocation: allProofs[pIdx].isGallery ? null : (allProofs[pIdx].proofLocation ?? item.proofLocation),
+                proofId: allProofs[pIdx].isGallery ? null : (allProofs[pIdx].proofId ?? item.proofId),
+                proofSource: allProofs[pIdx].isGallery ? 'gallery' : (allProofs[pIdx].proofSource ?? item.proofSource),
                 employeeName: item.employeeName,
                 employeeId: item.employeeId,
                 storeName: item.storeName,
@@ -5267,6 +5329,9 @@ class _RequestDetailModal extends StatelessWidget {
 
   static String _getDirectProofImageUrl(String url) {
     final trimmed = url.trim();
+    if (trimmed.startsWith('data:image/')) {
+      return trimmed;
+    }
     final lh3Match = RegExp(r'googleusercontent\.com/d/([a-zA-Z0-9_-]+)', caseSensitive: false).firstMatch(trimmed);
     if (lh3Match != null) {
       return 'https://lh3.googleusercontent.com/d/${lh3Match.group(1)}=w1000';
@@ -5300,6 +5365,123 @@ class _RequestDetailModal extends StatelessWidget {
     return null;
   }
 
+  static Widget _buildProofImageWidget(
+    String url, {
+    required BoxFit fit,
+    Widget Function(BuildContext, Widget, ImageChunkEvent?)? loadingBuilder,
+    Widget Function(BuildContext, Object, StackTrace?)? errorBuilder,
+  }) {
+    final cleanUrl = url.trim();
+    if (cleanUrl.startsWith('data:image/')) {
+      try {
+        final commaIdx = cleanUrl.indexOf(',');
+        final b64 = commaIdx != -1 ? cleanUrl.substring(commaIdx + 1) : cleanUrl;
+        final bytes = base64Decode(b64);
+        return Image.memory(
+          bytes,
+          fit: fit,
+          errorBuilder: errorBuilder ??
+              (context, error, stackTrace) => const Center(
+                    child: Icon(Icons.broken_image_outlined, color: Color(0xFF94A3B8), size: 24),
+                  ),
+        );
+      } catch (e) {
+        if (errorBuilder != null) {
+          return errorBuilder(null as dynamic, e, null);
+        }
+        return const Center(
+          child: Icon(Icons.broken_image_outlined, color: Color(0xFF94A3B8), size: 24),
+        );
+      }
+    }
+    return Image.network(
+      cleanUrl,
+      fit: fit,
+      loadingBuilder: loadingBuilder,
+      errorBuilder: errorBuilder,
+    );
+  }
+
+  static final Map<String, String> _addressCache = {};
+
+  static Future<String?> reverseGeocodeCoordinates(double lat, double lon) async {
+    final key = '${lat.toStringAsFixed(5)},${lon.toStringAsFixed(5)}';
+    if (_addressCache.containsKey(key)) return _addressCache[key];
+
+    // 1. Nominatim
+    try {
+      final client = HttpClient();
+      client.userAgent = 'HYGPortalAdminDesktop/1.0';
+      final uri = Uri.parse('https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=$lat&lon=$lon&zoom=18&addressdetails=1');
+      final req = await client.getUrl(uri);
+      req.headers.set('Accept-Language', 'en');
+      final resp = await req.close().timeout(const Duration(seconds: 4));
+      if (resp.statusCode == 200) {
+        final body = await resp.transform(utf8.decoder).join();
+        final data = jsonDecode(body) as Map<String, dynamic>;
+        final addr = (data['address'] as Map<String, dynamic>?) ?? {};
+        final building = addr['amenity'] ?? addr['shop'] ?? addr['building'] ?? addr['office'] ?? '';
+        final streetNum = addr['house_number'] ?? '';
+        final road = addr['road'] ?? addr['street'] ?? addr['pedestrian'] ?? addr['path'] ?? '';
+        final streetPart = [streetNum, road].where((s) => s.toString().isNotEmpty).join(' ');
+        final barangay = addr['neighbourhood'] ?? addr['suburb'] ?? addr['quarter'] ?? addr['residential'] ?? addr['village'] ?? '';
+        final city = addr['city'] ?? addr['town'] ?? addr['municipality'] ?? addr['city_district'] ?? '';
+        final province = addr['state'] ?? addr['province'] ?? addr['region'] ?? '';
+        final postcode = addr['postcode'] ?? '';
+
+        final parts = <String>[];
+        if (building.toString().isNotEmpty) parts.add(building.toString());
+        if (streetPart.isNotEmpty) parts.add(streetPart);
+        if (barangay.toString().isNotEmpty) parts.add(barangay.toString());
+        if (city.toString().isNotEmpty) parts.add(city.toString());
+        if (province.toString().isNotEmpty && province != city) parts.add(province.toString());
+        if (postcode.toString().isNotEmpty) parts.add(postcode.toString());
+
+        if (parts.length >= 2) {
+          final res = parts.join(', ');
+          _addressCache[key] = res;
+          return res;
+        } else if (data['display_name'] != null) {
+          final res = data['display_name'].toString();
+          _addressCache[key] = res;
+          return res;
+        }
+      }
+    } catch (_) {}
+
+    // 2. BigDataCloud Fallback
+    try {
+      final client = HttpClient();
+      final uri = Uri.parse('https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=$lat&longitude=$lon&localityLanguage=en');
+      final req = await client.getUrl(uri);
+      final resp = await req.close().timeout(const Duration(seconds: 4));
+      if (resp.statusCode == 200) {
+        final body = await resp.transform(utf8.decoder).join();
+        final data = jsonDecode(body) as Map<String, dynamic>;
+        final parts = <String>[];
+        final adminList = data['localityInfo']?['administrative'];
+        if (adminList is List) {
+          for (int i = adminList.length - 1; i >= 0; i--) {
+            final item = adminList[i];
+            if (item is Map && item['name'] != null && (item['order'] ?? 0) >= 4 && !parts.contains(item['name'])) {
+              parts.add(item['name'].toString());
+            }
+          }
+        }
+        if (data['locality'] != null && !parts.contains(data['locality'])) parts.add(data['locality'].toString());
+        if (data['city'] != null && !parts.contains(data['city'])) parts.add(data['city'].toString());
+        if (data['principalSubdivision'] != null && !parts.contains(data['principalSubdivision'])) parts.add(data['principalSubdivision'].toString());
+        if (parts.isNotEmpty) {
+          final res = parts.join(', ');
+          _addressCache[key] = res;
+          return res;
+        }
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
   static void _showProofPreviewDialog(
     BuildContext context,
     String rawUrl, {
@@ -5307,6 +5489,7 @@ class _RequestDetailModal extends StatelessWidget {
     String? proofTime,
     String? proofLocation,
     String? proofId,
+    String? proofSource,
     String? employeeName,
     String? employeeId,
     String? storeName,
@@ -5322,6 +5505,7 @@ class _RequestDetailModal extends StatelessWidget {
         proofTime: proofTime,
         proofLocation: proofLocation,
         proofId: proofId,
+        proofSource: proofSource,
         employeeName: employeeName,
         employeeId: employeeId,
         storeName: storeName,
@@ -5539,216 +5723,26 @@ class _RequestDetailModal extends StatelessWidget {
     String? proofTime,
     String? proofLocation,
     String? proofId,
+    String? proofSource,
     String? employeeName,
     String? employeeId,
     String? storeName,
     String? department,
   }) {
-    final directUrl = _getDirectProofImageUrl(proofUrl);
-
-    final isMulti = totalPhotos != null && totalPhotos > 1;
-    final photoBadgeLabel = isMulti ? 'Photo #${(photoIndex ?? 0) + 1}' : 'Photo Proof';
-
-    String timeBadgeText = isMulti ? 'Photo #${(photoIndex ?? 0) + 1} Attached' : 'Photo Proof Attached';
-    if (proofTime != null && proofTime.trim().isNotEmpty) {
-      try {
-        final dt = DateTime.parse(proofTime.trim());
-        final ph = dt.toUtc().add(const Duration(hours: 8));
-        const months = ['Jan.', 'Feb.', 'Mar.', 'Apr.', 'May', 'Jun.', 'Jul.', 'Aug.', 'Sept.', 'Oct.', 'Nov.', 'Dec.'];
-        final m = months[ph.month - 1];
-        final d = ph.day.toString().padLeft(2, '0');
-        final y = ph.year;
-        final hour12 = ph.hour == 0 ? 12 : (ph.hour > 12 ? ph.hour - 12 : ph.hour);
-        final min = ph.minute.toString().padLeft(2, '0');
-        final ampm = ph.hour >= 12 ? 'PM' : 'AM';
-        timeBadgeText = '$m $d, $y • $hour12:$min $ampm';
-      } catch (_) {}
-    }
-
-    final locationSubtitle = (proofLocation != null && proofLocation.trim().isNotEmpty)
-        ? proofLocation.trim()
-        : '';
-    return Padding(
-      padding: EdgeInsets.only(top: isMulti && (photoIndex ?? 0) > 0 ? 4 : 6, bottom: 2),
-      child: InkWell(
-        onTap: () => _showProofPreviewDialog(
-          context,
-          proofUrl,
-          title: title,
-          proofTime: proofTime,
-          proofLocation: proofLocation,
-          proofId: proofId,
-          employeeName: employeeName,
-          employeeId: employeeId,
-          storeName: storeName,
-          department: department,
-          allProofs: allProofs,
-          initialIndex: photoIndex ?? 0,
-        ),
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF8FAFC),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0xFFCBD5E1)),
-          ),
-          child: Row(
-            children: [
-              // Thumbnail Box
-              ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: Container(
-                  width: 44,
-                  height: 44,
-                  color: const Color(0xFFE2E8F0),
-                  child: Image.network(
-                    directUrl,
-                    fit: BoxFit.cover,
-                    loadingBuilder: (context, child, loadingProgress) {
-                      if (loadingProgress == null) return child;
-                      return const Center(
-                        child: SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0284C7)),
-                        ),
-                      );
-                    },
-                    errorBuilder: (context, error, stackTrace) {
-                      return const Center(
-                        child: Icon(Icons.photo_camera_outlined, size: 20, color: Color(0xFF64748B)),
-                      );
-                    },
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              // Meta Info
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      children: [
-                        if (isMulti) ...[
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            margin: const EdgeInsets.only(right: 6),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF0F172A),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.image_outlined, size: 11, color: Color(0xFF38BDF8)),
-                                const SizedBox(width: 4),
-                                Text(
-                                  photoBadgeLabel,
-                                  style: const TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                        Flexible(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFEFF6FF),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.photo_camera_outlined, size: 12, color: Color(0xFF2563EB)),
-                                const SizedBox(width: 4),
-                                Flexible(
-                                  child: Text(
-                                    timeBadgeText,
-                                    style: const TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF1E40AF),
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 3),
-                    if (locationSubtitle.isNotEmpty) ...[
-                      Row(
-                        children: [
-                          const Icon(Icons.location_on_outlined, size: 11, color: Color(0xFF64748B)),
-                          const SizedBox(width: 3),
-                          Expanded(
-                            child: Text(
-                              locationSubtitle,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: Color(0xFF64748B),
-                                fontWeight: FontWeight.w500,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ] else ...[
-                      const Text(
-                      'Click to inspect full photo proof',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Color(0xFF64748B),
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              // Action Button
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: const [
-                    Icon(Icons.visibility_outlined, size: 14, color: Color(0xFF2563EB)),
-                    SizedBox(width: 4),
-                    Text(
-                      'View Proof',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF2563EB),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    return _RequestProofCardItem(
+      proofUrl: proofUrl,
+      photoIndex: photoIndex,
+      totalPhotos: totalPhotos,
+      allProofs: allProofs,
+      title: title,
+      proofTime: proofTime,
+      proofLocation: proofLocation,
+      proofId: proofId,
+      proofSource: proofSource,
+      employeeName: employeeName,
+      employeeId: employeeId,
+      storeName: storeName,
+      department: department,
     );
   }
 
@@ -6743,12 +6737,366 @@ class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
   }
 }
 
+class _RequestProofCardItem extends StatefulWidget {
+  const _RequestProofCardItem({
+    required this.proofUrl,
+    this.photoIndex,
+    this.totalPhotos,
+    this.allProofs,
+    this.title,
+    this.proofTime,
+    this.proofLocation,
+    this.proofId,
+    this.proofSource,
+    this.employeeName,
+    this.employeeId,
+    this.storeName,
+    this.department,
+  });
+
+  final String proofUrl;
+  final int? photoIndex;
+  final int? totalPhotos;
+  final List<RequestProofItem>? allProofs;
+  final String? title;
+  final String? proofTime;
+  final String? proofLocation;
+  final String? proofId;
+  final String? proofSource;
+  final String? employeeName;
+  final String? employeeId;
+  final String? storeName;
+  final String? department;
+
+  @override
+  State<_RequestProofCardItem> createState() => _RequestProofCardItemState();
+}
+
+class _RequestProofCardItemState extends State<_RequestProofCardItem> {
+  late String _displayLocation;
+  late String _currentUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _displayLocation = widget.proofLocation ?? '';
+    _currentUrl = widget.proofUrl;
+    _resolveLocationAndUrl();
+  }
+
+  void _resolveLocationAndUrl() async {
+    final currentProofItem = (widget.allProofs != null &&
+            widget.photoIndex != null &&
+            widget.photoIndex! >= 0 &&
+            widget.photoIndex! < widget.allProofs!.length)
+        ? widget.allProofs![widget.photoIndex!]
+        : null;
+
+    final isGallery = currentProofItem?.isGallery ??
+        (widget.proofSource?.toLowerCase().trim() == 'gallery' ||
+            (widget.proofTime == null &&
+                widget.proofLocation == null &&
+                widget.proofId == null &&
+                widget.proofSource != 'camera' &&
+                widget.proofSource != 'photo_proof'));
+
+    if (isGallery) return;
+
+    final hasRawCoords = _displayLocation.contains('Lat:') || _displayLocation.contains('Lon:');
+    final isBase64 = _currentUrl.trim().startsWith('data:image/');
+
+    try {
+      final client = Supabase.instance.client;
+      Map<String, dynamic>? row;
+
+      if (widget.proofId != null && widget.proofId!.isNotEmpty && !widget.proofId!.startsWith('proof_')) {
+        final res = await client.from('photo_proofs').select('*').eq('id', widget.proofId!).maybeSingle();
+        if (res != null) row = res;
+      }
+
+      if (row == null && widget.proofTime != null && widget.proofTime!.isNotEmpty) {
+        var q = client.from('photo_proofs').select('*').eq('timestamp', widget.proofTime!);
+        if (widget.employeeId != null && RegExp(r'^[0-9a-f-]{36}$', caseSensitive: false).hasMatch(widget.employeeId!)) {
+          q = q.eq('employee_id', widget.employeeId!);
+        }
+        final res = await q.limit(1).maybeSingle();
+        if (res != null) row = res;
+      }
+
+      if (row != null && mounted) {
+        final cloudLoc = row['location_text']?.toString().trim() ?? '';
+        final cloudUrl = row['drive_web_view_link']?.toString().trim() ?? row['photo_url']?.toString().trim() ?? '';
+        if (cloudLoc.isNotEmpty && !cloudLoc.startsWith('Lat:') && !cloudLoc.contains('Lon:')) {
+          setState(() {
+            _displayLocation = cloudLoc;
+            if (cloudUrl.isNotEmpty) _currentUrl = cloudUrl;
+          });
+          return;
+        } else if (cloudUrl.isNotEmpty && isBase64) {
+          setState(() {
+            _currentUrl = cloudUrl;
+          });
+        }
+      }
+
+      if (hasRawCoords) {
+        final match = RegExp(r'Lat:\s*([0-9.-]+)[,\s]+Lon:\s*([0-9.-]+)', caseSensitive: false).firstMatch(_displayLocation);
+        if (match != null) {
+          final lat = double.tryParse(match.group(1) ?? '');
+          final lon = double.tryParse(match.group(2) ?? '');
+          if (lat != null && lon != null) {
+            final addr = await _RequestDetailModal.reverseGeocodeCoordinates(lat, lon);
+            if (addr != null && addr.isNotEmpty && mounted) {
+              setState(() {
+                _displayLocation = addr;
+              });
+            }
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final directUrl = _RequestDetailModal._getDirectProofImageUrl(_currentUrl);
+
+    final currentProofItem = (widget.allProofs != null &&
+            widget.photoIndex != null &&
+            widget.photoIndex! >= 0 &&
+            widget.photoIndex! < widget.allProofs!.length)
+        ? widget.allProofs![widget.photoIndex!]
+        : null;
+
+    final isGallery = currentProofItem?.isGallery ??
+        (widget.proofSource?.toLowerCase().trim() == 'gallery' ||
+            (widget.proofTime == null &&
+                widget.proofLocation == null &&
+                widget.proofId == null &&
+                widget.proofSource != 'camera' &&
+                widget.proofSource != 'photo_proof'));
+
+    final isMulti = widget.totalPhotos != null && widget.totalPhotos! > 1;
+    final photoBadgeLabel = isMulti ? 'Photo #${(widget.photoIndex ?? 0) + 1}' : 'Photo Proof';
+
+    String timeBadgeText;
+    if (isGallery) {
+      timeBadgeText = isMulti ? 'Photo #${(widget.photoIndex ?? 0) + 1} • Uploaded from Gallery' : 'Uploaded from Gallery';
+    } else {
+      timeBadgeText = isMulti ? 'Photo #${(widget.photoIndex ?? 0) + 1} Attached' : 'Photo Proof Attached';
+      if (widget.proofTime != null && widget.proofTime!.trim().isNotEmpty) {
+        try {
+          final dt = DateTime.parse(widget.proofTime!.trim());
+          final ph = dt.toUtc().add(const Duration(hours: 8));
+          const months = ['Jan.', 'Feb.', 'Mar.', 'Apr.', 'May', 'Jun.', 'Jul.', 'Aug.', 'Sept.', 'Oct.', 'Nov.', 'Dec.'];
+          final m = months[ph.month - 1];
+          final d = ph.day.toString().padLeft(2, '0');
+          final y = ph.year;
+          final hour12 = ph.hour == 0 ? 12 : (ph.hour > 12 ? ph.hour - 12 : ph.hour);
+          final min = ph.minute.toString().padLeft(2, '0');
+          final ampm = ph.hour >= 12 ? 'PM' : 'AM';
+          timeBadgeText = '$m $d, $y • $hour12:$min $ampm';
+        } catch (_) {}
+      }
+    }
+
+    final locationSubtitle = (!isGallery && _displayLocation.trim().isNotEmpty)
+        ? _displayLocation.trim()
+        : '';
+
+    return Padding(
+      padding: EdgeInsets.only(top: isMulti && (widget.photoIndex ?? 0) > 0 ? 4 : 6, bottom: 2),
+      child: InkWell(
+        onTap: () => _RequestDetailModal._showProofPreviewDialog(
+          context,
+          _currentUrl,
+          title: widget.title,
+          proofTime: isGallery ? null : widget.proofTime,
+          proofLocation: isGallery ? null : _displayLocation,
+          proofId: isGallery ? null : widget.proofId,
+          proofSource: isGallery ? 'gallery' : widget.proofSource,
+          employeeName: widget.employeeName,
+          employeeId: widget.employeeId,
+          storeName: widget.storeName,
+          department: widget.department,
+          allProofs: widget.allProofs,
+          initialIndex: widget.photoIndex ?? 0,
+        ),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xFFCBD5E1)),
+          ),
+          child: Row(
+            children: [
+              // Thumbnail Box
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: Container(
+                  width: 44,
+                  height: 44,
+                  color: const Color(0xFFE2E8F0),
+                  child: _RequestDetailModal._buildProofImageWidget(
+                    directUrl,
+                    fit: BoxFit.cover,
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return const Center(
+                        child: SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0284C7)),
+                        ),
+                      );
+                    },
+                    errorBuilder: (context, error, stackTrace) {
+                      return const Center(
+                        child: Icon(Icons.photo_camera_outlined, size: 20, color: Color(0xFF64748B)),
+                      );
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              // Meta Info
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        if (isMulti) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            margin: const EdgeInsets.only(right: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0F172A),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.image_outlined, size: 11, color: Color(0xFF38BDF8)),
+                                const SizedBox(width: 4),
+                                Text(
+                                  photoBadgeLabel,
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        Flexible(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEFF6FF),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.photo_camera_outlined, size: 12, color: Color(0xFF2563EB)),
+                                const SizedBox(width: 4),
+                                Flexible(
+                                  child: Text(
+                                    timeBadgeText,
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF1E40AF),
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    if (locationSubtitle.isNotEmpty) ...[
+                      Row(
+                        children: [
+                          const Icon(Icons.location_on_outlined, size: 11, color: Color(0xFF64748B)),
+                          const SizedBox(width: 3),
+                          Expanded(
+                            child: Text(
+                              locationSubtitle,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Color(0xFF64748B),
+                                fontWeight: FontWeight.w500,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ] else ...[
+                      const Text(
+                        'Click to inspect full photo proof',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFF64748B),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Action Button
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: const Color(0xFFCBD5E1)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.visibility_outlined, size: 14, color: Color(0xFF0284C7)),
+                    SizedBox(width: 4),
+                    Text(
+                      'View Proof',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF0284C7),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _RequestProofPreviewDialog extends StatefulWidget {
   final String rawUrl;
   final String? title;
   final String? proofTime;
   final String? proofLocation;
   final String? proofId;
+  final String? proofSource;
   final String? employeeName;
   final String? employeeId;
   final String? storeName;
@@ -6763,6 +7111,7 @@ class _RequestProofPreviewDialog extends StatefulWidget {
     this.proofTime,
     this.proofLocation,
     this.proofId,
+    this.proofSource,
     this.employeeName,
     this.employeeId,
     this.storeName,
@@ -6792,6 +7141,21 @@ class _RequestProofPreviewDialogState extends State<_RequestProofPreviewDialog> 
     _setupCurrentProof();
   }
 
+  bool get isCurrentGallery {
+    final currentProof = (widget.allProofs != null &&
+            _currentIndex >= 0 &&
+            _currentIndex < widget.allProofs!.length)
+        ? widget.allProofs![_currentIndex]
+        : null;
+    return currentProof?.isGallery ??
+        (widget.proofSource == 'gallery' ||
+            (widget.proofTime == null &&
+                widget.proofLocation == null &&
+                widget.proofId == null &&
+                widget.proofSource != 'camera' &&
+                widget.proofSource != 'photo_proof'));
+  }
+
   void _setupCurrentProof() {
     final currentProof = (widget.allProofs != null &&
             _currentIndex >= 0 &&
@@ -6799,10 +7163,11 @@ class _RequestProofPreviewDialogState extends State<_RequestProofPreviewDialog> 
         ? widget.allProofs![_currentIndex]
         : null;
 
+    final isGallery = isCurrentGallery;
     final activeUrl = currentProof?.proofUrl ?? widget.rawUrl;
-    final activeTime = currentProof?.proofTime ?? widget.proofTime;
-    final activeLoc = currentProof?.proofLocation ?? widget.proofLocation;
-    final activeId = currentProof?.proofId ?? widget.proofId;
+    final activeTime = isGallery ? null : (currentProof?.proofTime ?? widget.proofTime);
+    final activeLoc = isGallery ? null : (currentProof?.proofLocation ?? widget.proofLocation);
+    final activeId = isGallery ? null : (currentProof?.proofId ?? widget.proofId);
 
     final driveId = _RequestDetailModal._extractDriveFileId(activeUrl) ?? '';
     _currentRecord = _PhotoProofRecord(
@@ -6821,8 +7186,13 @@ class _RequestProofPreviewDialogState extends State<_RequestProofPreviewDialog> 
       driveWebViewLink: activeUrl,
     );
 
-    _loadFromCloud();
-    _checkImageWatermark();
+    if (!isGallery) {
+      _loadFromCloud();
+      _checkImageWatermark();
+    } else {
+      _isBurnedWatermark = false;
+      _manualOverlayOverride = false;
+    }
   }
 
   void _switchProof(int newIndex) {
@@ -6842,7 +7212,7 @@ class _RequestProofPreviewDialogState extends State<_RequestProofPreviewDialog> 
     try {
       final client = Supabase.instance.client;
       Map<String, dynamic>? row;
-      if (proofId.isNotEmpty) {
+      if (proofId.isNotEmpty && !proofId.startsWith('proof_')) {
         final res = await client
             .from('photo_proofs')
             .select('*')
@@ -6859,8 +7229,26 @@ class _RequestProofPreviewDialogState extends State<_RequestProofPreviewDialog> 
             .maybeSingle();
         if (res != null) row = res;
       }
+      if (row == null && _currentRecord.timestamp.isNotEmpty) {
+        var query = client.from('photo_proofs').select('*').eq('timestamp', _currentRecord.timestamp);
+        final empId = _currentRecord.employeeId.isNotEmpty ? _currentRecord.employeeId : (widget.employeeId ?? '');
+        if (empId.isNotEmpty && RegExp(r'^[0-9a-f-]{36}$', caseSensitive: false).hasMatch(empId)) {
+          query = query.eq('employee_id', empId);
+        }
+        final res = await query.limit(1).maybeSingle();
+        if (res != null) row = res;
+      }
       if (row != null && mounted) {
         final cloudRecord = _PhotoProofRecord.fromMap(row);
+        var resolvedLoc = cloudRecord.locationText.isNotEmpty ? cloudRecord.locationText : _currentRecord.locationText;
+        if (resolvedLoc.contains('Lat:') || resolvedLoc.contains('Lon:')) {
+          final lat = cloudRecord.latitude ?? _currentRecord.latitude;
+          final lon = cloudRecord.longitude ?? _currentRecord.longitude;
+          if (lat != null && lon != null) {
+            final geo = await _RequestDetailModal.reverseGeocodeCoordinates(lat, lon);
+            if (geo != null && geo.isNotEmpty) resolvedLoc = geo;
+          }
+        }
         setState(() {
           _currentRecord = _PhotoProofRecord(
             id: cloudRecord.id.isNotEmpty ? cloudRecord.id : _currentRecord.id,
@@ -6870,7 +7258,7 @@ class _RequestProofPreviewDialogState extends State<_RequestProofPreviewDialog> 
             timePeriod: cloudRecord.timePeriod.isNotEmpty ? cloudRecord.timePeriod : _currentRecord.timePeriod,
             dateFormatted: cloudRecord.dateFormatted.isNotEmpty ? cloudRecord.dateFormatted : _currentRecord.dateFormatted,
             dayFormatted: cloudRecord.dayFormatted.isNotEmpty ? cloudRecord.dayFormatted : _currentRecord.dayFormatted,
-            locationText: cloudRecord.locationText.isNotEmpty ? cloudRecord.locationText : _currentRecord.locationText,
+            locationText: resolvedLoc,
             employeeName: cloudRecord.employeeName.isNotEmpty ? cloudRecord.employeeName : _currentRecord.employeeName,
             employeeId: cloudRecord.employeeId.isNotEmpty ? cloudRecord.employeeId : _currentRecord.employeeId,
             storeName: cloudRecord.storeName.isNotEmpty ? cloudRecord.storeName : _currentRecord.storeName,
@@ -6880,6 +7268,39 @@ class _RequestProofPreviewDialogState extends State<_RequestProofPreviewDialog> 
             longitude: cloudRecord.longitude ?? _currentRecord.longitude,
           );
         });
+      } else if (mounted) {
+        var currentLoc = _currentRecord.locationText;
+        if (currentLoc.contains('Lat:') || currentLoc.contains('Lon:')) {
+          final match = RegExp(r'Lat:\s*([0-9.-]+)[,\s]+Lon:\s*([0-9.-]+)', caseSensitive: false).firstMatch(currentLoc);
+          if (match != null) {
+            final lat = double.tryParse(match.group(1) ?? '');
+            final lon = double.tryParse(match.group(2) ?? '');
+            if (lat != null && lon != null) {
+              final geo = await _RequestDetailModal.reverseGeocodeCoordinates(lat, lon);
+              if (geo != null && geo.isNotEmpty && mounted) {
+                setState(() {
+                  _currentRecord = _PhotoProofRecord(
+                    id: _currentRecord.id,
+                    photoUrl: _currentRecord.photoUrl,
+                    timestamp: _currentRecord.timestamp,
+                    timeDigits: _currentRecord.timeDigits,
+                    timePeriod: _currentRecord.timePeriod,
+                    dateFormatted: _currentRecord.dateFormatted,
+                    dayFormatted: _currentRecord.dayFormatted,
+                    locationText: geo,
+                    employeeName: _currentRecord.employeeName,
+                    employeeId: _currentRecord.employeeId,
+                    storeName: _currentRecord.storeName,
+                    driveFileId: _currentRecord.driveFileId,
+                    driveWebViewLink: _currentRecord.driveWebViewLink,
+                    latitude: lat,
+                    longitude: lon,
+                  );
+                });
+              }
+            }
+          }
+        }
       }
     } catch (e) {
       debugPrint('[RequestProofPreview] Supabase fetch exception: $e');
@@ -6890,7 +7311,9 @@ class _RequestProofPreviewDialogState extends State<_RequestProofPreviewDialog> 
     final directUrl = _RequestDetailModal._getDirectProofImageUrl(_currentRecord.photoUrl);
     if (directUrl.isEmpty) return;
     try {
-      final ImageProvider provider = NetworkImage(directUrl);
+      final ImageProvider provider = directUrl.startsWith('data:image/')
+          ? MemoryImage(base64Decode(directUrl.indexOf(',') != -1 ? directUrl.substring(directUrl.indexOf(',') + 1) : directUrl))
+          : NetworkImage(directUrl) as ImageProvider;
       if (_imageStream != null && _listener != null) {
         _imageStream!.removeListener(_listener!);
       }
@@ -6923,6 +7346,7 @@ class _RequestProofPreviewDialogState extends State<_RequestProofPreviewDialog> 
   }
 
   bool get showOverlay {
+    if (isCurrentGallery) return false;
     return _manualOverlayOverride ??
         (_isBurnedWatermark == null ? true : !_isBurnedWatermark!);
   }
@@ -6932,9 +7356,10 @@ class _RequestProofPreviewDialogState extends State<_RequestProofPreviewDialog> 
     final directUrl = _RequestDetailModal._getDirectProofImageUrl(
       _currentRecord.resolvedPhotoUrl.isNotEmpty ? _currentRecord.resolvedPhotoUrl : widget.rawUrl,
     );
-    final hasDetails = _currentRecord.displayTimeDigits.isNotEmpty ||
-        _currentRecord.displayLocationText.isNotEmpty ||
-        _currentRecord.displayDateFormatted.isNotEmpty;
+    final hasDetails = !isCurrentGallery &&
+        (_currentRecord.displayTimeDigits.isNotEmpty ||
+            _currentRecord.displayLocationText.isNotEmpty ||
+            _currentRecord.displayDateFormatted.isNotEmpty);
 
     final deptDisplay = [
       if (widget.department != null && widget.department!.isNotEmpty) widget.department,
@@ -6945,7 +7370,8 @@ class _RequestProofPreviewDialogState extends State<_RequestProofPreviewDialog> 
     ].join(' • ');
 
     final headerSubtitle = [
-      if (_currentRecord.formattedTimeLabel.isNotEmpty) _currentRecord.formattedTimeLabel,
+      if (!isCurrentGallery && _currentRecord.formattedTimeLabel.isNotEmpty) _currentRecord.formattedTimeLabel,
+      if (isCurrentGallery) 'Uploaded from Gallery',
       if (_currentRecord.employeeName.isNotEmpty) _currentRecord.employeeName,
       if (deptDisplay.isNotEmpty && _currentRecord.employeeName.isEmpty) deptDisplay,
     ].join(' • ');
@@ -7108,7 +7534,7 @@ class _RequestProofPreviewDialogState extends State<_RequestProofPreviewDialog> 
                         boundaryMargin: const EdgeInsets.all(20),
                         minScale: 0.8,
                         maxScale: 4.0,
-                        child: Image.network(
+                        child: _RequestDetailModal._buildProofImageWidget(
                           directUrl,
                           fit: BoxFit.contain,
                           loadingBuilder: (context, child, loadingProgress) {
@@ -7303,7 +7729,7 @@ class _RequestProofPreviewDialogState extends State<_RequestProofPreviewDialog> 
             ),
 
             // Location Strip below photo (if location is available)
-            if (_currentRecord.displayLocationText.isNotEmpty)
+            if (!isCurrentGallery && _currentRecord.displayLocationText.isNotEmpty)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: const BoxDecoration(
@@ -7342,7 +7768,13 @@ class _RequestProofPreviewDialogState extends State<_RequestProofPreviewDialog> 
                 children: [
                   Expanded(
                     child: Text(
-                      widget.rawUrl,
+                      widget.rawUrl.startsWith('data:image/')
+                          ? (_currentRecord.driveWebViewLink.isNotEmpty && _currentRecord.driveWebViewLink.startsWith('http')
+                              ? _currentRecord.driveWebViewLink
+                              : (_currentRecord.photoUrl.isNotEmpty && _currentRecord.photoUrl.startsWith('http')
+                                  ? _currentRecord.photoUrl
+                                  : 'Attached Photo Proof (Offline Image)'))
+                          : widget.rawUrl,
                       style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,

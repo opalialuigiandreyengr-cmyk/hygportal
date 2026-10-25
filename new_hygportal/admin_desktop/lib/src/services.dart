@@ -5022,3 +5022,200 @@ class TutorialService {
   }
 }
 
+// ==========================================
+// PORTAL EVENTS AND ACTIVITIES SERVICE
+// ==========================================
+class PortalEventActivityService {
+  static final _client = Supabase.instance.client;
+
+  static Future<List<PortalEventActivityItem>> getEvents({bool onlyActive = false}) async {
+    try {
+      var query = _client.from('portal_events').select();
+      if (onlyActive) {
+        query = query.eq('is_active', true);
+      }
+      final response = await query
+          .order('event_date', ascending: false)
+          .order('time_from', ascending: true);
+
+      return (response as List)
+          .map((row) => PortalEventActivityItem.fromMap(row as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      final errStr = e.toString().toLowerCase();
+      if (errStr.contains('portal_events') ||
+          errStr.contains('pgrst202') ||
+          errStr.contains('pgrst205') ||
+          errStr.contains('42p01') ||
+          errStr.contains('schema cache')) {
+        throw Exception(
+          'Database setup required: The "portal_events" table is not created in Supabase yet. '
+          'Please execute migration 0209_create_events_and_activities_table.sql in your Supabase SQL Editor.',
+        );
+      }
+      debugPrint('Direct portal_events select failed, trying RPC: $e');
+      try {
+        final rpcResponse = await _client.rpc(
+          'get_portal_events',
+          params: {'p_only_active': onlyActive},
+        );
+        return (rpcResponse as List)
+            .map((row) => PortalEventActivityItem.fromMap(row as Map<String, dynamic>))
+            .toList();
+      } catch (rpcErr) {
+        final rpcStr = rpcErr.toString().toLowerCase();
+        if (rpcStr.contains('pgrst202') ||
+            rpcStr.contains('pgrst205') ||
+            rpcStr.contains('42p01') ||
+            rpcStr.contains('portal_events')) {
+          throw Exception(
+            'Database setup required: The "portal_events" table is not created in Supabase yet. '
+            'Please execute migration 0209_create_events_and_activities_table.sql in your Supabase SQL Editor.',
+          );
+        }
+        debugPrint('Error fetching portal events: $rpcErr');
+        rethrow;
+      }
+    }
+  }
+
+  static Future<PortalEventActivityItem> createEvent({
+    required String title,
+    required String type,
+    String description = '',
+    String location = '',
+    required DateTime eventDate,
+    DateTime? endDate,
+    required String timeFrom,
+    required String timeTo,
+    required double totalHours,
+    bool isActive = true,
+    String createdBy = '',
+  }) async {
+    final dateStr = eventDate.toIso8601String().split('T').first;
+    final endDateStr = (endDate ?? eventDate).toIso8601String().split('T').first;
+    final data = {
+      'title': title.trim(),
+      'type': type.trim(),
+      'description': description.trim(),
+      'location': location.trim(),
+      'event_date': dateStr,
+      'end_date': endDateStr,
+      'time_from': timeFrom.trim(),
+      'time_to': timeTo.trim(),
+      'total_hours': totalHours,
+      'is_active': isActive,
+      if (createdBy.isNotEmpty) 'created_by': createdBy.trim(),
+    };
+
+    try {
+      final response = await _client
+          .from('portal_events')
+          .insert(data)
+          .select()
+          .single();
+      return PortalEventActivityItem.fromMap(response);
+    } catch (e) {
+      debugPrint('Direct insert failed, attempting RPC: $e');
+      final newId = await _client.rpc('admin_save_portal_event', params: {
+        'p_title': title.trim(),
+        'p_type': type.trim(),
+        'p_description': description.trim(),
+        'p_location': location.trim(),
+        'p_event_date': dateStr,
+        'p_end_date': endDateStr,
+        'p_time_from': timeFrom.trim(),
+        'p_time_to': timeTo.trim(),
+        'p_total_hours': totalHours,
+        'p_is_active': isActive,
+        'p_created_by': createdBy.trim(),
+      });
+      return PortalEventActivityItem(
+        id: newId?.toString() ?? '',
+        title: title.trim(),
+        type: type.trim(),
+        description: description.trim(),
+        location: location.trim(),
+        eventDate: eventDate,
+        endDate: endDate ?? eventDate,
+        timeFrom: timeFrom.trim(),
+        timeTo: timeTo.trim(),
+        totalHours: totalHours,
+        isActive: isActive,
+        createdBy: createdBy.trim(),
+        createdAt: DateTime.now(),
+      );
+    }
+  }
+
+  static Future<void> updateEvent({
+    required String id,
+    required String title,
+    required String type,
+    String description = '',
+    String location = '',
+    required DateTime eventDate,
+    DateTime? endDate,
+    required String timeFrom,
+    required String timeTo,
+    required double totalHours,
+    bool isActive = true,
+  }) async {
+    final dateStr = eventDate.toIso8601String().split('T').first;
+    final endDateStr = (endDate ?? eventDate).toIso8601String().split('T').first;
+    final data = {
+      'title': title.trim(),
+      'type': type.trim(),
+      'description': description.trim(),
+      'location': location.trim(),
+      'event_date': dateStr,
+      'end_date': endDateStr,
+      'time_from': timeFrom.trim(),
+      'time_to': timeTo.trim(),
+      'total_hours': totalHours,
+      'is_active': isActive,
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+
+    try {
+      await _client.from('portal_events').update(data).eq('id', id);
+    } catch (e) {
+      debugPrint('Direct update failed, attempting RPC: $e');
+      await _client.rpc('admin_save_portal_event', params: {
+        'p_id': id,
+        'p_title': title.trim(),
+        'p_type': type.trim(),
+        'p_description': description.trim(),
+        'p_location': location.trim(),
+        'p_event_date': dateStr,
+        'p_end_date': endDateStr,
+        'p_time_from': timeFrom.trim(),
+        'p_time_to': timeTo.trim(),
+        'p_total_hours': totalHours,
+        'p_is_active': isActive,
+      });
+    }
+  }
+
+  static Future<void> toggleActive(String id, bool newStatus) async {
+    try {
+      await _client
+          .from('portal_events')
+          .update({'is_active': newStatus, 'updated_at': DateTime.now().toIso8601String()})
+          .eq('id', id);
+    } catch (e) {
+      debugPrint('Direct toggle failed: $e');
+      rethrow;
+    }
+  }
+
+  static Future<void> deleteEvent(String id) async {
+    try {
+      await _client.from('portal_events').delete().eq('id', id);
+    } catch (e) {
+      debugPrint('Direct delete failed, attempting RPC: $e');
+      await _client.rpc('admin_delete_portal_event', params: {'p_id': id});
+    }
+  }
+}
+

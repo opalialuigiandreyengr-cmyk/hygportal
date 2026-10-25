@@ -146,6 +146,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
       case HrSection.redemptionRequests:
       case HrSection.badges:
       case HrSection.rewardsReports:
+      case HrSection.eventsAndActivities:
         break;
     }
   }
@@ -2193,6 +2194,8 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
                           BadgesScreen(employees: _employees),
                         ] else if (_activeSection == HrSection.rewardsReports) ...[
                           const RewardsReportsScreen(),
+                        ] else if (_activeSection == HrSection.eventsAndActivities) ...[
+                          const EventsAndActivitiesScreen(),
                         ],
                       ],
                     ),
@@ -2312,6 +2315,14 @@ class HrSidebar extends StatelessWidget {
                       onTap: () => onSelectSection(HrSection.users),
                     ),
                   ],
+                  if (session.canManageAdminSettings ||
+                      session.appRole.toLowerCase() == 'hr')
+                    HrNavItem(
+                      icon: Icons.event_available_outlined,
+                      label: 'Events and Activities',
+                      active: activeSection == HrSection.eventsAndActivities,
+                      onTap: () => onSelectSection(HrSection.eventsAndActivities),
+                    ),
                   HrNavDropdown(
                     icon: Icons.inventory_2_outlined,
                     label: 'Master Data',
@@ -2771,6 +2782,7 @@ enum HrSection {
   redemptionRequests,
   badges,
   rewardsReports,
+  eventsAndActivities,
 }
 
 class HrTopBar extends StatelessWidget {

@@ -1,12 +1,40 @@
 part of '../main.dart';
 
 /// Formats a 24-hour time string (e.g. "14:30:00" or "08:00") into 12-hour format ("2:30 PM", "8:00 AM").
-/// Used by both the UI Data Table and Excel Export to display human-readable time bounds.
+/// Used by UI Data Table, Request Details, and Excel Export to display standard human-readable times.
 String _format12HourTime(String? timeStr) {
   if (timeStr == null || timeStr.trim().isEmpty) return '';
+  final trimmed = timeStr.trim();
+
+  // If already in 12-hour format without range
+  if (trimmed.toUpperCase().contains('AM') || trimmed.toUpperCase().contains('PM')) {
+    return trimmed;
+  }
+
+  // Handle range with " - " or " to "
+  if (trimmed.contains(' - ')) {
+    final rangeParts = trimmed.split(RegExp(r'\s*-\s*'));
+    if (rangeParts.length == 2) {
+      final f = _format12HourTime(rangeParts[0]);
+      final t = _format12HourTime(rangeParts[1]);
+      if (f.isNotEmpty && t.isNotEmpty) {
+        return '$f - $t';
+      }
+    }
+  } else if (trimmed.toLowerCase().contains(' to ')) {
+    final rangeParts = trimmed.split(RegExp(r'\s+to\s+', caseSensitive: false));
+    if (rangeParts.length == 2) {
+      final f = _format12HourTime(rangeParts[0]);
+      final t = _format12HourTime(rangeParts[1]);
+      if (f.isNotEmpty && t.isNotEmpty) {
+        return '$f - $t';
+      }
+    }
+  }
+
   try {
-    final parts = timeStr.trim().split(':');
-    if (parts.isEmpty) return timeStr;
+    final parts = trimmed.split(':');
+    if (parts.isEmpty) return trimmed;
     int hour = int.parse(parts[0]);
     int minute = parts.length > 1 ? int.parse(parts[1]) : 0;
 
@@ -23,8 +51,18 @@ String _format12HourTime(String? timeStr) {
     final minStr = minute.toString().padLeft(2, '0');
     return '$hour:$minStr $period';
   } catch (_) {
-    return timeStr;
+    return trimmed;
   }
+}
+
+/// Formats a time range (timeFrom and timeTo) into standard 12-hour format ("8:00 AM - 6:00 PM").
+String _formatTimeRange(String? tf, String? tt) {
+  final from = _format12HourTime(tf);
+  final to = _format12HourTime(tt);
+  if (from.isNotEmpty && to.isNotEmpty) {
+    return '$from - $to';
+  }
+  return from.isNotEmpty ? from : (to.isNotEmpty ? to : '');
 }
 
 /// Normalizes ESARF transaction type strings into standardized short abbreviations for UI uniformity.
@@ -440,7 +478,11 @@ class _RequestsPanelState extends State<RequestsPanel>
             final rawStatus = r.status.trim().toLowerCase();
             final effectiveStatus = (rawStatus == 'validated' || rawStatus == 'rejected' || rawStatus == 'cancelled')
                 ? rawStatus
-                : (r.isAutoApprovedBirthdayGrant ? 'approved' : rawStatus);
+                : (r.isAutoApprovedBirthdayGrant
+                    ? 'approved'
+                    : ((rawStatus == 'pre_approved' || rawStatus == 'pre-approved')
+                        ? (r.isPreApprovedStatus ? 'pre_approved' : 'pending')
+                        : rawStatus));
             return effectiveStatus == _statusFilter;
           })
           .toList();
@@ -2897,11 +2939,9 @@ class _RequestCardRowState extends State<_RequestCardRow> {
   Widget _buildStatusCell(AdminRequestItem item) {
     final rawStatus = item.status.trim().toLowerCase();
     final isBirthdayLeave = item.isAutoApprovedBirthdayGrant;
-    final isAppliedPassed = item.isAppliedForPassedDays;
 
-    final resolvedStatus = (isAppliedPassed &&
-            (rawStatus == 'pre_approved' || rawStatus == 'pre-approved'))
-        ? 'pending'
+    final resolvedStatus = (rawStatus == 'pre_approved' || rawStatus == 'pre-approved')
+        ? (item.isPreApprovedStatus ? 'pre_approved' : 'pending')
         : rawStatus;
 
     final statusKey = resolvedStatus == 'validated'
@@ -5123,6 +5163,46 @@ class _RequestDetailModal extends StatelessWidget {
   }
 
   Widget _buildEntryTopHeader(AdminRequestItem item, EsarfEntryItem entry, int index) {
+    final entryStatusLower = (entry.status ?? '').toLowerCase().trim();
+    final itemStatusLower = item.status.toLowerCase().trim();
+
+    final isRejected = entry.isRejected || entryStatusLower == 'rejected' || itemStatusLower == 'rejected';
+    final isValidated = itemStatusLower == 'validated' || entryStatusLower == 'validated';
+    final isApproved = !isRejected && !isValidated && (entryStatusLower == 'approved' || itemStatusLower == 'approved');
+
+    // Pre-approved status is strictly for scheduled OT or Offset only
+    final entryTx = (entry.transactionType ?? entry.txAbbr).toLowerCase().trim();
+    final isEntryFioObUtCs = entryTx.contains('fio') ||
+        entryTx.contains('punch') ||
+        entryTx.contains('ob') ||
+        entryTx.contains('business') ||
+        entryTx.contains('undertime') ||
+        entryTx.contains('ut') ||
+        entryTx.contains('change of schedule') ||
+        entryTx.contains('cs');
+    final isEntryOtOrOffset = !isEntryFioObUtCs &&
+        (entryTx == 'ot' ||
+            entryTx == 'overtime' ||
+            entryTx.contains('overtime') ||
+            (entryTx.contains('offset') && !entryTx.contains('use_offset') && !entryTx.contains('use offset')));
+    final hasEntryProof = entry.proofs.isNotEmpty || (entry.proofUrl != null && entry.proofUrl!.trim().isNotEmpty);
+    final isPreApproved = !isRejected &&
+        !isValidated &&
+        !isApproved &&
+        item.isPreApprovedStatus &&
+        isEntryOtOrOffset &&
+        !hasEntryProof;
+
+    final resolvedStatus = isRejected
+        ? 'rejected'
+        : (isValidated
+            ? 'validated'
+            : (isApproved
+                ? 'approved'
+                : (isPreApproved
+                    ? 'pre_approved'
+                    : 'pending')));
+
     return Row(
       children: [
         Container(
@@ -5158,21 +5238,22 @@ class _RequestDetailModal extends StatelessWidget {
           ),
         ),
         const Spacer(),
-        _buildStatusBadge(
-          entry.isRejected
-              ? 'rejected'
-              : (item.status.trim().toLowerCase() == 'validated'
-                  ? 'validated'
-                  : (entry.status ?? item.status)),
-        ),
+        _buildStatusBadge(resolvedStatus),
       ],
     );
   }
 
   List<(String, String)> _buildEsarfEntryGridItems(EsarfEntryItem entry) {
+    final formattedTime = _formatTimeRange(entry.timeFrom, entry.timeTo);
+    final displayTime = formattedTime.isNotEmpty
+        ? formattedTime
+        : (_format12HourTime(entry.timesText).isNotEmpty
+            ? _format12HourTime(entry.timesText)
+            : '—');
+
     final items = <(String, String)>[
       ('Date', entry.datesText.isNotEmpty ? entry.datesText : '—'),
-      ('Time', entry.timesText.isNotEmpty ? entry.timesText : '—'),
+      ('Time', displayTime),
       ('Total Hours', entry.totalHours != null ? '${entry.totalHours!.toStringAsFixed(1)} hrs' : '—'),
       ('Schedule', entry.timeScheduleText.isNotEmpty ? entry.timeScheduleText : '—'),
       ('Day Off', entry.dayOffText.isNotEmpty ? entry.dayOffText : '—'),
@@ -5842,6 +5923,10 @@ class _RequestDetailModal extends StatelessWidget {
       bg = const Color(0xFFF1F5F9);
       fg = const Color(0xFF64748B);
       label = 'CANCELLED';
+    } else if (st == 'pre_approved' || st == 'pre-approved' || st == 'preapproved') {
+      bg = const Color(0xFFDBEAFE);
+      fg = const Color(0xFF1E40AF);
+      label = 'PRE-APPROVED';
     }
 
     return Container(

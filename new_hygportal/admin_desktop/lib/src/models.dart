@@ -902,6 +902,125 @@ class AdminRequestItem {
     return false;
   }
 
+  bool get isScheduledOtOrOffset {
+    if (category != AdminRequestCategory.esarf) return false;
+
+    final tx = (transactionType ?? '').trim().toLowerCase();
+    final code = requestTypeCode.trim().toLowerCase();
+    final name = requestTypeName.trim().toLowerCase();
+
+    // Pure non-OT/Offset regular ESARF transactions can NEVER be scheduled OT or offset
+    final isFio = tx.contains('fio') || tx.contains('punch');
+    final isOb = tx.contains('ob') || tx.contains('official business');
+    final isUt = tx.contains('undertime') || tx == 'ut';
+    final isCs = tx.contains('change of schedule') || tx == 'cs';
+
+    if ((isFio || isOb || isUt || isCs) && !tx.contains('offset') && tx != 'ot' && tx != 'overtime') {
+      return false;
+    }
+
+    // Offset requests (excluding use_offset)
+    if (code == 'use_offset' || tx.contains('use_offset') || tx.contains('use offset')) {
+      return false;
+    }
+    if (code == 'offset_earn' || tx.contains('offset') || name.contains('offset')) {
+      return true;
+    }
+
+    // Overtime
+    if (tx == 'ot' || tx == 'overtime' || (tx.contains('overtime') && !isFio && !isOb && !isUt && !isCs)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  bool get isShiftOrDatePassed {
+    try {
+      final nowUtc = DateTime.now().toUtc();
+      final nowPh = nowUtc.add(const Duration(hours: 8));
+      final todayStr =
+          '${nowPh.year.toString().padLeft(4, '0')}-${nowPh.month.toString().padLeft(2, '0')}-${nowPh.day.toString().padLeft(2, '0')}';
+      final nowMins = nowPh.hour * 60 + nowPh.minute;
+
+      final df = (dateFrom ?? '').trim();
+      if (df.isNotEmpty) {
+        if (df.compareTo(todayStr) < 0) return true; // Date is in the past
+        if (df == todayStr) {
+          final tt = (timeTo ?? '').trim();
+          if (tt.isNotEmpty) {
+            final parts = tt.split(':');
+            final h = int.tryParse(parts[0]) ?? 0;
+            final m = parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0;
+            if (nowMins >= (h * 60 + m)) return true; // Shift has ended
+          } else {
+            final tf = (timeFrom ?? '').trim();
+            if (tf.isNotEmpty) {
+              final parts = tf.split(':');
+              final h = int.tryParse(parts[0]) ?? 0;
+              final m = parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0;
+              if (nowMins >= (h * 60 + m)) return true; // Shift has started
+            }
+          }
+        }
+      }
+
+      if (entries.isNotEmpty) {
+        final anyEntryPassed = entries.any((e) {
+          final edf = (e.dateFrom ?? '').trim();
+          if (edf.isEmpty) return false;
+          if (edf.compareTo(todayStr) < 0) return true;
+          if (edf == todayStr) {
+            final ett = (e.timeTo ?? '').trim();
+            if (ett.isNotEmpty) {
+              final parts = ett.split(':');
+              final h = int.tryParse(parts[0]) ?? 0;
+              final m = parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0;
+              return nowMins >= (h * 60 + m);
+            }
+            final etf = (e.timeFrom ?? '').trim();
+            if (etf.isNotEmpty) {
+              final parts = etf.split(':');
+              final h = int.tryParse(parts[0]) ?? 0;
+              final m = parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0;
+              return nowMins >= (h * 60 + m);
+            }
+          }
+          return false;
+        });
+        if (anyEntryPassed) return true;
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  bool get isPreApprovedStatus {
+    final s = status.toLowerCase().trim();
+    if (s != 'pre_approved' && s != 'pre-approved') {
+      return false;
+    }
+    // Pre-approved status is for scheduled OT or Offset only
+    if (!isScheduledOtOrOffset) {
+      return false;
+    }
+    // If it was applied for passed days or the shift/date has already passed
+    if (isAppliedForPassedDays || isShiftOrDatePassed) {
+      return false;
+    }
+    // If photo proof has already been attached
+    if (proofs.isNotEmpty || (proofUrl != null && proofUrl!.trim().isNotEmpty)) {
+      return false;
+    }
+    // If any approval step has already been approved
+    final hasStepApproved = approvalSummary.any(
+      (a) => (a['status'] ?? '').toString().toLowerCase().trim() == 'approved',
+    );
+    if (hasStepApproved) {
+      return false;
+    }
+    return true;
+  }
+
   String get statusLabel {
     final s = status.toLowerCase().trim();
     if (s == 'validated') return 'Validated';
@@ -910,15 +1029,15 @@ class AdminRequestItem {
     if (isAutoApprovedBirthdayGrant) {
       return 'Approved';
     }
+    if (s == 'pre_approved' || s == 'pre-approved') {
+      if (isPreApprovedStatus) {
+        return 'Pre-approved';
+      }
+      return 'Pending';
+    }
     if (s == 'pending') return 'Pending';
     if (s == 'approved') return 'Approved';
     if (s == 'needs_admin_review') return 'Needs Review';
-    if (s == 'pre_approved' || s == 'pre-approved') {
-      if (isAppliedForPassedDays) {
-        return 'Pending';
-      }
-      return 'Pre-approved';
-    }
     return status;
   }
 
@@ -1059,7 +1178,7 @@ class AdminRequestItem {
 
   String get cleanReasonText {
     final r = reason ?? remarks ?? '';
-    return r
+    String cleaned = r
         .replaceAll(RegExp(r'\[Actual:\s*[\d.]+\s*hrs?\]', caseSensitive: false), '')
         .replaceAll(RegExp(r'\[Proof:\s*[^Suggested\]]+\]', caseSensitive: false), '')
         .replaceAll(RegExp(r'\[Proof:\s*([^\]]+)\]', caseSensitive: false), '')
@@ -1067,9 +1186,20 @@ class AdminRequestItem {
         .replaceAll(RegExp(r'\[ProofLoc(?:ation)?:\s*([^\]]+)\]', caseSensitive: false), '')
         .replaceAll(RegExp(r'\[ProofId:\s*([^\]]+)\]', caseSensitive: false), '')
         .replaceAll(RegExp(r'\[ProofSource:\s*([^\]]+)\]', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\[(?:PreApproved|Scheduled)\]\s*', caseSensitive: false), '')
         .replaceAll('[REJECTED]', '')
         .replaceAll('[APPROVED]', '')
         .trim();
+
+    final eventMatch = RegExp(r'\[Event:\s*([^\]]+)\]', caseSensitive: false).firstMatch(cleaned);
+    if (eventMatch != null) {
+      final evTitle = eventMatch.group(1)?.trim() ?? '';
+      cleaned = cleaned.replaceAll(eventMatch.group(0)!, '').trim();
+      if (!cleaned.toLowerCase().contains(evTitle.toLowerCase())) {
+        cleaned = cleaned.isEmpty ? 'Event: $evTitle' : '$cleaned (Event: $evTitle)';
+      }
+    }
+    return cleaned;
   }
 
 
@@ -1330,12 +1460,12 @@ class EsarfEntryItem {
     return t.isNotEmpty ? t : 'ESARF';
   }
   String get datesText => dateFrom ?? '';
-  String get timesText => (timeFrom != null && timeFrom!.isNotEmpty && timeTo != null && timeTo!.isNotEmpty) ? '$timeFrom - $timeTo' : (timeFrom ?? '');
+  String get timesText => _formatTimeRange(timeFrom, timeTo);
   String get dayOffText => dayOff ?? '';
   String get timeScheduleText => timeSchedule ?? '';
   String get cleanReasonText {
     final r = reason ?? '';
-    return r
+    String cleaned = r
         .replaceAll(RegExp(r'\[Actual:\s*[\d.]+\s*hrs?\]', caseSensitive: false), '')
         .replaceAll(RegExp(r'\[Proof:\s*[^Suggested\]]+\]', caseSensitive: false), '')
         .replaceAll(RegExp(r'\[Proof:\s*([^\]]+)\]', caseSensitive: false), '')
@@ -1343,9 +1473,20 @@ class EsarfEntryItem {
         .replaceAll(RegExp(r'\[ProofLoc(?:ation)?:\s*([^\]]+)\]', caseSensitive: false), '')
         .replaceAll(RegExp(r'\[ProofId:\s*([^\]]+)\]', caseSensitive: false), '')
         .replaceAll(RegExp(r'\[ProofSource:\s*([^\]]+)\]', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\[(?:PreApproved|Scheduled)\]\s*', caseSensitive: false), '')
         .replaceAll('[REJECTED]', '')
         .replaceAll('[APPROVED]', '')
         .trim();
+
+    final eventMatch = RegExp(r'\[Event:\s*([^\]]+)\]', caseSensitive: false).firstMatch(cleaned);
+    if (eventMatch != null) {
+      final evTitle = eventMatch.group(1)?.trim() ?? '';
+      cleaned = cleaned.replaceAll(eventMatch.group(0)!, '').trim();
+      if (!cleaned.toLowerCase().contains(evTitle.toLowerCase())) {
+        cleaned = cleaned.isEmpty ? 'Event: $evTitle' : '$cleaned (Event: $evTitle)';
+      }
+    }
+    return cleaned;
   }
   bool get isRejected => (status ?? '').toLowerCase() == 'rejected';
 
@@ -1507,6 +1648,7 @@ class EsarfEntryItem {
             .replaceAll(RegExp(r'\[ProofLoc(?:ation)?:\s*([^\]]+)\]', caseSensitive: false), '')
             .replaceAll(RegExp(r'\[ProofId:\s*([^\]]+)\]', caseSensitive: false), '')
             .replaceAll(RegExp(r'\[ProofSource:\s*([^\]]+)\]', caseSensitive: false), '')
+            .replaceAll(RegExp(r'\[(?:PreApproved|Scheduled)\]\s*', caseSensitive: false), '')
             .replaceAll('[REJECTED]', '')
             .replaceAll('[APPROVED]', '')
             .trim();
@@ -1738,4 +1880,137 @@ class PortalTutorialItem {
   }
 }
 
+// ==========================================
+// PORTAL EVENT / ACTIVITY MODEL
+// ==========================================
+class PortalEventActivityItem {
+  const PortalEventActivityItem({
+    required this.id,
+    required this.title,
+    required this.type,
+    required this.description,
+    required this.location,
+    required this.eventDate,
+    this.endDate,
+    required this.timeFrom,
+    required this.timeTo,
+    required this.totalHours,
+    required this.isActive,
+    this.createdBy = '',
+    this.createdAt,
+    this.updatedAt,
+  });
 
+  final String id;
+  final String title;
+  final String type; // 'Event' or 'Activity'
+  final String description;
+  final String location;
+  final DateTime eventDate;
+  final DateTime? endDate;
+  final String timeFrom;
+  final String timeTo;
+  final double totalHours;
+  final bool isActive;
+  final String createdBy;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+
+  bool get isEvent => type.toLowerCase() == 'event';
+  bool get isActivity => type.toLowerCase() == 'activity';
+
+  factory PortalEventActivityItem.fromMap(Map<String, dynamic> map) {
+    DateTime parseDate(dynamic val) {
+      if (val == null) return DateTime.now();
+      if (val is DateTime) return val;
+      return DateTime.tryParse(val.toString()) ?? DateTime.now();
+    }
+
+    DateTime? parseNullableDate(dynamic val) {
+      if (val == null) return null;
+      if (val is DateTime) return val;
+      return DateTime.tryParse(val.toString());
+    }
+
+    double parseHours(dynamic val) {
+      if (val == null) return 8.0;
+      if (val is num) return val.toDouble();
+      return double.tryParse(val.toString()) ?? 8.0;
+    }
+
+    return PortalEventActivityItem(
+      id: map['id']?.toString() ?? '',
+      title: map['title']?.toString() ?? '',
+      type: map['type']?.toString().trim().isNotEmpty == true
+          ? map['type'].toString().trim()
+          : 'Event',
+      description: map['description']?.toString() ?? '',
+      location: map['location']?.toString() ?? '',
+      eventDate: parseDate(map['event_date']),
+      endDate: parseNullableDate(map['end_date']),
+      timeFrom: map['time_from']?.toString() ?? '08:00',
+      timeTo: map['time_to']?.toString() ?? '17:00',
+      totalHours: parseHours(map['total_hours']),
+      isActive: map['is_active'] == true ||
+          map['is_active'] == 1 ||
+          map['is_active'] == null,
+      createdBy: map['created_by']?.toString() ?? '',
+      createdAt: parseNullableDate(map['created_at']),
+      updatedAt: parseNullableDate(map['updated_at']),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      if (id.isNotEmpty) 'id': id,
+      'title': title,
+      'type': type,
+      'description': description,
+      'location': location,
+      'event_date': eventDate.toIso8601String().split('T').first,
+      if (endDate != null)
+        'end_date': endDate!.toIso8601String().split('T').first
+      else
+        'end_date': eventDate.toIso8601String().split('T').first,
+      'time_from': timeFrom,
+      'time_to': timeTo,
+      'total_hours': totalHours,
+      'is_active': isActive,
+      if (createdBy.isNotEmpty) 'created_by': createdBy,
+    };
+  }
+
+  PortalEventActivityItem copyWith({
+    String? id,
+    String? title,
+    String? type,
+    String? description,
+    String? location,
+    DateTime? eventDate,
+    DateTime? endDate,
+    String? timeFrom,
+    String? timeTo,
+    double? totalHours,
+    bool? isActive,
+    String? createdBy,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) {
+    return PortalEventActivityItem(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      type: type ?? this.type,
+      description: description ?? this.description,
+      location: location ?? this.location,
+      eventDate: eventDate ?? this.eventDate,
+      endDate: endDate ?? this.endDate,
+      timeFrom: timeFrom ?? this.timeFrom,
+      timeTo: timeTo ?? this.timeTo,
+      totalHours: totalHours ?? this.totalHours,
+      isActive: isActive ?? this.isActive,
+      createdBy: createdBy ?? this.createdBy,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+}

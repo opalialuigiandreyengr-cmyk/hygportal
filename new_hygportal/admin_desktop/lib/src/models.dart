@@ -996,29 +996,73 @@ class AdminRequestItem {
 
   bool get isPreApprovedStatus {
     final s = status.toLowerCase().trim();
-    if (s != 'pre_approved' && s != 'pre-approved') {
+    if (s == 'rejected' || s == 'cancelled' || s == 'validated' || s == 'approved') {
       return false;
     }
-    // Pre-approved status is for scheduled OT or Offset only
+
+    // Pre-approved status is strictly for scheduled OT or Offset only
     if (!isScheduledOtOrOffset) {
       return false;
     }
-    // If it was applied for passed days or the shift/date has already passed
-    if (isAppliedForPassedDays || isShiftOrDatePassed) {
-      return false;
-    }
-    // If photo proof has already been attached
+
+    // If photo proof has already been attached, it has moved past pre-approved
     if (proofs.isNotEmpty || (proofUrl != null && proofUrl!.trim().isNotEmpty)) {
       return false;
     }
-    // If any approval step has already been approved
-    final hasStepApproved = approvalSummary.any(
-      (a) => (a['status'] ?? '').toString().toLowerCase().trim() == 'approved',
+
+    // If any approval step has already been rejected
+    final hasStepRejected = approvalSummary.any(
+      (a) => (a['status'] ?? '').toString().toLowerCase().trim() == 'rejected',
     );
-    if (hasStepApproved) {
+    if (hasStepRejected) {
       return false;
     }
-    return true;
+
+    // If explicitly marked as pre_approved in database
+    if (s == 'pre_approved' || s == 'pre-approved') {
+      return true;
+    }
+
+    // If request contains an Event or Activity (e.g. DYC, Caibiran Grand Opening)
+    final r = (reason ?? '').trim().toLowerCase();
+    if (RegExp(r'(?:^|[\s\[(])(event|activity):', caseSensitive: false).hasMatch(r)) {
+      return true;
+    }
+    if (entries.any((e) {
+      final er = (e.reason ?? '').trim().toLowerCase();
+      final en = (e.eventName ?? '').trim();
+      return en.isNotEmpty || RegExp(r'(?:^|[\s\[(])(event|activity):', caseSensitive: false).hasMatch(er);
+    })) {
+      return true;
+    }
+
+    // If applied ahead of time relative to submittedAt
+    if (submittedAt != null && submittedAt!.isNotEmpty && dateFrom != null && dateFrom!.isNotEmpty) {
+      try {
+        final subDt = DateTime.parse(submittedAt!).toUtc().add(const Duration(hours: 8));
+        final subDateStr =
+            '${subDt.year.toString().padLeft(4, '0')}-${subDt.month.toString().padLeft(2, '0')}-${subDt.day.toString().padLeft(2, '0')}';
+        final df = dateFrom!.trim();
+        if (df.compareTo(subDateStr) > 0) return true;
+        if (df == subDateStr) {
+          final subMins = subDt.hour * 60 + subDt.minute;
+          if (timeTo != null && timeTo!.isNotEmpty) {
+            final parts = timeTo!.trim().split(':');
+            final h = int.tryParse(parts[0]) ?? 0;
+            final m = parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0;
+            if ((h * 60 + m) >= subMins) return true;
+          }
+          if (timeFrom != null && timeFrom!.isNotEmpty) {
+            final parts = timeFrom!.trim().split(':');
+            final h = int.tryParse(parts[0]) ?? 0;
+            final m = parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0;
+            if ((h * 60 + m) >= subMins) return true;
+          }
+        }
+      } catch (_) {}
+    }
+
+    return false;
   }
 
   String get statusLabel {
@@ -1029,11 +1073,11 @@ class AdminRequestItem {
     if (isAutoApprovedBirthdayGrant) {
       return 'Approved';
     }
+    if (isPreApprovedStatus) {
+      return 'Pre-approved';
+    }
     if (s == 'pre_approved' || s == 'pre-approved') {
-      if (isPreApprovedStatus) {
-        return 'Pre-approved';
-      }
-      return 'Pending';
+      return 'Pre-approved';
     }
     if (s == 'pending') return 'Pending';
     if (s == 'approved') return 'Approved';
@@ -1437,6 +1481,19 @@ class EsarfEntryItem {
   final String? proofSource;
   final String? actualHours;
   final List<RequestProofItem> proofs;
+
+  String? get eventName {
+    final r = reason ?? '';
+    final eventMatch = RegExp(r'\[Event:\s*([^\]]+)\]', caseSensitive: false).firstMatch(r);
+    if (eventMatch != null) {
+      return eventMatch.group(1)?.trim();
+    }
+    final prefixMatch = RegExp(r'(?:^|[\s\[(])(?:event|activity):\s*([^,;\]\)\n]+)', caseSensitive: false).firstMatch(r);
+    if (prefixMatch != null) {
+      return prefixMatch.group(1)?.trim();
+    }
+    return null;
+  }
 
   bool get isGallery {
     if (proofs.isNotEmpty) {

@@ -72,13 +72,13 @@ String _formatEsarfTransactionAbbr(String? raw) {
   final text = raw.trim();
   final lower = text.toLowerCase();
 
-  if (lower == 'ot' || lower.contains('overtime')) return 'OT';
-  if (lower == 'ut' || lower.contains('undertime')) return 'UT';
+  if (lower == 'ot' || lower.contains('overtime') || lower == 'over time') return 'OT';
+  if (lower == 'ut' || lower.contains('undertime') || lower == 'under time') return 'UT';
   if (lower == 'ob' || lower.contains('official business')) return 'OB';
-  if (lower == 'fio' || lower.contains('failure to punch')) return 'FIO';
+  if (lower == 'fio' || lower.contains('failure to punch') || lower.contains('punch in/out')) return 'FIO';
   if (lower == 'cs' || lower.contains('change schedule') || lower.contains('schedule change')) return 'CS';
-  if (lower == 'use offset' || lower.contains('use offset') || lower == 'uo') return 'Use Offset';
-  if (lower == 'offset') return 'Offset';
+  if (lower == 'use offset' || lower.contains('use offset') || lower == 'use_offset' || lower == 'uo') return 'Use Offset';
+  if (lower == 'offset' || lower.contains('offset')) return 'Offset';
   if (lower == 'adjustment' || lower.contains('adjustment')) return 'Adj';
   
   if (text.length <= 4) return text.toUpperCase();
@@ -258,6 +258,144 @@ String _getDisplayTransactionType(AdminRequestItem item) {
   return item.requestTypeName;
 }
 
+/// Normalizes department name into a single canonical sentence-case string (e.g. "LOGISTICS" -> "Logistics").
+String _canonicalDepartmentName(String raw) {
+  final clean = raw.trim();
+  if (clean.isEmpty) return '';
+  final lower = clean.toLowerCase();
+
+  if (lower == 'it' ||
+      lower == 'information technology' ||
+      lower == 'info tech' ||
+      lower == 'i.t.' ||
+      lower == 'i.t') {
+    return 'IT';
+  }
+  if (lower == 'hr' ||
+      lower == 'human resources' ||
+      lower == 'human resource' ||
+      lower == 'h.r.' ||
+      lower == 'h.r') {
+    return 'HR';
+  }
+  if (lower == 'admin' ||
+      lower == 'administration' ||
+      lower == 'administrative') {
+    return 'Admin';
+  }
+  if (lower == 'accounting' || lower == 'finance' || lower == 'acctg') {
+    return 'Accounting';
+  }
+  if (lower == 'accounting and inventory' || lower == 'accounting & inventory') {
+    return 'Accounting & Inventory';
+  }
+  if (lower == 'marketing' || lower == 'mktg') {
+    return 'Marketing';
+  }
+  if (lower == 'logistics' ||
+      lower == 'warehouse & logistics' ||
+      lower == 'logistics & warehouse') {
+    return 'Logistics';
+  }
+  if (lower == 'motorpool' || lower == 'motor pool') {
+    return 'Motorpool';
+  }
+  if (lower == 'inventory') {
+    return 'Inventory';
+  }
+  if (lower == 'audit' || lower == 'internal audit') {
+    return 'Audit';
+  }
+  if (lower == 'maintenance') {
+    return 'Maintenance';
+  }
+  if (lower == 'operations' || lower == 'operation' || lower == 'ops') {
+    return 'Operations';
+  }
+  if (lower == 'purchasing') {
+    return 'Purchasing';
+  }
+  if (lower == 'customer service') {
+    return 'Customer Service';
+  }
+
+  return clean.split(' ').map((word) {
+    if (word.isEmpty) return '';
+    return word[0].toUpperCase() + word.substring(1).toLowerCase();
+  }).join(' ');
+}
+
+/// Helper to match an AdminRequestItem against a department filter string.
+bool _matchesDepartment(AdminRequestItem item, String filter) {
+  if (filter == 'all') return true;
+  final itemDept = (item.departmentName ?? '').trim().toLowerCase();
+  final filterDept = filter.trim().toLowerCase();
+  if (itemDept == filterDept) return true;
+  final itemCanon = _canonicalDepartmentName(item.departmentName ?? '').toLowerCase();
+  final filterCanon = _canonicalDepartmentName(filter).toLowerCase();
+  return itemCanon == filterCanon;
+}
+
+/// Helper to match an ESARF AdminRequestItem against a transaction type filter
+/// (e.g. 'OT', 'UT', 'Offset', 'Use Offset', 'FIO', 'OB').
+bool _matchesEsarfTransactionType(AdminRequestItem item, String filter) {
+  if (filter == 'all') return true;
+  final filterLower = filter.toLowerCase();
+  final types = _getEsarfTypes(item);
+  for (final t in types) {
+    final tLower = t.toLowerCase();
+    if (tLower == filterLower) return true;
+    if (t.contains('/')) {
+      final parts = t.split('/').map((s) => s.trim().toLowerCase());
+      if (parts.contains(filterLower)) return true;
+    }
+  }
+
+  // Fallback checks on transactionType, requestTypeCode, and requestTypeName
+  final rawTx = (item.transactionType ?? '').toLowerCase();
+  final rawCode = item.requestTypeCode.toLowerCase();
+  final rawName = item.requestTypeName.toLowerCase();
+
+  switch (filter) {
+    case 'OT':
+      return rawTx == 'ot' ||
+          rawTx.contains('overtime') ||
+          rawTx.contains('over time') ||
+          rawCode.contains('overtime') ||
+          rawName.contains('overtime');
+    case 'UT':
+      return rawTx == 'ut' ||
+          rawTx.contains('undertime') ||
+          rawTx.contains('under time') ||
+          rawCode.contains('undertime') ||
+          rawName.contains('undertime');
+    case 'Offset':
+      final isUseOffset = rawTx.contains('use offset') ||
+          rawCode.contains('use_offset') ||
+          rawName.contains('use offset');
+      if (isUseOffset) return false;
+      return rawTx.contains('offset') ||
+          rawCode.contains('offset') ||
+          rawName.contains('offset');
+    case 'Use Offset':
+      return rawTx.contains('use offset') ||
+          rawCode.contains('use_offset') ||
+          rawName.contains('use offset');
+    case 'FIO':
+      return rawTx.contains('fio') ||
+          rawTx.contains('punch') ||
+          rawCode.contains('fio') ||
+          rawName.contains('punch');
+    case 'OB':
+      return rawTx.contains('ob') ||
+          rawTx.contains('official business') ||
+          rawCode.contains('ob') ||
+          rawName.contains('official business');
+    default:
+      return types.contains(filter);
+  }
+}
+
 // Ã¢â€â‚¬Ã¢â€â‚¬ Header Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 class RequestsHeader extends StatelessWidget {
@@ -424,6 +562,9 @@ class _RequestsPanelState extends State<RequestsPanel>
   late final TabController _tabController;
   String _searchQuery = '';
   String _statusFilter = 'all';
+  String _departmentFilter = 'all';
+  String _txTypeFilter = 'all';
+  List<String> _loadedDepartments = [];
   DateTime? _dateFrom;
   DateTime? _dateTo;
   bool _isRefreshingApprovers = false;
@@ -442,6 +583,43 @@ class _RequestsPanelState extends State<RequestsPanel>
     _tabController.addListener(() => setState(() {
       _currentPage = 1;
     }));
+    _loadDepartments();
+  }
+
+  Future<void> _loadDepartments() async {
+    try {
+      final list = await DepartmentDirectoryService.loadDepartments();
+      if (mounted) {
+        setState(() {
+          _loadedDepartments = list
+              .map((d) => d.name.trim())
+              .where((n) => n.isNotEmpty)
+              .toList();
+        });
+      }
+    } catch (_) {}
+  }
+
+  List<String> get _departmentOptions {
+    final map = <String, String>{};
+    for (final d in _loadedDepartments) {
+      final canon = _canonicalDepartmentName(d);
+      if (canon.isNotEmpty && canon != '-' && canon != '—') {
+        map.putIfAbsent(canon.toLowerCase(), () => canon);
+      }
+    }
+    for (final r in widget.requests) {
+      final d = r.departmentName?.trim();
+      if (d != null && d.isNotEmpty && d != '-' && d != '—') {
+        final canon = _canonicalDepartmentName(d);
+        if (canon.isNotEmpty && canon != '-' && canon != '—') {
+          map.putIfAbsent(canon.toLowerCase(), () => canon);
+        }
+      }
+    }
+    final sorted = map.values.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return sorted;
   }
 
   @override
@@ -480,8 +658,8 @@ class _RequestsPanelState extends State<RequestsPanel>
                 ? rawStatus
                 : (r.isAutoApprovedBirthdayGrant
                     ? 'approved'
-                    : ((rawStatus == 'pre_approved' || rawStatus == 'pre-approved')
-                        ? (r.isPreApprovedStatus ? 'pre_approved' : 'pending')
+                    : (r.isPreApprovedStatus
+                        ? 'pre_approved'
                         : rawStatus));
             return effectiveStatus == _statusFilter;
           })
@@ -503,22 +681,21 @@ class _RequestsPanelState extends State<RequestsPanel>
       }).toList();
     }
 
-    if (_searchQuery.isNotEmpty) {
-      final q = _searchQuery.toLowerCase();
+    // ESARF / Time tab specific filters: Department and Transaction Type
+    if (tabIndex == 0) {
+      if (_departmentFilter != 'all') {
+        items = items.where((r) => _matchesDepartment(r, _departmentFilter)).toList();
+      }
+      if (_txTypeFilter != 'all') {
+        items = items.where((r) => _matchesEsarfTransactionType(r, _txTypeFilter)).toList();
+      }
+    }
+
+    // Limit search to Employee name only on all tabs
+    if (_searchQuery.trim().isNotEmpty) {
+      final q = _searchQuery.trim().toLowerCase();
       items = items.where((r) {
-        return (r.employeeName ?? '').toLowerCase().contains(q) ||
-            (r.employeeNo ?? '').toLowerCase().contains(q) ||
-            (r.departmentName ?? '').toLowerCase().contains(q) ||
-            (r.storeName ?? '').toLowerCase().contains(q) ||
-            (r.dateFrom ?? '').toLowerCase().contains(q) ||
-            (r.dateTo ?? '').toLowerCase().contains(q) ||
-            (r.startDate ?? '').toLowerCase().contains(q) ||
-            (r.endDate ?? '').toLowerCase().contains(q) ||
-            r.requestTypeName.toLowerCase().contains(q) ||
-            (r.leaveCategory ?? '').toLowerCase().contains(q) ||
-            (r.perkProductName ?? '').toLowerCase().contains(q) ||
-            (r.reason ?? '').toLowerCase().contains(q) ||
-            r.approverNames.toLowerCase().contains(q);
+        return (r.employeeName ?? '').toLowerCase().contains(q);
       }).toList();
     }
 
@@ -1698,7 +1875,7 @@ class _RequestsPanelState extends State<RequestsPanel>
                       onChanged: (v) => setState(() { _searchQuery = v; _currentPage = 1; }),
                       style: HygTypography.input.copyWith(fontSize: 13),
                       decoration: InputDecoration(
-                        hintText: 'Search employee, department, store, date, type...',
+                        hintText: 'Search employee name...',
                         prefixIcon: const Icon(
                           Icons.search,
                           color: Color(0xFF94A3B8),
@@ -1721,10 +1898,128 @@ class _RequestsPanelState extends State<RequestsPanel>
                   ),
                 ),
                 const SizedBox(width: 10),
+                if (_tabController.index == 0) ...[
+                  // Department Dropdown
+                  Builder(
+                    builder: (context) {
+                      final deptOptions = _departmentOptions;
+                      final effectiveDept = _departmentFilter == 'all'
+                          ? 'all'
+                          : (deptOptions.firstWhere(
+                              (d) => d.toLowerCase() == _departmentFilter.toLowerCase(),
+                              orElse: () => 'all',
+                            ));
+                      return SizedBox(
+                        width: 180,
+                        height: 38,
+                        child: DropdownButtonFormField<String>(
+                          key: ValueKey('req_dept_$effectiveDept'),
+                          initialValue: effectiveDept,
+                          isExpanded: true,
+                          onChanged: (v) => setState(() {
+                            _departmentFilter = v ?? 'all';
+                            _currentPage = 1;
+                          }),
+                          style: HygTypography.tableBody,
+                          decoration: InputDecoration(
+                            filled: true,
+                            fillColor: HygColors.background,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(9),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(9),
+                              borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                            ),
+                          ),
+                          items: [
+                            const DropdownMenuItem(
+                              value: 'all',
+                              child: Text('All Departments', overflow: TextOverflow.ellipsis),
+                            ),
+                            ...deptOptions.map(
+                              (dept) => DropdownMenuItem(
+                                value: dept,
+                                child: Text(dept, overflow: TextOverflow.ellipsis),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(width: 10),
+                  // Transaction Type Dropdown
+                  SizedBox(
+                    width: 155,
+                    height: 38,
+                    child: DropdownButtonFormField<String>(
+                      key: ValueKey('req_tx_$_txTypeFilter'),
+                      initialValue: _txTypeFilter,
+                      isExpanded: true,
+                      onChanged: (v) => setState(() {
+                        _txTypeFilter = v ?? 'all';
+                        _currentPage = 1;
+                      }),
+                      style: HygTypography.tableBody,
+                      decoration: InputDecoration(
+                        filled: true,
+                        fillColor: HygColors.background,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(9),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(9),
+                          borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                        ),
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'all',
+                          child: Text('All Types', overflow: TextOverflow.ellipsis),
+                        ),
+                        DropdownMenuItem(
+                          value: 'OT',
+                          child: Text('OT', overflow: TextOverflow.ellipsis),
+                        ),
+                        DropdownMenuItem(
+                          value: 'UT',
+                          child: Text('UT', overflow: TextOverflow.ellipsis),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Offset',
+                          child: Text('Offset', overflow: TextOverflow.ellipsis),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Use Offset',
+                          child: Text('Use Offset', overflow: TextOverflow.ellipsis),
+                        ),
+                        DropdownMenuItem(
+                          value: 'FIO',
+                          child: Text('FIO', overflow: TextOverflow.ellipsis),
+                        ),
+                        DropdownMenuItem(
+                          value: 'OB',
+                          child: Text('OB', overflow: TextOverflow.ellipsis),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                ],
                 SizedBox(
-                  width: 150,
+                  width: 145,
                   height: 38,
                   child: DropdownButtonFormField<String>(
+                    isExpanded: true,
                     key: ValueKey(_statusFilter),
                     initialValue: _statusFilter,
                     onChanged: (v) =>
@@ -1747,14 +2042,14 @@ class _RequestsPanelState extends State<RequestsPanel>
                       ),
                     ),
                     items: const [
-                      DropdownMenuItem(value: 'all', child: Text('All Status')),
-                      DropdownMenuItem(value: 'pending', child: Text('Pending')),
+                      DropdownMenuItem(value: 'all', child: Text('All Status', overflow: TextOverflow.ellipsis)),
+                      DropdownMenuItem(value: 'pending', child: Text('Pending', overflow: TextOverflow.ellipsis)),
                       DropdownMenuItem(
-                          value: 'approved', child: Text('Approved')),
+                          value: 'approved', child: Text('Approved', overflow: TextOverflow.ellipsis)),
                       DropdownMenuItem(
-                          value: 'rejected', child: Text('Rejected')),
+                          value: 'rejected', child: Text('Rejected', overflow: TextOverflow.ellipsis)),
                       DropdownMenuItem(
-                          value: 'cancelled', child: Text('Cancelled')),
+                          value: 'cancelled', child: Text('Cancelled', overflow: TextOverflow.ellipsis)),
                     ],
                   ),
                 ),
@@ -1862,6 +2157,39 @@ class _RequestsPanelState extends State<RequestsPanel>
                     ),
                   ),
                 ],
+                if (_tabController.index == 0 && (_departmentFilter != 'all' || _txTypeFilter != 'all')) ...[
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () => setState(() {
+                      _departmentFilter = 'all';
+                      _txTypeFilter = 'all';
+                      _currentPage = 1;
+                    }),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEFF6FF),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: const Color(0xFFBFDBFE)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Icon(Icons.close, size: 12, color: Color(0xFF1D4ED8)),
+                          SizedBox(width: 4),
+                          Text(
+                            'Reset filters',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF1D4ED8),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
                 const Spacer(),
                 if (_tabController.index < _tabs.length && _tabs[_tabController.index] != 'Perks') ...[
                   SizedBox(
@@ -1929,6 +2257,8 @@ class _RequestsPanelState extends State<RequestsPanel>
                 title: 'No requests found',
                 message: _searchQuery.isNotEmpty ||
                         _statusFilter != 'all' ||
+                        _departmentFilter != 'all' ||
+                        _txTypeFilter != 'all' ||
                         _dateFrom != null ||
                         _dateTo != null
                     ? 'Try adjusting your filters.'
@@ -2940,8 +3270,8 @@ class _RequestCardRowState extends State<_RequestCardRow> {
     final rawStatus = item.status.trim().toLowerCase();
     final isBirthdayLeave = item.isAutoApprovedBirthdayGrant;
 
-    final resolvedStatus = (rawStatus == 'pre_approved' || rawStatus == 'pre-approved')
-        ? (item.isPreApprovedStatus ? 'pre_approved' : 'pending')
+    final resolvedStatus = item.isPreApprovedStatus
+        ? 'pre_approved'
         : rawStatus;
 
     final statusKey = resolvedStatus == 'validated'
@@ -5186,12 +5516,14 @@ class _RequestDetailModal extends StatelessWidget {
             entryTx.contains('overtime') ||
             (entryTx.contains('offset') && !entryTx.contains('use_offset') && !entryTx.contains('use offset')));
     final hasEntryProof = entry.proofs.isNotEmpty || (entry.proofUrl != null && entry.proofUrl!.trim().isNotEmpty);
+    final isEntryEvent = (entry.eventName != null && entry.eventName!.trim().isNotEmpty) ||
+        RegExp(r'(?:^|[\s\[(])(event|activity):', caseSensitive: false).hasMatch(entry.reason ?? '');
     final isPreApproved = !isRejected &&
         !isValidated &&
         !isApproved &&
-        item.isPreApprovedStatus &&
         isEntryOtOrOffset &&
-        !hasEntryProof;
+        !hasEntryProof &&
+        (item.isPreApprovedStatus || isEntryEvent || item.status.contains('pre_approved') || item.status.contains('pre-approved'));
 
     final resolvedStatus = isRejected
         ? 'rejected'
@@ -6240,6 +6572,9 @@ class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
   String? _error;
 
   String _searchQuery = '';
+  String _departmentFilter = 'all';
+  String _txTypeFilter = 'all';
+  List<String> _loadedDepartments = [];
   DateTime? _dateFrom;
   DateTime? _dateTo;
 
@@ -6265,7 +6600,44 @@ class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
       });
     });
     _requests = List<AdminRequestItem>.from(widget.allRequests);
+    _loadDepartments();
     _fetchRequests();
+  }
+
+  Future<void> _loadDepartments() async {
+    try {
+      final list = await DepartmentDirectoryService.loadDepartments();
+      if (mounted) {
+        setState(() {
+          _loadedDepartments = list
+              .map((d) => d.name.trim())
+              .where((n) => n.isNotEmpty)
+              .toList();
+        });
+      }
+    } catch (_) {}
+  }
+
+  List<String> get _departmentOptions {
+    final map = <String, String>{};
+    for (final d in _loadedDepartments) {
+      final canon = _canonicalDepartmentName(d);
+      if (canon.isNotEmpty && canon != '-' && canon != '—') {
+        map.putIfAbsent(canon.toLowerCase(), () => canon);
+      }
+    }
+    for (final r in _requests) {
+      final d = r.departmentName?.trim();
+      if (d != null && d.isNotEmpty && d != '-' && d != '—') {
+        final canon = _canonicalDepartmentName(d);
+        if (canon.isNotEmpty && canon != '-' && canon != '—') {
+          map.putIfAbsent(canon.toLowerCase(), () => canon);
+        }
+      }
+    }
+    final sorted = map.values.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return sorted;
   }
 
   @override
@@ -6321,22 +6693,21 @@ class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
       }).toList();
     }
 
-    if (_searchQuery.isNotEmpty) {
-      final q = _searchQuery.toLowerCase();
+    // ESARF / Time tab specific filters: Department and Transaction Type
+    if (tabIndex == 0) {
+      if (_departmentFilter != 'all') {
+        items = items.where((r) => _matchesDepartment(r, _departmentFilter)).toList();
+      }
+      if (_txTypeFilter != 'all') {
+        items = items.where((r) => _matchesEsarfTransactionType(r, _txTypeFilter)).toList();
+      }
+    }
+
+    // Limit search to Employee name only on all tabs
+    if (_searchQuery.trim().isNotEmpty) {
+      final q = _searchQuery.trim().toLowerCase();
       items = items.where((r) {
-        return (r.employeeName ?? '').toLowerCase().contains(q) ||
-            (r.employeeNo ?? '').toLowerCase().contains(q) ||
-            (r.departmentName ?? '').toLowerCase().contains(q) ||
-            (r.storeName ?? '').toLowerCase().contains(q) ||
-            (r.dateFrom ?? '').toLowerCase().contains(q) ||
-            (r.dateTo ?? '').toLowerCase().contains(q) ||
-            (r.startDate ?? '').toLowerCase().contains(q) ||
-            (r.endDate ?? '').toLowerCase().contains(q) ||
-            r.requestTypeName.toLowerCase().contains(q) ||
-            (r.leaveCategory ?? '').toLowerCase().contains(q) ||
-            (r.perkProductName ?? '').toLowerCase().contains(q) ||
-            (r.reason ?? '').toLowerCase().contains(q) ||
-            r.approverNames.toLowerCase().contains(q);
+        return (r.employeeName ?? '').toLowerCase().contains(q);
       }).toList();
     }
 
@@ -6631,7 +7002,7 @@ class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
                                 }),
                                 style: HygTypography.input.copyWith(fontSize: 13),
                                 decoration: InputDecoration(
-                                  hintText: 'Search employee, department, store, date, type...',
+                                  hintText: 'Search employee name...',
                                   prefixIcon: const Icon(
                                     Icons.search,
                                     color: Color(0xFF94A3B8),
@@ -6652,6 +7023,123 @@ class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
                             ),
                           ),
                           const SizedBox(width: 10),
+                          if (_tabController.index == 0) ...[
+                            // Department dropdown
+                            Builder(
+                              builder: (context) {
+                                final deptOptions = _departmentOptions;
+                                final effectiveDept = _departmentFilter == 'all'
+                                    ? 'all'
+                                    : (deptOptions.firstWhere(
+                                        (d) => d.toLowerCase() == _departmentFilter.toLowerCase(),
+                                        orElse: () => 'all',
+                                      ));
+                                return SizedBox(
+                                  width: 180,
+                                  height: 38,
+                                  child: DropdownButtonFormField<String>(
+                                    key: ValueKey('val_dept_$effectiveDept'),
+                                    initialValue: effectiveDept,
+                                    isExpanded: true,
+                                    onChanged: (v) => setState(() {
+                                      _departmentFilter = v ?? 'all';
+                                      _currentPage = 1;
+                                    }),
+                                    style: HygTypography.tableBody,
+                                    decoration: InputDecoration(
+                                      filled: true,
+                                      fillColor: HygColors.background,
+                                      contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 8,
+                                      ),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(9),
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(9),
+                                        borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                                      ),
+                                    ),
+                                    items: [
+                                      const DropdownMenuItem(
+                                        value: 'all',
+                                        child: Text('All Departments', overflow: TextOverflow.ellipsis),
+                                      ),
+                                      ...deptOptions.map(
+                                        (dept) => DropdownMenuItem(
+                                          value: dept,
+                                          child: Text(dept, overflow: TextOverflow.ellipsis),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                            const SizedBox(width: 10),
+                            // Transaction Type dropdown
+                            SizedBox(
+                              width: 155,
+                              height: 38,
+                              child: DropdownButtonFormField<String>(
+                                key: ValueKey('val_tx_$_txTypeFilter'),
+                                initialValue: _txTypeFilter,
+                                isExpanded: true,
+                                onChanged: (v) => setState(() {
+                                  _txTypeFilter = v ?? 'all';
+                                  _currentPage = 1;
+                                }),
+                                style: HygTypography.tableBody,
+                                decoration: InputDecoration(
+                                  filled: true,
+                                  fillColor: HygColors.background,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 8,
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(9),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(9),
+                                    borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                                  ),
+                                ),
+                                items: const [
+                                  DropdownMenuItem(
+                                    value: 'all',
+                                    child: Text('All Types', overflow: TextOverflow.ellipsis),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'OT',
+                                    child: Text('OT', overflow: TextOverflow.ellipsis),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'UT',
+                                    child: Text('UT', overflow: TextOverflow.ellipsis),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'Offset',
+                                    child: Text('Offset', overflow: TextOverflow.ellipsis),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'Use Offset',
+                                    child: Text('Use Offset', overflow: TextOverflow.ellipsis),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'FIO',
+                                    child: Text('FIO', overflow: TextOverflow.ellipsis),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'OB',
+                                    child: Text('OB', overflow: TextOverflow.ellipsis),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                          ],
                           // Submitted date range filter
                           const Icon(Icons.date_range, size: 16, color: Color(0xFF64748B)),
                           const SizedBox(width: 6),
@@ -6738,6 +7226,39 @@ class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
                               ),
                             ),
                           ],
+                          if (_tabController.index == 0 && (_departmentFilter != 'all' || _txTypeFilter != 'all')) ...[
+                            const SizedBox(width: 8),
+                            GestureDetector(
+                              onTap: () => setState(() {
+                                _departmentFilter = 'all';
+                                _txTypeFilter = 'all';
+                                _currentPage = 1;
+                              }),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFEFF6FF),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: const Color(0xFFBFDBFE)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: const [
+                                    Icon(Icons.close, size: 12, color: Color(0xFF1D4ED8)),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'Reset filters',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: Color(0xFF1D4ED8),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
                           const SizedBox(width: 14),
                           SizedBox(
                             height: 34,
@@ -6778,7 +7299,11 @@ class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
                         child: EmployeesStateMessage(
                           icon: Icons.fact_check_outlined,
                           title: 'No validated requests found',
-                          message: _searchQuery.isNotEmpty || _dateFrom != null || _dateTo != null
+                          message: _searchQuery.isNotEmpty ||
+                                  _departmentFilter != 'all' ||
+                                  _txTypeFilter != 'all' ||
+                                  _dateFrom != null ||
+                                  _dateTo != null
                               ? 'Try adjusting your search or date filters.'
                               : 'No requests have been validated in this category yet.',
                         ),

@@ -9,6 +9,181 @@ class RequestPdfService {
   static const String _hygDeepNavy = '#071426';
   static const String _hygGold = '#E2B93B';
 
+  static final Map<String, Uint8List> _companyLogoMemoryCache = {};
+  static List<CompanyPreview>? _cachedCompanies;
+  static DateTime? _companiesCacheTime;
+
+  /// Loads companies from CompanyDirectoryService with a 5-minute memory cache.
+  static Future<List<CompanyPreview>> _getCompanies() async {
+    if (_cachedCompanies != null && _companiesCacheTime != null) {
+      if (DateTime.now().difference(_companiesCacheTime!).inMinutes < 5) {
+        return _cachedCompanies!;
+      }
+    }
+    try {
+      final companies = await CompanyDirectoryService.loadCompanies();
+      _cachedCompanies = companies;
+      _companiesCacheTime = DateTime.now();
+      return companies;
+    } catch (e) {
+      debugPrint('Failed to load companies in RequestPdfService: $e');
+      return _cachedCompanies ?? const [];
+    }
+  }
+
+  /// Finds the company matching targetName or company_id from a list of companies.
+  /// Handles exact name match, normalized match without punctuation, and corporate suffix stripping
+  /// (e.g. "Chawnah Foods Inc." matches "Chawnah Foods INC.").
+  static CompanyPreview? findMatchingCompany(
+    List<CompanyPreview> companies,
+    String? targetName, {
+    Map<String, dynamic>? rawRow,
+  }) {
+    if (companies.isEmpty) return null;
+
+    // 1. Direct company_id match from rawRow if available
+    final rawCompanyId = rawRow?['company_id']?.toString().trim();
+    if (rawCompanyId != null && rawCompanyId.isNotEmpty) {
+      for (final c in companies) {
+        if (c.id.toLowerCase() == rawCompanyId.toLowerCase()) {
+          return c;
+        }
+      }
+    }
+
+    if (targetName == null || targetName.trim().isEmpty) return null;
+    final cleanTarget = targetName.trim().toLowerCase();
+
+    // 2. Exact match (case-insensitive)
+    for (final c in companies) {
+      if (c.name.trim().toLowerCase() == cleanTarget) {
+        return c;
+      }
+    }
+
+    // 3. Normalized alphanumeric match (removes punctuation, spaces)
+    String normalize(String s) => s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+    final normTarget = normalize(cleanTarget);
+    for (final c in companies) {
+      if (normalize(c.name) == normTarget && normTarget.isNotEmpty) {
+        return c;
+      }
+    }
+
+    // 4. Normalized match stripping corporate suffixes (inc, corp, corporation, co, etc.)
+    String stripSuffix(String s) {
+      return s
+          .toLowerCase()
+          .replaceAll(
+            RegExp(r'\b(inc|incorporated|incorporation|corp|corporation|co|company|ltd|limited)\b', caseSensitive: false),
+            '',
+          )
+          .replaceAll(RegExp(r'[^a-z0-9]'), '')
+          .trim();
+    }
+
+    final strippedTarget = stripSuffix(cleanTarget);
+    if (strippedTarget.isNotEmpty) {
+      for (final c in companies) {
+        final strippedComp = stripSuffix(c.name);
+        if (strippedComp.isNotEmpty &&
+            (strippedComp == strippedTarget ||
+                strippedComp.contains(strippedTarget) ||
+                strippedTarget.contains(strippedComp))) {
+          return c;
+        }
+      }
+    }
+
+    // 5. Token stem matching (handles singular/plural like "Cake Haven" vs "Cakes Haven Incorporation")
+    List<String> getStems(String s) {
+      return s
+          .toLowerCase()
+          .replaceAll(
+            RegExp(r'\b(inc|incorporated|incorporation|corp|corporation|co|company|ltd|limited)\b', caseSensitive: false),
+            '',
+          )
+          .split(RegExp(r'[^a-z0-9]+'))
+          .where((w) => w.isNotEmpty)
+          .map((w) => w.endsWith('s') && w.length > 3 ? w.substring(0, w.length - 1) : w)
+          .toList();
+    }
+
+    final targetStems = getStems(cleanTarget);
+    if (targetStems.isNotEmpty) {
+      for (final c in companies) {
+        final compStems = getStems(c.name);
+        if (compStems.isNotEmpty) {
+          final targetJoined = targetStems.join('');
+          final compJoined = compStems.join('');
+          if (targetJoined == compJoined ||
+              (targetStems.length >= 2 && compStems.length >= 2 &&
+               targetStems.every((st) => compStems.contains(st))) ||
+              (compStems.length >= 2 && targetStems.length >= 2 &&
+               compStems.every((st) => targetStems.contains(st)))) {
+            return c;
+          }
+        }
+      }
+    }
+
+    // 6. Code / initials match (e.g. CAKES_HAVEN, CFI, COC)
+    for (final c in companies) {
+      final init = c.initials.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+      final normCode = c.id.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+      if ((init.isNotEmpty && init == normTarget) ||
+          (normCode.isNotEmpty && normCode == normTarget)) {
+        return c;
+      }
+    }
+
+    return null;
+  }
+
+  /// Resolves the company logo bytes for the employee's company.
+  /// Looks up the company uploaded logo from the company screen / directory.
+  /// Falls back to the default HYG logo if no company logo is uploaded or if download fails.
+  static Future<Uint8List?> resolveCompanyLogo({
+    required AdminRequestItem item,
+    List<CompanyPreview>? preloadedCompanies,
+  }) async {
+    try {
+      final companies = preloadedCompanies ?? await _getCompanies();
+      final matched = findMatchingCompany(companies, item.companyName, rawRow: item.rawRow);
+
+      if (matched != null) {
+        final cacheKey = matched.id.isNotEmpty ? matched.id : matched.name.toLowerCase();
+        if (_companyLogoMemoryCache.containsKey(cacheKey)) {
+          final cached = _companyLogoMemoryCache[cacheKey];
+          if (cached != null && cached.isNotEmpty) {
+            return cached;
+          }
+        }
+
+        final logoUrl = matched.logoUrl?.trim();
+        if (logoUrl != null && logoUrl.isNotEmpty) {
+          final bytes = await _downloadImageBytes(logoUrl);
+          if (bytes != null && bytes.isNotEmpty) {
+            final trimmed = _trimAndNormalizeLogoBytes(bytes);
+            _companyLogoMemoryCache[cacheKey] = trimmed;
+            return trimmed;
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error resolving company logo for ${item.companyName}: $e');
+    }
+
+    // Fallback: Default HYG Logo asset
+    try {
+      final byteData = await rootBundle.load('assets/hyg_logo.png');
+      final bytes = byteData.buffer.asUint8List();
+      return _trimAndNormalizeLogoBytes(bytes);
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Sanitizes text for safe filename usage.
   static String _sanitizeFileName(String text) {
     return text.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_').replaceAll(RegExp(r'\s+'), '_').trim();
@@ -105,6 +280,68 @@ class RequestPdfService {
     return bytes;
   }
 
+  /// Trims transparent or blank outer borders from company logo image bytes so the logo
+  /// fills its visual boundaries without empty whitespace padding.
+  static Uint8List _trimAndNormalizeLogoBytes(Uint8List bytes) {
+    if (bytes.isEmpty) return bytes;
+    try {
+      final img = image_pkg.decodeImage(bytes);
+      if (img == null) return bytes;
+
+      final hasAlpha = img.hasAlpha;
+      int minX = img.width;
+      int minY = img.height;
+      int maxX = -1;
+      int maxY = -1;
+
+      for (int y = 0; y < img.height; y++) {
+        for (int x = 0; x < img.width; x++) {
+          final p = img.getPixel(x, y);
+          final bool isContent;
+          if (hasAlpha) {
+            // For images with an alpha channel, non-transparent pixels are content
+            isContent = p.a > 15;
+          } else {
+            // For opaque images with solid backgrounds, non-near-white pixels are content
+            isContent = p.r < 245 || p.g < 245 || p.b < 245;
+          }
+
+          if (isContent) {
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+          }
+        }
+      }
+
+      // If non-empty content was found, crop outer padding with a 2px buffer
+      if (maxX >= minX && maxY >= minY) {
+        final cropX = (minX - 2).clamp(0, img.width - 1);
+        final cropY = (minY - 2).clamp(0, img.height - 1);
+        final cropMaxX = (maxX + 2).clamp(0, img.width - 1);
+        final cropMaxY = (maxY + 2).clamp(0, img.height - 1);
+        final cropW = cropMaxX - cropX + 1;
+        final cropH = cropMaxY - cropY + 1;
+
+        // Only crop if at least 4% of empty margin exists on either axis
+        if (cropW < img.width * 0.96 || cropH < img.height * 0.96) {
+          final cropped = image_pkg.copyCrop(
+            img,
+            x: cropX,
+            y: cropY,
+            width: cropW,
+            height: cropH,
+          );
+          return Uint8List.fromList(image_pkg.encodePng(cropped));
+        }
+      }
+    } catch (e) {
+      debugPrint('Error trimming logo bytes: $e');
+    }
+    return bytes;
+  }
+
   /// Main entry point: Generates and saves a PDF document for an ESARF or Leave request.
   static Future<void> downloadRequestPdf({
     required BuildContext context,
@@ -190,7 +427,7 @@ class RequestPdfService {
         ));
       }
 
-      // 2. Download images in parallel
+      // 2. Download proofs and resolve company logo in parallel
       final Map<String, Uint8List> downloadedImages = {};
       final downloadFutures = proofsToProcess.map((proof) async {
         final url = proof.proofUrl.trim();
@@ -200,15 +437,11 @@ class RequestPdfService {
             downloadedImages[url] = bytes;
           }
         }
-      });
-      await Future.wait(downloadFutures);
+      }).toList();
 
-      // 3. Load HYG Logo asset
-      Uint8List? logoBytes;
-      try {
-        final byteData = await rootBundle.load('assets/hyg_logo.png');
-        logoBytes = byteData.buffer.asUint8List();
-      } catch (_) {}
+      final companyLogoFuture = resolveCompanyLogo(item: item);
+      await Future.wait([...downloadFutures, companyLogoFuture]);
+      final logoBytes = await companyLogoFuture;
 
       // 4. Load fonts
       pw.Font? regularFont;
@@ -365,7 +598,7 @@ class RequestPdfService {
                   style: pw.TextStyle(fontSize: 8, color: mutedText, fontWeight: pw.FontWeight.bold),
                 ),
                 pw.Text(
-                  'Employee: ${item.employeeName ?? "—"} (${item.employeeNo ?? "N/A"})',
+                  'Employee: ${item.employeeName ?? "-"} (${item.employeeNo ?? "N/A"})',
                   style: pw.TextStyle(fontSize: 8, color: mutedText),
                 ),
               ],
@@ -406,11 +639,11 @@ class RequestPdfService {
             children: [
               if (logoBytes != null)
                 pw.Container(
-                  width: 145,
-                  height: 48,
+                  width: 260,
+                  height: 52,
                   alignment: pw.Alignment.centerLeft,
                   child: pw.Image(
-                    pw.MemoryImage(logoBytes),
+                    pw.MemoryImage(_trimAndNormalizeLogoBytes(logoBytes)),
                     fit: pw.BoxFit.contain,
                   ),
                 )
@@ -419,9 +652,11 @@ class RequestPdfService {
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
                     pw.Text(
-                      'HYG GROUP OF COMPANIES',
+                      (item.companyName != null && item.companyName!.trim().isNotEmpty)
+                          ? item.companyName!.trim().toUpperCase()
+                          : 'HYG GROUP OF COMPANIES',
                       style: pw.TextStyle(
-                        fontSize: 15,
+                        fontSize: 14,
                         fontWeight: pw.FontWeight.bold,
                         color: navyColor,
                       ),
@@ -508,7 +743,7 @@ class RequestPdfService {
                   ],
                 ),
                 pw.Text(
-                  'Submitted: ${_formatDateString(item.submittedAt, includeTime: true) ?? "—"}',
+                  'Submitted: ${_formatDateString(item.submittedAt, includeTime: true) ?? "-"}',
                   style: pw.TextStyle(
                     fontSize: 9,
                     color: statusTextColor,
@@ -537,11 +772,11 @@ class RequestPdfService {
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      _buildInfoRow('Employee Name:', item.employeeName ?? '—', isBold: true),
+                      _buildInfoRow('Employee Name:', item.employeeName ?? '-', isBold: true),
                       pw.SizedBox(height: 4),
-                      _buildInfoRow('Employee No:', item.employeeNo ?? item.employeeId ?? '—'),
+                      _buildInfoRow('Employee No:', item.employeeNo ?? item.employeeId ?? '-'),
                       pw.SizedBox(height: 4),
-                      _buildInfoRow('Position / Title:', item.positionName ?? '—'),
+                      _buildInfoRow('Position / Title:', item.positionName ?? '-'),
                     ],
                   ),
                 ),
@@ -550,9 +785,9 @@ class RequestPdfService {
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      _buildInfoRow('Department:', item.departmentName ?? '—'),
+                      _buildInfoRow('Department:', item.departmentName ?? '-'),
                       pw.SizedBox(height: 4),
-                      _buildInfoRow('Store / Branch:', item.storeName ?? '—'),
+                      _buildInfoRow('Store / Branch:', item.storeName ?? '-'),
                       pw.SizedBox(height: 4),
                       _buildInfoRow('Company:', item.companyName ?? 'HYG Group of Companies'),
                     ],
@@ -657,10 +892,10 @@ class RequestPdfService {
                     pw.Row(
                       children: [
                         pw.Expanded(
-                          child: _buildInfoRow('Time Schedule:', item.timeSchedule ?? '—'),
+                          child: _buildInfoRow('Time Schedule:', item.timeSchedule ?? '-'),
                         ),
                         pw.Expanded(
-                          child: _buildInfoRow('Day Off / Payroll:', '${item.dayOff ?? "—"} / ${item.payrollClass ?? "—"}'),
+                          child: _buildInfoRow('Day Off / Payroll:', '${item.dayOff ?? "-"} / ${item.payrollClass ?? "-"}'),
                         ),
                       ],
                     ),
@@ -668,7 +903,7 @@ class RequestPdfService {
                       pw.SizedBox(height: 6),
                       pw.Divider(color: borderColor, thickness: 0.5),
                       pw.SizedBox(height: 4),
-                      _buildInfoRow('Reason / Purpose:', item.cleanReasonText.isNotEmpty ? item.cleanReasonText : (item.reason ?? '—')),
+                      _buildInfoRow('Reason / Purpose:', item.cleanReasonText.isNotEmpty ? item.cleanReasonText : (item.reason ?? '-')),
                     ],
                   ],
                 ),
@@ -701,10 +936,10 @@ class RequestPdfService {
                   pw.Row(
                     children: [
                       pw.Expanded(
-                        child: _buildInfoRow('Start Date:', item.startDate ?? item.dateFrom ?? '—'),
+                        child: _buildInfoRow('Start Date:', item.startDate ?? item.dateFrom ?? '-'),
                       ),
                       pw.Expanded(
-                        child: _buildInfoRow('End Date:', item.endDate ?? item.dateTo ?? '—'),
+                        child: _buildInfoRow('End Date:', item.endDate ?? item.dateTo ?? '-'),
                       ),
                     ],
                   ),
@@ -728,7 +963,7 @@ class RequestPdfService {
                   pw.SizedBox(height: 4),
                   _buildInfoRow(
                     'Reason for Leave:',
-                    item.cleanReasonText.isNotEmpty ? item.cleanReasonText : (item.reason ?? item.remarks ?? '—'),
+                    item.cleanReasonText.isNotEmpty ? item.cleanReasonText : (item.reason ?? item.remarks ?? '-'),
                   ),
                 ],
               ),
@@ -851,7 +1086,7 @@ class RequestPdfService {
               color: lightBg,
             ),
             child: pw.Text(
-              'CONFIDENTIALITY NOTICE: This document contains confidential information intended solely for the use of HYG Group of Companies. Unauthorized distribution or copying is strictly prohibited. System-generated and validated electronically via HYG Online HR Portal.',
+              'CONFIDENTIALITY NOTICE: This document contains confidential information intended solely for the use of ${(item.companyName != null && item.companyName!.trim().isNotEmpty) ? item.companyName!.trim() : "HYG Group of Companies"}. Unauthorized distribution or copying is strictly prohibited. System-generated and validated electronically via HYG Online HR Portal.',
               style: pw.TextStyle(fontSize: 7, color: mutedText, fontStyle: pw.FontStyle.italic),
             ),
           ),
@@ -940,15 +1175,15 @@ class RequestPdfService {
     ].join('\n');
     final reason = entry.cleanReasonText.isNotEmpty
         ? entry.cleanReasonText
-        : (entry.reason ?? '—');
+        : (entry.reason ?? '-');
 
     return pw.TableRow(
       children: [
         _buildTableCell('$index', align: pw.TextAlign.center),
-        _buildTableCell(entry.transactionType ?? '—'),
-        _buildTableCell(dateRange.isNotEmpty ? dateRange : '—'),
-        _buildTableCell(timeBound.isNotEmpty ? timeBound : '—'),
-        _buildTableCell(schedule.isNotEmpty ? schedule : '—'),
+        _buildTableCell(entry.transactionType ?? '-'),
+        _buildTableCell(dateRange.isNotEmpty ? dateRange : '-'),
+        _buildTableCell(timeBound.isNotEmpty ? timeBound : '-'),
+        _buildTableCell(schedule.isNotEmpty ? schedule : '-'),
         _buildTableCell(_formatHours(entry.totalHours), align: pw.TextAlign.right),
         _buildTableCell(reason),
       ],
@@ -961,12 +1196,12 @@ class RequestPdfService {
         step['level'] ??
         step['required_level'] ??
         step['route_level'] ??
-        '—';
+        '-';
     final levelStr = rawLevel.toString().startsWith('L') ? rawLevel.toString() : 'L$rawLevel';
-    final name = (step['approver_name'] ?? step['name'] ?? '—').toString().trim();
+    final name = (step['approver_name'] ?? step['name'] ?? '-').toString().trim();
     final pos = (step['approver_position_name'] ?? step['position_name'] ?? 'Approver').toString().trim();
     final status = (step['status'] ?? 'pending').toString().trim().toUpperCase();
-    final timestamp = (step['acted_at'] ?? step['timestamp'] ?? item.finalApprovedAt ?? '—').toString().trim();
+    final timestamp = (step['acted_at'] ?? step['timestamp'] ?? item.finalApprovedAt ?? '-').toString().trim();
 
     return pw.TableRow(
       children: [
@@ -974,7 +1209,7 @@ class RequestPdfService {
         _buildTableCell(name),
         _buildTableCell(pos),
         _buildTableCell(status, align: pw.TextAlign.center),
-        _buildTableCell(timestamp.isNotEmpty ? timestamp : '—'),
+        _buildTableCell(timestamp.isNotEmpty ? timestamp : '-'),
       ],
     );
   }
@@ -1135,7 +1370,7 @@ class RequestPdfService {
     if (from != null && to != null && from != to) {
       return '$from to $to';
     }
-    return from ?? to ?? '—';
+    return from ?? to ?? '-';
   }
 
   static String _formatTimeRange(String? tf, String? tt) {
@@ -1144,6 +1379,6 @@ class RequestPdfService {
     if (from.isNotEmpty && to.isNotEmpty) {
       return '$from - $to';
     }
-    return from.isNotEmpty ? from : (to.isNotEmpty ? to : '—');
+    return from.isNotEmpty ? from : (to.isNotEmpty ? to : '-');
   }
 }

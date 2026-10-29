@@ -303,6 +303,7 @@ class CompanyPreview {
     required this.id,
     required this.name,
     required this.initials,
+    this.logoUrl,
     required this.contactNumber,
     required this.address,
     required this.status,
@@ -311,6 +312,7 @@ class CompanyPreview {
   final String id;
   final String name;
   final String initials;
+  final String? logoUrl;
   final String contactNumber;
   final String address;
   final String status;

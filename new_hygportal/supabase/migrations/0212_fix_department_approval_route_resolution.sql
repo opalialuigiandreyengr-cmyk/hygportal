@@ -58,6 +58,7 @@ begin
   limit 1;
 
   v_search_start_level := greatest(
+    
     coalesce(p_starting_level, 1),
     coalesce(v_requester_level, 0) + 1
   );

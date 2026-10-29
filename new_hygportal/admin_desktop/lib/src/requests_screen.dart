@@ -68,17 +68,17 @@ String _formatTimeRange(String? tf, String? tt) {
 /// Normalizes ESARF transaction type strings into standardized short abbreviations for UI uniformity.
 /// Examples: "Overtime" -> "OT", "Official Business" -> "OB", "Failure to Punch In/Out" -> "FIO".
 String _formatEsarfTransactionAbbr(String? raw) {
-  if (raw == null || raw.trim().isEmpty) return 'Ã¢â‚¬â€';
+  if (raw == null || raw.trim().isEmpty) return '—';
   final text = raw.trim();
   final lower = text.toLowerCase();
 
-  if (lower == 'ot' || lower.contains('overtime') || lower == 'over time') return 'OT';
-  if (lower == 'ut' || lower.contains('undertime') || lower == 'under time') return 'UT';
-  if (lower == 'ob' || lower.contains('official business')) return 'OB';
-  if (lower == 'fio' || lower.contains('failure to punch') || lower.contains('punch in/out')) return 'FIO';
-  if (lower == 'cs' || lower.contains('change schedule') || lower.contains('schedule change')) return 'CS';
   if (lower == 'use offset' || lower.contains('use offset') || lower == 'use_offset' || lower == 'uo') return 'Use Offset';
   if (lower == 'offset' || lower.contains('offset')) return 'Offset';
+  if (lower == 'ut' || lower.contains('undertime') || lower == 'under time') return 'UT';
+  if (lower == 'fio' || lower.contains('failure to punch') || lower.contains('punch in_out') || lower.contains('punch in/out') || lower.contains('punch')) return 'FIO';
+  if (lower == 'ob' || lower.contains('official business')) return 'OB';
+  if (lower == 'cs' || lower.contains('change schedule') || lower.contains('schedule change') || lower.contains('change of schedule')) return 'CS';
+  if (lower == 'ot' || lower.contains('overtime') || lower == 'over time') return 'OT';
   if (lower == 'adjustment' || lower.contains('adjustment')) return 'Adj';
   
   if (text.length <= 4) return text.toUpperCase();
@@ -86,18 +86,27 @@ String _formatEsarfTransactionAbbr(String? raw) {
   return text;
 }
 
-String _formatSingleEsarfType(String raw) {
-  final trimmed = raw.trim();
-  if (trimmed.isEmpty) return '';
-  if (trimmed.contains('/')) {
-    return trimmed
-        .split('/')
-        .map((s) => _formatEsarfTransactionAbbr(s.trim()))
-        .where((s) => s.isNotEmpty && s != '—')
-        .join('/');
+/// Extracts individual standardized ESARF transaction type abbreviations
+/// from a compound or raw string (e.g. "OT/FIO/OB", "FIO, OB", "Failure to Punch In/Out (FIO) + Official Business (OB)").
+List<String> _extractEsarfTransactionTypes(String? raw) {
+  if (raw == null || raw.trim().isEmpty) return const [];
+  // Normalize "in/out" so the slash isn't mistaken for a transaction separator
+  final clean = raw.replaceAll(RegExp(r'in/out', caseSensitive: false), 'in_out');
+  final parts = clean
+      .split(RegExp(r'[,/\\+&]+'))
+      .map((s) => s.trim())
+      .where((s) => s.isNotEmpty);
+
+  final List<String> result = [];
+  for (final part in parts) {
+    final abbr = _formatEsarfTransactionAbbr(part);
+    if (abbr.isNotEmpty && abbr != '—' && !result.contains(abbr)) {
+      result.add(abbr);
+    }
   }
-  return _formatEsarfTransactionAbbr(trimmed);
+  return result;
 }
+
 
 /// Formats a numeric days value (e.g. 1.0 -> "1d", 1.5 -> "1.5d", 0 -> "0d").
 String _formatDaysNum(double? d) {
@@ -111,33 +120,64 @@ String _formatDaysNum(double? d) {
 List<String> _getEsarfTypes(AdminRequestItem item) {
   final List<String> types = [];
 
+  // 1. Check entry-level transaction types if entries exist
   if (item.entries.isNotEmpty) {
     for (final e in item.entries) {
       final t = (e.transactionType != null && e.transactionType!.trim().isNotEmpty)
           ? e.transactionType!.trim()
           : null;
       if (t != null) {
-        final commaParts = t.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty);
-        for (final cp in commaParts) {
-          final formatted = _formatSingleEsarfType(cp);
-          if (formatted.isNotEmpty && !types.contains(formatted)) {
-            types.add(formatted);
+        final extracted = _extractEsarfTransactionTypes(t);
+        for (final ex in extracted) {
+          if (!types.contains(ex)) {
+            types.add(ex);
           }
         }
       }
     }
   }
 
-  if (types.isEmpty) {
-    final raw = (item.transactionType != null && item.transactionType!.trim().isNotEmpty)
-        ? item.transactionType!.trim()
-        : item.requestTypeName;
-    final commaParts = raw.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty);
-    for (final cp in commaParts) {
-      final formatted = _formatSingleEsarfType(cp);
-      if (formatted.isNotEmpty && !types.contains(formatted)) {
-        types.add(formatted);
+  // 2. Check top-level transactionType on item
+  final rawTx = (item.transactionType != null && item.transactionType!.trim().isNotEmpty)
+      ? item.transactionType!.trim()
+      : null;
+  if (rawTx != null) {
+    final extracted = _extractEsarfTransactionTypes(rawTx);
+    for (final ex in extracted) {
+      if (!types.contains(ex)) {
+        types.add(ex);
       }
+    }
+  }
+
+  // 3. Fallback: parse entry blocks from reason if types is still empty
+  if (types.isEmpty) {
+    final reasonText = (item.reason ?? '').trim();
+    if (reasonText.isNotEmpty && reasonText.contains('[Entry ')) {
+      final matches = RegExp(r'\[Entry\s+\d+\]\s*\(([^)]+)\)').allMatches(reasonText);
+      for (final m in matches) {
+        final label = m.group(1)?.trim();
+        if (label != null && label.isNotEmpty) {
+          final extracted = _extractEsarfTransactionTypes(label);
+          for (final ex in extracted) {
+            if (!types.contains(ex)) {
+              types.add(ex);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // 4. Fallback strictly based on specific requestTypeCode ONLY if no transactionType was specified
+  if (types.isEmpty) {
+    final code = item.requestTypeCode.toLowerCase().trim();
+    if (code == 'use_offset') {
+      types.add('Use Offset');
+    } else if (code == 'offset_earn' || code == 'offset') {
+      types.add('Offset');
+    } else if (code == 'overtime' || code == 'ot') {
+      types.add('OT');
     }
   }
 
@@ -338,62 +378,17 @@ bool _matchesDepartment(AdminRequestItem item, String filter) {
 
 /// Helper to match an ESARF AdminRequestItem against a transaction type filter
 /// (e.g. 'OT', 'UT', 'Offset', 'Use Offset', 'FIO', 'OB').
+/// Strictly checks the transaction type(s) of the request, without checking total hours.
 bool _matchesEsarfTransactionType(AdminRequestItem item, String filter) {
   if (filter == 'all') return true;
-  final filterLower = filter.toLowerCase();
+  final filterLower = filter.toLowerCase().trim();
   final types = _getEsarfTypes(item);
+
   for (final t in types) {
-    final tLower = t.toLowerCase();
-    if (tLower == filterLower) return true;
-    if (t.contains('/')) {
-      final parts = t.split('/').map((s) => s.trim().toLowerCase());
-      if (parts.contains(filterLower)) return true;
-    }
+    if (t.toLowerCase().trim() == filterLower) return true;
   }
 
-  // Fallback checks on transactionType, requestTypeCode, and requestTypeName
-  final rawTx = (item.transactionType ?? '').toLowerCase();
-  final rawCode = item.requestTypeCode.toLowerCase();
-  final rawName = item.requestTypeName.toLowerCase();
-
-  switch (filter) {
-    case 'OT':
-      return rawTx == 'ot' ||
-          rawTx.contains('overtime') ||
-          rawTx.contains('over time') ||
-          rawCode.contains('overtime') ||
-          rawName.contains('overtime');
-    case 'UT':
-      return rawTx == 'ut' ||
-          rawTx.contains('undertime') ||
-          rawTx.contains('under time') ||
-          rawCode.contains('undertime') ||
-          rawName.contains('undertime');
-    case 'Offset':
-      final isUseOffset = rawTx.contains('use offset') ||
-          rawCode.contains('use_offset') ||
-          rawName.contains('use offset');
-      if (isUseOffset) return false;
-      return rawTx.contains('offset') ||
-          rawCode.contains('offset') ||
-          rawName.contains('offset');
-    case 'Use Offset':
-      return rawTx.contains('use offset') ||
-          rawCode.contains('use_offset') ||
-          rawName.contains('use offset');
-    case 'FIO':
-      return rawTx.contains('fio') ||
-          rawTx.contains('punch') ||
-          rawCode.contains('fio') ||
-          rawName.contains('punch');
-    case 'OB':
-      return rawTx.contains('ob') ||
-          rawTx.contains('official business') ||
-          rawCode.contains('ob') ||
-          rawName.contains('official business');
-    default:
-      return types.contains(filter);
-  }
+  return false;
 }
 
 // Ã¢â€â‚¬Ã¢â€â‚¬ Header Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬

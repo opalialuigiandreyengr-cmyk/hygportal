@@ -1110,6 +1110,37 @@ class CompanyDirectoryService {
     return cached.map(CompanyDirectoryService._fromRow).toList(growable: false);
   }
 
+  static Future<String> uploadCompanyLogo({
+    required String companyIdOrSlug,
+    required Uint8List bytes,
+    required String fileName,
+  }) async {
+    final extension = EmployeeDirectoryService._fileExtension(fileName);
+    final cleanSlug = companyIdOrSlug
+        .trim()
+        .replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+    final path =
+        'logos/$cleanSlug/${DateTime.now().millisecondsSinceEpoch}.$extension';
+    final contentType =
+        EmployeeDirectoryService._contentTypeForExtension(extension);
+
+    await _client.storage
+        .from(AppConfig.companyLogoBucket)
+        .uploadBinary(
+          path,
+          bytes,
+          fileOptions: FileOptions(
+            upsert: true,
+            contentType: contentType,
+            cacheControl: '3600',
+          ),
+        );
+
+    return _client.storage
+        .from(AppConfig.companyLogoBucket)
+        .getPublicUrl(path);
+  }
+
   static Future<String> createCompany({
     required String name,
     required String contactNumber,
@@ -1262,6 +1293,7 @@ class CompanyDirectoryService {
       ),
       address: EmployeeDirectoryService._stringValue(row['address']),
       status: isActive ? 'active' : 'inactive',
+      logoUrl: EmployeeDirectoryService._nullableString(row['logo_url']),
     );
   }
 
@@ -3869,6 +3901,11 @@ class AppConfig {
   static const hrPassword = String.fromEnvironment(
     'HYG_HR_PASSWORD',
     defaultValue: 'hyg_hr2026',
+  );
+
+  static const companyLogoBucket = String.fromEnvironment(
+    'HYG_COMPANY_LOGO_BUCKET',
+    defaultValue: 'company-logos',
   );
 
   static const employeePhotoBucket = String.fromEnvironment(

@@ -75,7 +75,10 @@ class _CompanyDialogState extends State<CompanyDialog> {
   final _contactController = TextEditingController();
   final _addressController = TextEditingController();
   String? _logoPath;
+  Uint8List? _logoBytes;
   String? _logoFileName;
+  String? _existingLogoUrl;
+  bool _removeExistingLogo = false;
   var _isSaving = false;
   String? _error;
 
@@ -86,6 +89,7 @@ class _CompanyDialogState extends State<CompanyDialog> {
       _nameController.text = widget.company!.name;
       _contactController.text = widget.company!.contactNumber;
       _addressController.text = widget.company!.address;
+      _existingLogoUrl = widget.company!.logoUrl;
     }
   }
 
@@ -100,18 +104,42 @@ class _CompanyDialogState extends State<CompanyDialog> {
   Future<void> _pickLogo() async {
     final result = await FilePicker.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['jpg', 'jpeg', 'png'],
+      allowedExtensions: ['jpg', 'jpeg', 'png', 'webp'],
       allowMultiple: false,
+      withData: true,
     );
 
     final file = result?.files.single;
-    if (file?.path == null) {
+    if (file == null) {
+      return;
+    }
+
+    Uint8List? bytes = file.bytes;
+    if (bytes == null && file.path != null) {
+      try {
+        bytes = await File(file.path!).readAsBytes();
+      } catch (_) {}
+    }
+
+    if (bytes == null && file.path == null) {
       return;
     }
 
     setState(() {
-      _logoPath = file!.path;
+      _logoPath = file.path;
+      _logoBytes = bytes;
       _logoFileName = file.name;
+      _removeExistingLogo = false;
+    });
+  }
+
+  void _removeLogo() {
+    setState(() {
+      _logoPath = null;
+      _logoBytes = null;
+      _logoFileName = null;
+      _existingLogoUrl = null;
+      _removeExistingLogo = true;
     });
   }
 
@@ -128,12 +156,31 @@ class _CompanyDialogState extends State<CompanyDialog> {
     });
 
     try {
+      String logoUrl = _existingLogoUrl ?? '';
+      if (_removeExistingLogo) {
+        logoUrl = '';
+      } else if (_logoBytes != null && _logoBytes!.isNotEmpty) {
+        final slug = name.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_').toLowerCase();
+        final companyKey = widget.company?.id ?? slug;
+        try {
+          logoUrl = await CompanyDirectoryService.uploadCompanyLogo(
+            companyIdOrSlug: companyKey,
+            bytes: _logoBytes!,
+            fileName: _logoFileName ?? 'company_logo.png',
+          );
+        } catch (uploadErr) {
+          debugPrint('Company logo storage upload failed: $uploadErr');
+          final ext = EmployeeDirectoryService._fileExtension(_logoFileName ?? 'logo.png');
+          logoUrl = 'data:image/$ext;base64,${base64Encode(_logoBytes!)}';
+        }
+      }
+
       if (widget.company == null) {
         await CompanyDirectoryService.createCompany(
           name: name,
           contactNumber: _contactController.text,
           address: _addressController.text,
-          logoUrl: '',
+          logoUrl: logoUrl,
         );
       } else {
         await CompanyDirectoryService.updateCompany(
@@ -141,7 +188,7 @@ class _CompanyDialogState extends State<CompanyDialog> {
           name: name,
           contactNumber: _contactController.text,
           address: _addressController.text,
-          logoUrl: '',
+          logoUrl: logoUrl,
         );
       }
 
@@ -208,8 +255,11 @@ class _CompanyDialogState extends State<CompanyDialog> {
                 children: [
                   CompanyLogoBox(
                     logoPath: _logoPath,
+                    logoBytes: _logoBytes,
+                    existingLogoUrl: _existingLogoUrl,
                     logoFileName: _logoFileName,
                     onPickLogo: _pickLogo,
+                    onRemoveLogo: _removeLogo,
                   ),
                   const SizedBox(width: 24),
                   Expanded(
@@ -308,18 +358,86 @@ class CompanyLogoBox extends StatelessWidget {
   const CompanyLogoBox({
     required this.onPickLogo,
     this.logoPath,
+    this.logoBytes,
+    this.existingLogoUrl,
     this.logoFileName,
+    this.onRemoveLogo,
     super.key,
   });
 
   final VoidCallback onPickLogo;
   final String? logoPath;
+  final Uint8List? logoBytes;
+  final String? existingLogoUrl;
   final String? logoFileName;
+  final VoidCallback? onRemoveLogo;
+
+  Widget _buildPlaceholder() {
+    return const Center(
+      child: Icon(
+        Icons.business,
+        color: Color(0xFF94A3B8),
+        size: 46,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final selectedLogoPath = logoPath;
-    final selectedLogoName = logoFileName;
+    final hasNewFile = (logoBytes != null && logoBytes!.isNotEmpty) ||
+        (logoPath != null && logoPath!.isNotEmpty);
+    final hasExistingUrl =
+        existingLogoUrl != null && existingLogoUrl!.trim().isNotEmpty;
+    final hasImage = hasNewFile || hasExistingUrl;
+
+    Widget imageContent;
+    if (logoBytes != null && logoBytes!.isNotEmpty) {
+      imageContent = Image.memory(
+        logoBytes!,
+        fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) => _buildPlaceholder(),
+      );
+    } else if (logoPath != null && logoPath!.isNotEmpty) {
+      imageContent = Image.file(
+        File(logoPath!),
+        fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) => _buildPlaceholder(),
+      );
+    } else if (hasExistingUrl) {
+      final url = existingLogoUrl!.trim();
+      if (url.startsWith('data:image/')) {
+        try {
+          final commaIdx = url.indexOf(',');
+          final base64Str =
+              commaIdx != -1 ? url.substring(commaIdx + 1) : url;
+          imageContent = Image.memory(
+            base64Decode(base64Str),
+            fit: BoxFit.contain,
+            errorBuilder: (_, __, ___) => _buildPlaceholder(),
+          );
+        } catch (_) {
+          imageContent = _buildPlaceholder();
+        }
+      } else {
+        imageContent = Image.network(
+          url,
+          fit: BoxFit.contain,
+          errorBuilder: (_, __, ___) => _buildPlaceholder(),
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) return child;
+            return const Center(
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            );
+          },
+        );
+      }
+    } else {
+      imageContent = _buildPlaceholder();
+    }
 
     return SizedBox(
       width: 150,
@@ -331,50 +449,49 @@ class CompanyLogoBox extends StatelessWidget {
             child: Container(
               height: 150,
               clipBehavior: Clip.antiAlias,
+              padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: Colors.white,
                 border: Border.all(color: const Color(0xFFCBD5E1), width: 1.2),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: selectedLogoPath == null
-                  ? const Center(
-                      child: Icon(
-                        Icons.business,
-                        color: Color(0xFF94A3B8),
-                        size: 46,
-                      ),
-                    )
-                  : Image.file(
-                      File(selectedLogoPath),
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return const Center(
-                          child: Icon(
-                            Icons.business,
-                            color: Color(0xFF94A3B8),
-                            size: 46,
-                          ),
-                        );
-                      },
-                    ),
+              child: Center(child: imageContent),
             ),
           ),
-          const SizedBox(height: 12),
-          OutlinedButton(
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size.fromHeight(40),
-              foregroundColor: const Color(0xFF475569),
-              side: const BorderSide(color: Color(0xFFCBD5E1)),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(38),
+                    foregroundColor: const Color(0xFF475569),
+                    side: const BorderSide(color: Color(0xFFCBD5E1)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  onPressed: onPickLogo,
+                  child: Text(hasImage ? 'Change Logo' : 'Upload Logo'),
+                ),
               ),
-            ),
-            onPressed: onPickLogo,
-            child: const Text('Upload Logo'),
+              if (hasImage && onRemoveLogo != null) ...[
+                const SizedBox(width: 6),
+                IconButton(
+                  tooltip: 'Remove logo',
+                  onPressed: onRemoveLogo,
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    color: Color(0xFFDC2626),
+                    size: 20,
+                  ),
+                ),
+              ],
+            ],
           ),
           const SizedBox(height: 6),
           Text(
-            selectedLogoName ?? 'JPG, PNG.',
+            logoFileName ?? (hasExistingUrl ? 'Current logo' : 'JPG, PNG, WebP.'),
             textAlign: TextAlign.center,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
@@ -384,6 +501,87 @@ class CompanyLogoBox extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class CompanyAvatar extends StatelessWidget {
+  const CompanyAvatar({
+    required this.company,
+    this.size = 38,
+    super.key,
+  });
+
+  final CompanyPreview company;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final logoUrl = company.logoUrl?.trim() ?? '';
+
+    Widget initialFallback() {
+      return Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: const Color(0xFFFEF3C7),
+          borderRadius: BorderRadius.circular(9),
+        ),
+        child: Center(
+          child: Text(
+            company.initials,
+            textAlign: TextAlign.center,
+            style: HygTypography.tablePrimary.copyWith(
+              color: HygColors.goldStrong,
+              fontSize: size > 40 ? 16 : 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (logoUrl.isEmpty) {
+      return initialFallback();
+    }
+
+    Widget imageWidget;
+    if (logoUrl.startsWith('data:image/')) {
+      try {
+        final commaIdx = logoUrl.indexOf(',');
+        final base64Str =
+            commaIdx != -1 ? logoUrl.substring(commaIdx + 1) : logoUrl;
+        imageWidget = Image.memory(
+          base64Decode(base64Str),
+          fit: BoxFit.contain,
+          errorBuilder: (_, __, ___) => initialFallback(),
+        );
+      } catch (_) {
+        return initialFallback();
+      }
+    } else {
+      imageWidget = Image.network(
+        logoUrl,
+        fit: BoxFit.contain,
+        errorBuilder: (context, error, stackTrace) => initialFallback(),
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return initialFallback();
+        },
+      );
+    }
+
+    return Container(
+      width: size,
+      height: size,
+      padding: const EdgeInsets.all(3),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Center(child: imageWidget),
     );
   }
 }
@@ -549,25 +747,7 @@ class CompanyTableRow extends StatelessWidget {
             flex: 3,
             child: Row(
               children: [
-                Container(
-                  width: 38,
-                  height: 38,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFEF3C7),
-                    borderRadius: BorderRadius.circular(9),
-                  ),
-                  child: Center(
-                    child: Text(
-                      company.initials,
-                      textAlign: TextAlign.center,
-                      style: HygTypography.tablePrimary.copyWith(
-                        color: HygColors.goldStrong,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ),
+                CompanyAvatar(company: company),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(

@@ -662,7 +662,7 @@ class DepartmentLadderUpdate {
   final Map<int, String> roles;
 }
 
-enum AdminRequestCategory { esarf, leave, perk }
+enum AdminRequestCategory { esarf, leave, travelOrder, perk }
 
 class AdminRequestItem {
   AdminRequestItem({
@@ -766,6 +766,18 @@ class AdminRequestItem {
     }
     final code = requestTypeCode.trim().toLowerCase();
     final name = requestTypeName.trim().toLowerCase();
+    final trans = (transactionType ?? '').trim().toLowerCase();
+    if (code == 'travel_order' ||
+        code == 'travel' ||
+        code == 'official_travel' ||
+        code == 'official_travel_order' ||
+        code == 'to' ||
+        name.contains('travel order') ||
+        name.contains('official travel') ||
+        trans.contains('travel order') ||
+        trans.contains('official travel')) {
+      return AdminRequestCategory.travelOrder;
+    }
     if (code == 'discount' ||
         code == 'charge' ||
         code.contains('perk') ||

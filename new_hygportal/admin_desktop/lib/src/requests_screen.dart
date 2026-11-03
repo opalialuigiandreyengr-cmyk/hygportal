@@ -286,6 +286,8 @@ String _getDisplayTransactionType(AdminRequestItem item) {
       return type;
     }
     return item.requestTypeName;
+  } else if (item.category == AdminRequestCategory.travelOrder) {
+    return 'Official Travel Order';
   } else if (item.category == AdminRequestCategory.perk) {
     final kind = item.requestTypeCode == 'discount' ? 'Discount' : 'Charge';
     final product = item.perkProductName?.trim() ?? '';
@@ -566,7 +568,7 @@ class _RequestsPanelState extends State<RequestsPanel>
   int _currentPage = 1;
   static const int _pageSize = 20;
 
-  static const _tabs = ['ESARF / Time', 'Leave', 'Perks'];
+  static const _tabs = ['ESARF / Time', 'Leave', 'Travel Order', 'Perks'];
 
   @override
   void initState() {
@@ -638,6 +640,7 @@ class _RequestsPanelState extends State<RequestsPanel>
     final category = switch (tabIndex) {
       0 => AdminRequestCategory.esarf,
       1 => AdminRequestCategory.leave,
+      2 => AdminRequestCategory.travelOrder,
       _ => AdminRequestCategory.perk,
     };
 
@@ -710,6 +713,7 @@ class _RequestsPanelState extends State<RequestsPanel>
     final category = switch (tabIndex) {
       0 => AdminRequestCategory.esarf,
       1 => AdminRequestCategory.leave,
+      2 => AdminRequestCategory.travelOrder,
       _ => AdminRequestCategory.perk,
     };
     return widget.requests
@@ -734,8 +738,47 @@ class _RequestsPanelState extends State<RequestsPanel>
       return await _validateLeave(context, item);
     } else if (item.category == AdminRequestCategory.esarf) {
       return await _validateEsarf(context, item);
+    } else if (item.category == AdminRequestCategory.travelOrder) {
+      return await _validateTravelOrder(context, item);
     } else if (item.category == AdminRequestCategory.perk) {
       return await _validatePerk(context, item);
+    }
+    return false;
+  }
+
+  static Future<bool> _validateTravelOrder(BuildContext context, AdminRequestItem item) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Validate Travel Order'),
+        content: Text('Are you sure you want to validate Travel Order request for ${item.employeeName ?? "this employee"}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              await AdminRequestsService.updateRequestStatus(
+                requestId: item.requestId,
+                isPerk: false,
+                newStatus: 'validated',
+              );
+              if (ctx.mounted) Navigator.of(ctx).pop(true);
+            },
+            child: const Text('Validate'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Travel order request validated successfully!'),
+          backgroundColor: Color(0xFF059669),
+        ),
+      );
+      return true;
     }
     return false;
   }
@@ -1333,6 +1376,13 @@ class _RequestsPanelState extends State<RequestsPanel>
           'Paid Days', 'Unpaid Days', 'Status', 'Submitted',
         ];
         break;
+      case 2: // Travel Order
+        headers = [
+          'Employee No', 'Employee Name', 'Department', 'Store',
+          'Departure Date', 'Departure Time', 'Return Date', 'Return Time',
+          'Purpose / Itinerary', 'Status', 'Submitted',
+        ];
+        break;
       default: // Perk
         headers = [
           'Employee No', 'Employee Name', 'Department', 'Store',
@@ -1457,7 +1507,13 @@ class _RequestsPanelState extends State<RequestsPanel>
       endRow: 0,
       cellStyle: titleStyle,
       merge: true,
-      value: TextCellValue('EMPLOYEE SALARY ADJUSTMENT REQUEST FORM (ESARF)'),
+      value: TextCellValue(tabIndex == 0
+          ? 'EMPLOYEE SALARY ADJUSTMENT REQUEST FORM (ESARF)'
+          : (tabIndex == 1
+              ? 'EMPLOYEE LEAVE REQUESTS'
+              : (tabIndex == 2
+                  ? 'OFFICIAL TRAVEL ORDERS'
+                  : 'EMPLOYEE PERKS & DISCOUNTS'))),
     );
     sheetObj.setRowHeight(0, 35.0);
 
@@ -1537,6 +1593,24 @@ class _RequestsPanelState extends State<RequestsPanel>
             TextCellValue(item.statusLabel),
             item.submittedAt != null ? TextCellValue(_formatDateString(item.submittedAt, includeTime: true)!) : null,
           ];
+        case 2: // Travel Order
+          final depDate = _formatDateString(item.dateFrom ?? item.startDate);
+          final depTime = _format12HourTime(item.timeFrom);
+          final retDate = _formatDateString(item.dateTo ?? item.endDate);
+          final retTime = _format12HourTime(item.timeTo);
+          return [
+            item.employeeNo != null ? TextCellValue(item.employeeNo!) : null,
+            item.employeeName != null ? TextCellValue(item.employeeName!) : null,
+            item.departmentName != null ? TextCellValue(item.departmentName!) : null,
+            item.storeName != null ? TextCellValue(item.storeName!) : null,
+            TextCellValue(depDate ?? '—'),
+            TextCellValue(depTime.isNotEmpty ? depTime : '—'),
+            TextCellValue(retDate ?? '—'),
+            TextCellValue(retTime.isNotEmpty ? retTime : '—'),
+            item.reason != null ? TextCellValue(item.reason!) : null,
+            TextCellValue(item.statusLabel),
+            item.submittedAt != null ? TextCellValue(_formatDateString(item.submittedAt, includeTime: true)!) : null,
+          ];
         default: // Perk
           return [
             item.employeeNo != null ? TextCellValue(item.employeeNo!) : null,
@@ -1555,7 +1629,7 @@ class _RequestsPanelState extends State<RequestsPanel>
       }
     }
 
-    final centerCols = {'Employee No', 'Status', 'Date', 'Time', 'Submitted'};
+    final centerCols = {'Employee No', 'Status', 'Date', 'Time', 'Departure Date', 'Departure Time', 'Return Date', 'Return Time', 'Submitted'};
     final currencyCols = {'Amount', 'Discount', 'Final Amount'};
     final decimalCols = {'Total Hours', 'Total Days', 'Paid Days', 'Unpaid Days', 'Leave Credits'};
     final integerCols = {'Quantity'};
@@ -2266,6 +2340,7 @@ class _RequestsPanelState extends State<RequestsPanel>
               category: switch (tabIndex) {
                 0 => AdminRequestCategory.esarf,
                 1 => AdminRequestCategory.leave,
+                2 => AdminRequestCategory.travelOrder,
                 _ => AdminRequestCategory.perk,
               },
               showDelete: widget.showDeleteAction,
@@ -2701,6 +2776,23 @@ class _RequestsTableState extends State<_RequestsTable> {
           const _RequestColDef(title: 'Days', width: 70),
           const _RequestColDef(title: 'Type', width: 140),
           const _RequestColDef(title: 'Reason', width: 180),
+          const _RequestColDef(title: 'Approver', width: 240),
+          const _RequestColDef(title: 'Status', width: 120),
+          const _RequestColDef(title: 'Submitted', width: 140),
+          _RequestColDef(
+            title: 'Actions',
+            width: widget.isValidatedScreen ? 165 : 120,
+            alignment: Alignment.center,
+          ),
+        ];
+      case AdminRequestCategory.travelOrder:
+        return [
+          const _RequestColDef(title: 'Employee', width: 190),
+          const _RequestColDef(title: 'Department', width: 130),
+          const _RequestColDef(title: 'Store', width: 110),
+          const _RequestColDef(title: 'Departure', width: 120),
+          const _RequestColDef(title: 'Return', width: 120),
+          const _RequestColDef(title: 'Purpose / Itinerary', width: 200),
           const _RequestColDef(title: 'Approver', width: 240),
           const _RequestColDef(title: 'Status', width: 120),
           const _RequestColDef(title: 'Submitted', width: 140),
@@ -3724,6 +3816,38 @@ class _RequestCardRowState extends State<_RequestCardRow> {
           ),
           _buildLeaveTypeCell(item),
           _buildReasonCell(item.reason ?? '—'),
+          _buildApproverCell(item),
+          _buildStatusCell(item),
+          _buildSubmittedCell(item),
+          _buildActionsCell(context, item),
+        ];
+
+      case AdminRequestCategory.travelOrder:
+        final depDate = item.dateFrom ?? item.startDate ?? '—';
+        final depTime = item.timeFrom != null && item.timeFrom!.isNotEmpty ? ' (${item.timeFrom})' : '';
+        final retDate = item.dateTo ?? item.endDate ?? '—';
+        final retTime = item.timeTo != null && item.timeTo!.isNotEmpty ? ' (${item.timeTo})' : '';
+        final purpose = item.reason != null && item.reason!.isNotEmpty ? item.reason! : 'Official Travel Order';
+
+        return [
+          _buildEmployeeCell(item),
+          Text(
+            item.departmentName ?? '—',
+            style: HygTypography.tableBody,
+            overflow: TextOverflow.ellipsis,
+          ),
+          _buildStoreCell(item),
+          Text(
+            '$depDate$depTime',
+            style: HygTypography.tableBody,
+            overflow: TextOverflow.ellipsis,
+          ),
+          Text(
+            '$retDate$retTime',
+            style: HygTypography.tableBody,
+            overflow: TextOverflow.ellipsis,
+          ),
+          _buildReasonCell(purpose),
           _buildApproverCell(item),
           _buildStatusCell(item),
           _buildSubmittedCell(item),
@@ -5135,9 +5259,771 @@ void _showDetailModal(BuildContext context, AdminRequestItem item) {
   );
 }
 
-class _RequestDetailModal extends StatelessWidget {
-  const _RequestDetailModal({required this.item});
+class _TravelOrderDetails {
+  final String destinationsText;
+  final List<String> destinationStores;
+  final String departureDate;
+  final String departureTime;
+  final String returnDate;
+  final String returnTime;
+  final String transportMode;
+  final String plateNo;
+  final String purposeOfTravel;
+  final String purposeDetails;
+  final double transportBudget;
+  final double mealBudget;
+  final double emergencyBudget;
+  final double totalBudget;
+  final String costCenterCode;
+  final String chargeToStore;
+
+  _TravelOrderDetails({
+    required this.destinationsText,
+    required this.destinationStores,
+    required this.departureDate,
+    required this.departureTime,
+    required this.returnDate,
+    required this.returnTime,
+    required this.transportMode,
+    required this.plateNo,
+    required this.purposeOfTravel,
+    required this.purposeDetails,
+    required this.transportBudget,
+    required this.mealBudget,
+    required this.emergencyBudget,
+    required this.totalBudget,
+    required this.costCenterCode,
+    required this.chargeToStore,
+  });
+
+  factory _TravelOrderDetails.fromFallback(AdminRequestItem item) {
+    final rawReason = item.reason ?? item.remarks ?? '';
+    String destText = '';
+    List<String> stores = [];
+    final destMatch = RegExp(r'Destination:\s*([^|]+)', caseSensitive: false).firstMatch(rawReason);
+    if (destMatch != null) {
+      destText = destMatch.group(1)?.trim() ?? '';
+      stores = destText.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+    }
+    if (destText.isEmpty && item.storeName != null && item.storeName!.isNotEmpty) {
+      destText = item.storeName!;
+    }
+
+    String purpose = '';
+    final purposeMatch = RegExp(r'Purpose:\s*([^(|]+)', caseSensitive: false).firstMatch(rawReason);
+    if (purposeMatch != null) {
+      purpose = purposeMatch.group(1)?.trim() ?? '';
+    }
+
+    String purposeDet = '';
+    final purposeDetMatch = RegExp(r'\(([^)]+)\)', caseSensitive: false).firstMatch(rawReason);
+    if (purposeDetMatch != null) {
+      purposeDet = purposeDetMatch.group(1)?.trim() ?? '';
+    }
+
+    String trans = '';
+    final transMatch = RegExp(r'Transport:\s*([^[\n|]+)', caseSensitive: false).firstMatch(rawReason);
+    if (transMatch != null) {
+      trans = transMatch.group(1)?.trim() ?? '';
+    }
+
+    String plate = '';
+    final plateMatch = RegExp(r'\[([^\]]+)\]', caseSensitive: false).firstMatch(rawReason);
+    if (plateMatch != null) {
+      plate = plateMatch.group(1)?.trim() ?? '';
+    }
+
+    double totBudget = 0.0;
+    final budgetMatch = RegExp(r'Budget:\s*(?:PHP)?\s*([\d,.]+)', caseSensitive: false).firstMatch(rawReason);
+    if (budgetMatch != null) {
+      final s = budgetMatch.group(1)?.replaceAll(',', '');
+      totBudget = double.tryParse(s ?? '') ?? 0.0;
+    }
+
+    return _TravelOrderDetails(
+      destinationsText: destText.isNotEmpty ? destText : (item.storeName ?? '—'),
+      destinationStores: stores,
+      departureDate: item.dateFrom ?? item.startDate ?? '—',
+      departureTime: item.timeFrom ?? '—',
+      returnDate: item.dateTo ?? item.endDate ?? item.dateFrom ?? '—',
+      returnTime: item.timeTo ?? '—',
+      transportMode: trans.isNotEmpty ? trans : 'Not specified',
+      plateNo: plate,
+      purposeOfTravel: purpose.isNotEmpty ? purpose : 'Not specified',
+      purposeDetails: purposeDet,
+      transportBudget: totBudget,
+      mealBudget: 0.0,
+      emergencyBudget: 0.0,
+      totalBudget: totBudget,
+      costCenterCode: '000000',
+      chargeToStore: item.storeName ?? '—',
+    );
+  }
+
+  _TravelOrderDetails copyWithMap(Map<String, dynamic> row) {
+    List<String> stores = List<String>.from(destinationStores);
+    if (row['destination_stores'] is List) {
+      stores = (row['destination_stores'] as List).map((e) => e.toString()).toList();
+    }
+    String dest = row['destinations']?.toString() ?? destinationsText;
+    if (dest.isEmpty && stores.isNotEmpty) {
+      dest = stores.join(', ');
+    }
+
+    final tBudget = (row['transport_budget'] is num)
+        ? (row['transport_budget'] as num).toDouble()
+        : (double.tryParse(row['transport_budget']?.toString() ?? '') ?? transportBudget);
+    final mBudget = (row['meal_budget'] is num)
+        ? (row['meal_budget'] as num).toDouble()
+        : (double.tryParse(row['meal_budget']?.toString() ?? '') ?? mealBudget);
+    final eBudget = (row['emergency_budget'] is num)
+        ? (row['emergency_budget'] as num).toDouble()
+        : (double.tryParse(row['emergency_budget']?.toString() ?? '') ?? emergencyBudget);
+    double tot = (row['total_budget'] is num)
+        ? (row['total_budget'] as num).toDouble()
+        : (double.tryParse(row['total_budget']?.toString() ?? '') ?? totalBudget);
+    if (tot == 0.0 && (tBudget > 0 || mBudget > 0 || eBudget > 0)) {
+      tot = tBudget + mBudget + eBudget;
+    }
+
+    return _TravelOrderDetails(
+      destinationsText: dest.isNotEmpty ? dest : destinationsText,
+      destinationStores: stores.isNotEmpty ? stores : destinationStores,
+      departureDate: row['departure_date']?.toString() ?? departureDate,
+      departureTime: row['departure_time']?.toString() ?? departureTime,
+      returnDate: row['return_date']?.toString() ?? returnDate,
+      returnTime: row['return_time']?.toString() ?? returnTime,
+      transportMode: row['transport_mode']?.toString() ?? transportMode,
+      plateNo: row['plate_no']?.toString() ?? plateNo,
+      purposeOfTravel: row['purpose_of_travel']?.toString() ?? purposeOfTravel,
+      purposeDetails: row['purpose_details']?.toString() ?? purposeDetails,
+      transportBudget: tBudget,
+      mealBudget: mBudget,
+      emergencyBudget: eBudget,
+      totalBudget: tot,
+      costCenterCode: row['cost_center_code']?.toString() ?? costCenterCode,
+      chargeToStore: row['charge_to_store']?.toString() ?? chargeToStore,
+    );
+  }
+}
+
+class _RequestDetailModal extends StatefulWidget {
+  const _RequestDetailModal({super.key, required this.item});
   final AdminRequestItem item;
+
+  @override
+  State<_RequestDetailModal> createState() => _RequestDetailModalState();
+
+  static Future<void> _launchUrlInBrowser(String url) => _RequestDetailModalState._launchUrlInBrowser(url);
+  static String _getDirectProofImageUrl(String url) => _RequestDetailModalState._getDirectProofImageUrl(url);
+  static String? _extractDriveFileId(String url) => _RequestDetailModalState._extractDriveFileId(url);
+  static Widget _buildProofImageWidget(
+    String url, {
+    required BoxFit fit,
+    Widget Function(BuildContext, Widget, ImageChunkEvent?)? loadingBuilder,
+    Widget Function(BuildContext, Object, StackTrace?)? errorBuilder,
+  }) =>
+      _RequestDetailModalState._buildProofImageWidget(
+        url,
+        fit: fit,
+        loadingBuilder: loadingBuilder,
+        errorBuilder: errorBuilder,
+      );
+  static Future<String?> reverseGeocodeCoordinates(double lat, double lon) =>
+      _RequestDetailModalState.reverseGeocodeCoordinates(lat, lon);
+  static void _showProofPreviewDialog(
+    BuildContext context,
+    String rawUrl, {
+    String? title,
+    String? proofTime,
+    String? proofLocation,
+    String? proofId,
+    String? proofSource,
+    String? employeeName,
+    String? employeeId,
+    String? storeName,
+    String? department,
+    List<RequestProofItem>? allProofs,
+    int initialIndex = 0,
+  }) =>
+      _RequestDetailModalState._showProofPreviewDialog(
+        context,
+        rawUrl,
+        title: title,
+        proofTime: proofTime,
+        proofLocation: proofLocation,
+        proofId: proofId,
+        proofSource: proofSource,
+        employeeName: employeeName,
+        employeeId: employeeId,
+        storeName: storeName,
+        department: department,
+        allProofs: allProofs,
+        initialIndex: initialIndex,
+      );
+  static void _unusedLegacyProofPreviewDialog(BuildContext context, String rawUrl, {String? title}) =>
+      _RequestDetailModalState._unusedLegacyProofPreviewDialog(context, rawUrl, title: title);
+}
+
+class _RequestDetailModalState extends State<_RequestDetailModal> {
+  AdminRequestItem get item => widget.item;
+
+  _TravelOrderDetails? _travelDetails;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.item.category == AdminRequestCategory.travelOrder) {
+      _travelDetails = _TravelOrderDetails.fromFallback(widget.item);
+      _fetchTravelOrderDetails();
+    }
+  }
+
+  Future<void> _fetchTravelOrderDetails() async {
+    try {
+      final res = await Supabase.instance.client
+          .from('travel_order_request_details')
+          .select('*')
+          .eq('request_id', widget.item.requestId)
+          .maybeSingle();
+      if (res != null && mounted) {
+        setState(() {
+          _travelDetails = (_travelDetails ?? _TravelOrderDetails.fromFallback(widget.item)).copyWithMap(res);
+        });
+      }
+    } catch (e) {
+      debugPrint('[TravelOrderDetails] Non-fatal error loading travel order details: $e');
+    }
+  }
+
+  String _formatDateMDY(String? dateStr) {
+    if (dateStr == null || dateStr.trim().isEmpty) return '—';
+    final clean = dateStr.trim().split('T').first.split(' ').first;
+    final parts = clean.split('-');
+    if (parts.length == 3) {
+      final y = parts[0];
+      final m = parts[1].padLeft(2, '0');
+      final d = parts[2].padLeft(2, '0');
+      return '$m/$d/$y';
+    }
+    return clean;
+  }
+
+  String _formatCurrency(double amount) {
+    if (amount == 0.0) return '0.00';
+    final parts = amount.toStringAsFixed(2).split('.');
+    final intPart = parts[0].replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (Match m) => '${m[1]},',
+    );
+    return '$intPart.${parts[1]}';
+  }
+
+  Widget _buildTravelItineraryCard(BuildContext context, _TravelOrderDetails details) {
+    final hasCompanyVehicle = details.transportMode.toLowerCase().contains('company vehicle') || details.plateNo.isNotEmpty;
+    final hasOthersPurpose = details.purposeOfTravel.toLowerCase().contains('others') || details.purposeDetails.isNotEmpty;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: HygColors.border),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: const [
+              Icon(Icons.explore_outlined, size: 16, color: Color(0xFF64748B)),
+              SizedBox(width: 8),
+              Text(
+                'Travel Itinerary & Specific Work Intent',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  color: HygColors.ink,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          const Divider(height: 1, color: Color(0xFFF1F5F9)),
+          const SizedBox(height: 12),
+
+          // Destination Stores
+          const Text(
+            'Destination Store(s)',
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Color(0xFF64748B)),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            details.destinationsText.isNotEmpty ? details.destinationsText : 'Not specified',
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: HygColors.ink),
+          ),
+          const SizedBox(height: 12),
+
+          // Departure Date & Time
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Departure Date',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Color(0xFF64748B)),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      _formatDateMDY(details.departureDate),
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: HygColors.ink),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Departure Time',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Color(0xFF64748B)),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      _format12HourTime(details.departureTime).isNotEmpty
+                          ? _format12HourTime(details.departureTime)
+                          : (details.departureTime.isNotEmpty ? details.departureTime : '—'),
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: HygColors.ink),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Return Date & Time
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Return Date',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Color(0xFF64748B)),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      _formatDateMDY(details.returnDate),
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: HygColors.ink),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Return Time',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Color(0xFF64748B)),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      _format12HourTime(details.returnTime).isNotEmpty
+                          ? _format12HourTime(details.returnTime)
+                          : (details.returnTime.isNotEmpty ? details.returnTime : '—'),
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: HygColors.ink),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Transport Mode & Purpose
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Specific Mode of Transport',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Color(0xFF64748B)),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      details.transportMode.isNotEmpty ? details.transportMode : 'Not specified',
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: HygColors.ink),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Purpose of Travel',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Color(0xFF64748B)),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      details.purposeOfTravel.isNotEmpty ? details.purposeOfTravel : 'Not specified',
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: HygColors.ink),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          // Boxed Plate No (if company vehicle or specified)
+          if (hasCompanyVehicle) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Vehicle Plate No. *',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: const Color(0xFFCBD5E1)),
+                      borderRadius: BorderRadius.circular(6),
+                      color: Colors.white,
+                    ),
+                    child: Text(
+                      details.plateNo.isNotEmpty ? details.plateNo : 'None specified',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: details.plateNo.isNotEmpty ? HygColors.ink : const Color(0xFF94A3B8),
+                        fontStyle: details.plateNo.isNotEmpty ? FontStyle.normal : FontStyle.italic,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          // Boxed Specific Detailed Operational Tasks (if Others or specified)
+          if (hasOthersPurpose) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Specific Detailed Operational Tasks*',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    width: double.infinity,
+                    constraints: const BoxConstraints(minHeight: 46),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: const Color(0xFFCBD5E1)),
+                      borderRadius: BorderRadius.circular(6),
+                      color: Colors.white,
+                    ),
+                    child: Text(
+                      details.purposeDetails.isNotEmpty ? details.purposeDetails : 'No detailed tasks provided.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: details.purposeDetails.isNotEmpty ? HygColors.ink : const Color(0xFF94A3B8),
+                        fontStyle: details.purposeDetails.isNotEmpty ? FontStyle.normal : FontStyle.italic,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExpenseRow(String title, String subtitle, double amount) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(
+          child: RichText(
+            text: TextSpan(
+              style: const TextStyle(fontSize: 12, color: HygColors.ink),
+              children: [
+                TextSpan(
+                  text: title,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                TextSpan(
+                  text: ' $subtitle',
+                  style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.normal),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Container(
+          width: 125,
+          height: 32,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            border: Border.all(color: const Color(0xFFCBD5E1)),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          alignment: Alignment.centerLeft,
+          child: Row(
+            children: [
+              const Text(
+                '₱ ',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
+              ),
+              Expanded(
+                child: Text(
+                  _formatCurrency(amount),
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: HygColors.ink),
+                  textAlign: TextAlign.right,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTravelFinancialCard(BuildContext context, _TravelOrderDetails details) {
+    double transportCost = details.transportBudget;
+    if (transportCost == 0 && details.mealBudget == 0 && details.emergencyBudget == 0 && details.totalBudget > 0) {
+      transportCost = details.totalBudget;
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: HygColors.border),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: const [
+              Icon(Icons.payments_outlined, size: 16, color: Color(0xFF64748B)),
+              SizedBox(width: 8),
+              Text(
+                'Financial Authorization & Per Diem Allowances',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  color: HygColors.ink,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          const Divider(height: 1, color: Color(0xFFF1F5F9)),
+          const SizedBox(height: 12),
+
+          // Table Header
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: const [
+              Text(
+                'Expense Classification',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
+              ),
+              Text(
+                'Pre-authorized Budget',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // Row 1: Transport Costs
+          _buildExpenseRow(
+            'Transport Costs',
+            '(Fuel, Tolls, Commuter Fares)',
+            transportCost,
+          ),
+          const SizedBox(height: 8),
+
+          // Row 2: Meal / Per Diem Allowance
+          _buildExpenseRow(
+            'Meal / Per Diem Allowance',
+            '(Standard Food Rate)',
+            details.mealBudget,
+          ),
+          const SizedBox(height: 8),
+
+          // Row 3: Emergency Out-of-Pocket Expense
+          _buildExpenseRow(
+            'Emergency Out-of-Pocket Expense',
+            '(Capped Parts/Tools)',
+            details.emergencyBudget,
+          ),
+          const SizedBox(height: 10),
+
+          // Total Row
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFFBEB),
+              border: Border.all(color: const Color(0xFFFDE68A)),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Total Pre-authorized Budget',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: HygColors.ink),
+                ),
+                Text(
+                  '₱ ${_formatCurrency(details.totalBudget)}',
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Color(0xFFB45309)),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // Accounting Fund Source & Control Codes
+          const Text(
+            'Accounting Fund Source & Control Codes',
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Cost Center Code',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Color(0xFF64748B)),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      details.costCenterCode.isNotEmpty ? details.costCenterCode : '000000',
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: HygColors.ink),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Charge to Store/Branch',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Color(0xFF64748B)),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      details.chargeToStore.isNotEmpty ? details.chargeToStore : (item.storeName ?? '—'),
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: HygColors.ink),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTravelApprovalTimelineCard(BuildContext context, AdminRequestItem item) {
+    final hasTimeline = item.approvalSummary.isNotEmpty || item.isAutoApprovedBirthdayGrant;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: HygColors.border),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: const [
+              Icon(Icons.account_tree_outlined, size: 16, color: Color(0xFF64748B)),
+              SizedBox(width: 8),
+              Text(
+                'Approval Timeline',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  color: HygColors.ink,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          const Divider(height: 1, color: Color(0xFFF1F5F9)),
+          const SizedBox(height: 10),
+          if (hasTimeline)
+            _buildGlobalApprovalTimeline(context, item)
+          else
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                'No approval steps recorded.',
+                style: TextStyle(fontSize: 12, color: Color(0xFF64748B), fontStyle: FontStyle.italic),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -5234,6 +6120,61 @@ class _RequestDetailModal extends StatelessWidget {
                     // ESARF Layout
                     if (isEsarf) ...[
                       _buildEsarfEntriesTable(context, item, entries),
+                    ] else if (item.category == AdminRequestCategory.travelOrder) ...[
+                      // Travel Order Layout (3 Distinct Cards)
+                      if (item.status.trim().toLowerCase() == 'rejected' && item.rejectedReason != null && item.rejectedReason!.trim().isNotEmpty) ...[
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF2F2),
+                            border: Border.all(color: const Color(0xFFFCA5A5)),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Reason for Rejection:',
+                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFB91C1C)),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                item.rejectedReason!,
+                                style: const TextStyle(fontSize: 12, color: Color(0xFF7F1D1D)),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                      ],
+
+                      // Card 1: Travel Itinerary & Specific Work Intent
+                      _buildTravelItineraryCard(context, _travelDetails ?? _TravelOrderDetails.fromFallback(item)),
+                      const SizedBox(height: 14),
+
+                      // Card 2: Financial Authorization & Per Diem Allowances
+                      _buildTravelFinancialCard(context, _travelDetails ?? _TravelOrderDetails.fromFallback(item)),
+                      const SizedBox(height: 14),
+
+                      // Card 3: Approval Timeline
+                      _buildTravelApprovalTimelineCard(context, item),
+
+                      // Attached Proofs if any
+                      if (item.proofs.isNotEmpty || (item.proofUrl != null && item.proofUrl!.isNotEmpty)) ...[
+                        const SizedBox(height: 14),
+                        _buildReasonCard(
+                          context,
+                          item,
+                          'Travel Documentation & Attachments',
+                          item.proofs,
+                          fallbackProofUrl: item.proofUrl,
+                          fallbackProofTime: item.isGallery ? null : item.proofTime,
+                          fallbackProofLocation: item.isGallery ? null : item.proofLocation,
+                          fallbackProofId: item.isGallery ? null : item.proofId,
+                          fallbackProofSource: item.proofSource,
+                        ),
+                      ],
                     ] else ...[
                       // Leave & Perk Details
                       _buildNonEsarfDetails(context, item),
@@ -6560,7 +7501,7 @@ class _ValidatedRequestsScreen extends StatefulWidget {
 class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  final _tabs = const ['ESARF / Time', 'Leave', 'Perks'];
+  final _tabs = const ['ESARF / Time', 'Leave', 'Travel Order', 'Perks'];
 
   List<AdminRequestItem> _requests = [];
   bool _isLoading = false;
@@ -6582,7 +7523,8 @@ class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
     final initialIndex = switch (widget.initialCategory) {
       AdminRequestCategory.esarf => 0,
       AdminRequestCategory.leave => 1,
-      AdminRequestCategory.perk => 2,
+      AdminRequestCategory.travelOrder => 2,
+      AdminRequestCategory.perk => 3,
     };
     _tabController = TabController(
       length: _tabs.length,
@@ -6666,6 +7608,7 @@ class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
     final category = switch (tabIndex) {
       0 => AdminRequestCategory.esarf,
       1 => AdminRequestCategory.leave,
+      2 => AdminRequestCategory.travelOrder,
       _ => AdminRequestCategory.perk,
     };
 
@@ -6722,6 +7665,7 @@ class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
     final category = switch (tabIndex) {
       0 => AdminRequestCategory.esarf,
       1 => AdminRequestCategory.leave,
+      2 => AdminRequestCategory.travelOrder,
       _ => AdminRequestCategory.perk,
     };
     return _requests
@@ -7309,6 +8253,7 @@ class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
                         category: switch (tabIndex) {
                           0 => AdminRequestCategory.esarf,
                           1 => AdminRequestCategory.leave,
+                          2 => AdminRequestCategory.travelOrder,
                           _ => AdminRequestCategory.perk,
                         },
                         showDelete: false,

@@ -1789,9 +1789,15 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
           _selectSection(HrSection.requests);
         });
         break;
-      case NotificationCategory.perk:
+      case NotificationCategory.travelOrder:
         setState(() {
           _requestsInitialTab = 2;
+          _selectSection(HrSection.requests);
+        });
+        break;
+      case NotificationCategory.perk:
+        setState(() {
+          _requestsInitialTab = 3;
           _selectSection(HrSection.requests);
         });
         break;

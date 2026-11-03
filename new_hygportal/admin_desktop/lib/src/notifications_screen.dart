@@ -8,6 +8,7 @@ enum NotificationCategory {
   all,
   esarf,
   leave,
+  travelOrder,
   perk,
   user,
   photoProof,
@@ -53,6 +54,8 @@ class AdminNotificationItem {
         return 'ESARF';
       case NotificationCategory.leave:
         return 'Leave';
+      case NotificationCategory.travelOrder:
+        return 'Travel Order';
       case NotificationCategory.perk:
         return 'Perks';
       case NotificationCategory.user:
@@ -72,6 +75,8 @@ class AdminNotificationItem {
         return const Color(0xFFF97316); // Vibrant Orange
       case NotificationCategory.leave:
         return const Color(0xFF0284C7); // Sky Blue
+      case NotificationCategory.travelOrder:
+        return const Color(0xFF0D9488); // Teal
       case NotificationCategory.perk:
         return const Color(0xFF9333EA); // Purple
       case NotificationCategory.user:
@@ -91,6 +96,8 @@ class AdminNotificationItem {
         return Icons.access_time_filled_rounded;
       case NotificationCategory.leave:
         return Icons.event_available_rounded;
+      case NotificationCategory.travelOrder:
+        return Icons.commute_rounded;
       case NotificationCategory.perk:
         return Icons.card_giftcard_rounded;
       case NotificationCategory.user:
@@ -193,6 +200,7 @@ class AdminNotificationsService {
           final isLeave = req.category == AdminRequestCategory.leave;
           final isPerk = req.category == AdminRequestCategory.perk;
           final isEsarf = req.category == AdminRequestCategory.esarf;
+          final isTravel = req.category == AdminRequestCategory.travelOrder;
 
           DateTime? submittedDate;
           if (req.submittedAt != null && req.submittedAt!.isNotEmpty) {
@@ -235,6 +243,19 @@ class AdminNotificationsService {
                 : (req.perkAmount != null ? '₱${req.perkAmount!.toStringAsFixed(2)}' : '');
             final extra = [qtyStr, amountStr].where((s) => s.isNotEmpty).join(' • ');
             message = '$who requested $prodName${extra.isNotEmpty ? ' ($extra)' : ''}';
+          } else if (isTravel) {
+            category = NotificationCategory.travelOrder;
+            title = 'Travel Order Request';
+            final who = req.employeeName ?? 'An employee';
+            final depStr = req.dateFrom ?? req.startDate ?? '';
+            final retStr = req.dateTo ?? req.endDate ?? '';
+            final datesStr = depStr.isNotEmpty
+                ? (retStr.isNotEmpty && retStr != depStr ? '($depStr to $retStr)' : '($depStr)')
+                : '';
+            message = '$who submitted an Official Travel Order $datesStr'.trim();
+            if (req.reason != null && req.reason!.trim().isNotEmpty) {
+              message += ' • "${req.reason!.trim()}"';
+            }
           } else if (isEsarf) {
             category = NotificationCategory.esarf;
             final txName = req.transactionType ?? req.requestTypeName;
@@ -554,6 +575,9 @@ class _AdminNotificationsPopoverState extends State<AdminNotificationsPopover> {
           final leaveCount = allNotifications
               .where((n) => n.category == NotificationCategory.leave)
               .length;
+          final travelCount = allNotifications
+              .where((n) => n.category == NotificationCategory.travelOrder)
+              .length;
           final perkCount = allNotifications
               .where((n) => n.category == NotificationCategory.perk)
               .length;
@@ -573,6 +597,9 @@ class _AdminNotificationsPopoverState extends State<AdminNotificationsPopover> {
             }
             if (_selectedCategory == NotificationCategory.leave) {
               return n.category == NotificationCategory.leave;
+            }
+            if (_selectedCategory == NotificationCategory.travelOrder) {
+              return n.category == NotificationCategory.travelOrder;
             }
             if (_selectedCategory == NotificationCategory.perk) {
               return n.category == NotificationCategory.perk;
@@ -623,6 +650,7 @@ class _AdminNotificationsPopoverState extends State<AdminNotificationsPopover> {
                     allCount: allNotifications.length,
                     esarfCount: esarfCount,
                     leaveCount: leaveCount,
+                    travelCount: travelCount,
                     perkCount: perkCount,
                     activityCount: activityCount,
                   ),
@@ -773,6 +801,7 @@ class _AdminNotificationsPopoverState extends State<AdminNotificationsPopover> {
     required int allCount,
     required int esarfCount,
     required int leaveCount,
+    required int travelCount,
     required int perkCount,
     required int activityCount,
   }) {
@@ -788,6 +817,8 @@ class _AdminNotificationsPopoverState extends State<AdminNotificationsPopover> {
             _buildTabChip('ESARF', NotificationCategory.esarf, esarfCount),
             const SizedBox(width: 6),
             _buildTabChip('Leave', NotificationCategory.leave, leaveCount),
+            const SizedBox(width: 6),
+            _buildTabChip('Travel', NotificationCategory.travelOrder, travelCount),
             const SizedBox(width: 6),
             _buildTabChip('Perks', NotificationCategory.perk, perkCount),
             const SizedBox(width: 6),
@@ -1391,8 +1422,10 @@ class _HygNotificationsScreenState extends State<HygNotificationsScreen> {
       widget.onNavigateToRequests?.call(0);
     } else if (item.category == NotificationCategory.leave) {
       widget.onNavigateToRequests?.call(1);
-    } else if (item.category == NotificationCategory.perk) {
+    } else if (item.category == NotificationCategory.travelOrder) {
       widget.onNavigateToRequests?.call(2);
+    } else if (item.category == NotificationCategory.perk) {
+      widget.onNavigateToRequests?.call(3);
     } else if (item.category == NotificationCategory.user) {
       widget.onNavigateToUsers?.call();
     } else if (item.category == NotificationCategory.photoProof) {
@@ -1826,6 +1859,8 @@ class _HygNotificationsScreenState extends State<HygNotificationsScreen> {
               const SizedBox(width: 8),
               _buildCategoryPill('Leave Requests', NotificationCategory.leave),
               const SizedBox(width: 8),
+              _buildCategoryPill('Travel Orders', NotificationCategory.travelOrder),
+              const SizedBox(width: 8),
               _buildCategoryPill('Perks Requests', NotificationCategory.perk),
               const SizedBox(width: 8),
               _buildCategoryPill('Users & Accounts', NotificationCategory.user),
@@ -2103,6 +2138,8 @@ class _HygNotificationsScreenState extends State<HygNotificationsScreen> {
         return 'View ESARF';
       case NotificationCategory.leave:
         return 'View Leave';
+      case NotificationCategory.travelOrder:
+        return 'View Travel Order';
       case NotificationCategory.perk:
         return 'View Perk';
       case NotificationCategory.user:

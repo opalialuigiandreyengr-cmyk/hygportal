@@ -1845,6 +1845,7 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
                               'Regular',
                               'Part-Time',
                               'Probationary',
+                              'Seasonal',
                               'Trainee',
                             ],
                             onChanged: (value) =>

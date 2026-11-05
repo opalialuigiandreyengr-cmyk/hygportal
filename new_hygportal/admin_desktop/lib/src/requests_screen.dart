@@ -393,6 +393,45 @@ bool _matchesEsarfTransactionType(AdminRequestItem item, String filter) {
   return false;
 }
 
+const _defaultLeaveCategories = [
+  'Vacation Leave',
+  'Sick Leave',
+  'Birthday Leave',
+  'Emergency Leave',
+  'Bereavement Leave',
+  'Maternity Leave',
+  'Paternity Leave',
+  'Solo Parent Leave',
+];
+
+/// Normalizes leave category (e.g. 'Birthday Leave Grant' -> 'Birthday Leave').
+String _canonicalLeaveCategory(String raw) {
+  final clean = raw.trim();
+  if (clean.isEmpty) return '';
+  final lower = clean.toLowerCase();
+  if (lower == 'birthday leave grant' || lower == 'birthday leave') {
+    return 'Birthday Leave';
+  }
+  return clean;
+}
+
+/// Helper to match an AdminRequestItem against a leave category filter string.
+bool _matchesLeaveCategory(AdminRequestItem item, String filter) {
+  if (filter == 'all') return true;
+  final filterCanon = _canonicalLeaveCategory(filter).toLowerCase();
+  final itemCanon = _canonicalLeaveCategory(item.leaveCategory ?? '').toLowerCase();
+  if (itemCanon.isNotEmpty && itemCanon == filterCanon) return true;
+  if (itemCanon.isEmpty && item.requestTypeName.toLowerCase().contains(filterCanon)) {
+    return true;
+  }
+  if (filterCanon == 'birthday leave' &&
+      (item.isAutoApprovedBirthdayGrant ||
+          item.requestTypeName.toLowerCase().contains('birthday'))) {
+    return true;
+  }
+  return false;
+}
+
 // Ã¢â€â‚¬Ã¢â€â‚¬ Header Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 class RequestsHeader extends StatelessWidget {
@@ -561,6 +600,7 @@ class _RequestsPanelState extends State<RequestsPanel>
   String _statusFilter = 'all';
   String _departmentFilter = 'all';
   String _txTypeFilter = 'all';
+  String _leaveCategoryFilter = 'all';
   List<String> _loadedDepartments = [];
   DateTime? _dateFrom;
   DateTime? _dateTo;
@@ -611,6 +651,27 @@ class _RequestsPanelState extends State<RequestsPanel>
         final canon = _canonicalDepartmentName(d);
         if (canon.isNotEmpty && canon != '-' && canon != '—') {
           map.putIfAbsent(canon.toLowerCase(), () => canon);
+        }
+      }
+    }
+    final sorted = map.values.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return sorted;
+  }
+
+  List<String> get _leaveCategoryOptions {
+    final map = <String, String>{};
+    for (final c in _defaultLeaveCategories) {
+      map[c.toLowerCase()] = c;
+    }
+    for (final r in widget.requests) {
+      if (r.category == AdminRequestCategory.leave) {
+        final rawCat = r.leaveCategory?.trim();
+        if (rawCat != null && rawCat.isNotEmpty && rawCat != '-' && rawCat != '—') {
+          final canon = _canonicalLeaveCategory(rawCat);
+          if (canon.isNotEmpty) {
+            map.putIfAbsent(canon.toLowerCase(), () => canon);
+          }
         }
       }
     }
@@ -679,13 +740,22 @@ class _RequestsPanelState extends State<RequestsPanel>
       }).toList();
     }
 
-    // ESARF / Time tab specific filters: Department and Transaction Type
+    // Department filter applies to all tabs (ESARF / Time, Leave, Travel Order, Perks)
+    if (_departmentFilter != 'all') {
+      items = items.where((r) => _matchesDepartment(r, _departmentFilter)).toList();
+    }
+
+    // ESARF / Time tab specific filter: Transaction Type
     if (tabIndex == 0) {
-      if (_departmentFilter != 'all') {
-        items = items.where((r) => _matchesDepartment(r, _departmentFilter)).toList();
-      }
       if (_txTypeFilter != 'all') {
         items = items.where((r) => _matchesEsarfTransactionType(r, _txTypeFilter)).toList();
+      }
+    }
+
+    // Leave tab specific filter: Leave Category
+    if (tabIndex == 1) {
+      if (_leaveCategoryFilter != 'all') {
+        items = items.where((r) => _matchesLeaveCategory(r, _leaveCategoryFilter)).toList();
       }
     }
 
@@ -1967,61 +2037,61 @@ class _RequestsPanelState extends State<RequestsPanel>
                   ),
                 ),
                 const SizedBox(width: 10),
-                if (_tabController.index == 0) ...[
-                  // Department Dropdown
-                  Builder(
-                    builder: (context) {
-                      final deptOptions = _departmentOptions;
-                      final effectiveDept = _departmentFilter == 'all'
-                          ? 'all'
-                          : (deptOptions.firstWhere(
-                              (d) => d.toLowerCase() == _departmentFilter.toLowerCase(),
-                              orElse: () => 'all',
-                            ));
-                      return SizedBox(
-                        width: 180,
-                        height: 38,
-                        child: DropdownButtonFormField<String>(
-                          key: ValueKey('req_dept_$effectiveDept'),
-                          initialValue: effectiveDept,
-                          isExpanded: true,
-                          onChanged: (v) => setState(() {
-                            _departmentFilter = v ?? 'all';
-                            _currentPage = 1;
-                          }),
-                          style: HygTypography.tableBody,
-                          decoration: InputDecoration(
-                            filled: true,
-                            fillColor: HygColors.background,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(9),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(9),
-                              borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                // Department Dropdown
+                Builder(
+                  builder: (context) {
+                    final deptOptions = _departmentOptions;
+                    final effectiveDept = _departmentFilter == 'all'
+                        ? 'all'
+                        : (deptOptions.firstWhere(
+                            (d) => d.toLowerCase() == _departmentFilter.toLowerCase(),
+                            orElse: () => 'all',
+                          ));
+                    return SizedBox(
+                      width: 180,
+                      height: 38,
+                      child: DropdownButtonFormField<String>(
+                        key: ValueKey('req_dept_$effectiveDept'),
+                        initialValue: effectiveDept,
+                        isExpanded: true,
+                        onChanged: (v) => setState(() {
+                          _departmentFilter = v ?? 'all';
+                          _currentPage = 1;
+                        }),
+                        style: HygTypography.tableBody,
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor: HygColors.background,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(9),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(9),
+                            borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                          ),
+                        ),
+                        items: [
+                          const DropdownMenuItem(
+                            value: 'all',
+                            child: Text('All Departments', overflow: TextOverflow.ellipsis),
+                          ),
+                          ...deptOptions.map(
+                            (dept) => DropdownMenuItem(
+                              value: dept,
+                              child: Text(dept, overflow: TextOverflow.ellipsis),
                             ),
                           ),
-                          items: [
-                            const DropdownMenuItem(
-                              value: 'all',
-                              child: Text('All Departments', overflow: TextOverflow.ellipsis),
-                            ),
-                            ...deptOptions.map(
-                              (dept) => DropdownMenuItem(
-                                value: dept,
-                                child: Text(dept, overflow: TextOverflow.ellipsis),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                  const SizedBox(width: 10),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(width: 10),
+                if (_tabController.index == 0) ...[
                   // Transaction Type Dropdown
                   SizedBox(
                     width: 155,
@@ -2081,6 +2151,62 @@ class _RequestsPanelState extends State<RequestsPanel>
                         ),
                       ],
                     ),
+                  ),
+                  const SizedBox(width: 10),
+                ],
+                if (_tabController.index == 1) ...[
+                  // Leave Category Dropdown
+                  Builder(
+                    builder: (context) {
+                      final catOptions = _leaveCategoryOptions;
+                      final effectiveCat = _leaveCategoryFilter == 'all'
+                          ? 'all'
+                          : (catOptions.firstWhere(
+                              (c) => c.toLowerCase() == _leaveCategoryFilter.toLowerCase(),
+                              orElse: () => 'all',
+                            ));
+                      return SizedBox(
+                        width: 170,
+                        height: 38,
+                        child: DropdownButtonFormField<String>(
+                          key: ValueKey('req_leave_cat_$effectiveCat'),
+                          initialValue: effectiveCat,
+                          isExpanded: true,
+                          onChanged: (v) => setState(() {
+                            _leaveCategoryFilter = v ?? 'all';
+                            _currentPage = 1;
+                          }),
+                          style: HygTypography.tableBody,
+                          decoration: InputDecoration(
+                            filled: true,
+                            fillColor: HygColors.background,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(9),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(9),
+                              borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                            ),
+                          ),
+                          items: [
+                            const DropdownMenuItem(
+                              value: 'all',
+                              child: Text('All Categories', overflow: TextOverflow.ellipsis),
+                            ),
+                            ...catOptions.map(
+                              (cat) => DropdownMenuItem(
+                                value: cat,
+                                child: Text(cat, overflow: TextOverflow.ellipsis),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
                   const SizedBox(width: 10),
                 ],
@@ -2226,12 +2352,15 @@ class _RequestsPanelState extends State<RequestsPanel>
                     ),
                   ),
                 ],
-                if (_tabController.index == 0 && (_departmentFilter != 'all' || _txTypeFilter != 'all')) ...[
+                if (_departmentFilter != 'all' ||
+                    (_tabController.index == 0 && _txTypeFilter != 'all') ||
+                    (_tabController.index == 1 && _leaveCategoryFilter != 'all')) ...[
                   const SizedBox(width: 8),
                   GestureDetector(
                     onTap: () => setState(() {
                       _departmentFilter = 'all';
                       _txTypeFilter = 'all';
+                      _leaveCategoryFilter = 'all';
                       _currentPage = 1;
                     }),
                     child: Container(
@@ -2328,6 +2457,7 @@ class _RequestsPanelState extends State<RequestsPanel>
                         _statusFilter != 'all' ||
                         _departmentFilter != 'all' ||
                         _txTypeFilter != 'all' ||
+                        _leaveCategoryFilter != 'all' ||
                         _dateFrom != null ||
                         _dateTo != null
                     ? 'Try adjusting your filters.'
@@ -7510,6 +7640,7 @@ class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
   String _searchQuery = '';
   String _departmentFilter = 'all';
   String _txTypeFilter = 'all';
+  String _leaveCategoryFilter = 'all';
   List<String> _loadedDepartments = [];
   DateTime? _dateFrom;
   DateTime? _dateTo;
@@ -7577,6 +7708,27 @@ class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
     return sorted;
   }
 
+  List<String> get _leaveCategoryOptions {
+    final map = <String, String>{};
+    for (final c in _defaultLeaveCategories) {
+      map[c.toLowerCase()] = c;
+    }
+    for (final r in _requests) {
+      if (r.category == AdminRequestCategory.leave) {
+        final rawCat = r.leaveCategory?.trim();
+        if (rawCat != null && rawCat.isNotEmpty && rawCat != '-' && rawCat != '—') {
+          final canon = _canonicalLeaveCategory(rawCat);
+          if (canon.isNotEmpty) {
+            map.putIfAbsent(canon.toLowerCase(), () => canon);
+          }
+        }
+      }
+    }
+    final sorted = map.values.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return sorted;
+  }
+
   @override
   void dispose() {
     _tabController.dispose();
@@ -7631,13 +7783,22 @@ class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
       }).toList();
     }
 
-    // ESARF / Time tab specific filters: Department and Transaction Type
+    // Department filter applies to all tabs (ESARF / Time, Leave, Travel Order, Perks)
+    if (_departmentFilter != 'all') {
+      items = items.where((r) => _matchesDepartment(r, _departmentFilter)).toList();
+    }
+
+    // ESARF / Time tab specific filter: Transaction Type
     if (tabIndex == 0) {
-      if (_departmentFilter != 'all') {
-        items = items.where((r) => _matchesDepartment(r, _departmentFilter)).toList();
-      }
       if (_txTypeFilter != 'all') {
         items = items.where((r) => _matchesEsarfTransactionType(r, _txTypeFilter)).toList();
+      }
+    }
+
+    // Leave tab specific filter: Leave Category
+    if (tabIndex == 1) {
+      if (_leaveCategoryFilter != 'all') {
+        items = items.where((r) => _matchesLeaveCategory(r, _leaveCategoryFilter)).toList();
       }
     }
 
@@ -7962,61 +8123,61 @@ class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
                             ),
                           ),
                           const SizedBox(width: 10),
-                          if (_tabController.index == 0) ...[
-                            // Department dropdown
-                            Builder(
-                              builder: (context) {
-                                final deptOptions = _departmentOptions;
-                                final effectiveDept = _departmentFilter == 'all'
-                                    ? 'all'
-                                    : (deptOptions.firstWhere(
-                                        (d) => d.toLowerCase() == _departmentFilter.toLowerCase(),
-                                        orElse: () => 'all',
-                                      ));
-                                return SizedBox(
-                                  width: 180,
-                                  height: 38,
-                                  child: DropdownButtonFormField<String>(
-                                    key: ValueKey('val_dept_$effectiveDept'),
-                                    initialValue: effectiveDept,
-                                    isExpanded: true,
-                                    onChanged: (v) => setState(() {
-                                      _departmentFilter = v ?? 'all';
-                                      _currentPage = 1;
-                                    }),
-                                    style: HygTypography.tableBody,
-                                    decoration: InputDecoration(
-                                      filled: true,
-                                      fillColor: HygColors.background,
-                                      contentPadding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                        vertical: 8,
-                                      ),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(9),
-                                      ),
-                                      enabledBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(9),
-                                        borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                          // Department dropdown
+                          Builder(
+                            builder: (context) {
+                              final deptOptions = _departmentOptions;
+                              final effectiveDept = _departmentFilter == 'all'
+                                  ? 'all'
+                                  : (deptOptions.firstWhere(
+                                      (d) => d.toLowerCase() == _departmentFilter.toLowerCase(),
+                                      orElse: () => 'all',
+                                    ));
+                              return SizedBox(
+                                width: 180,
+                                height: 38,
+                                child: DropdownButtonFormField<String>(
+                                  key: ValueKey('val_dept_$effectiveDept'),
+                                  initialValue: effectiveDept,
+                                  isExpanded: true,
+                                  onChanged: (v) => setState(() {
+                                    _departmentFilter = v ?? 'all';
+                                    _currentPage = 1;
+                                  }),
+                                  style: HygTypography.tableBody,
+                                  decoration: InputDecoration(
+                                    filled: true,
+                                    fillColor: HygColors.background,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 8,
+                                    ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(9),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(9),
+                                      borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                                    ),
+                                  ),
+                                  items: [
+                                    const DropdownMenuItem(
+                                      value: 'all',
+                                      child: Text('All Departments', overflow: TextOverflow.ellipsis),
+                                    ),
+                                    ...deptOptions.map(
+                                      (dept) => DropdownMenuItem(
+                                        value: dept,
+                                        child: Text(dept, overflow: TextOverflow.ellipsis),
                                       ),
                                     ),
-                                    items: [
-                                      const DropdownMenuItem(
-                                        value: 'all',
-                                        child: Text('All Departments', overflow: TextOverflow.ellipsis),
-                                      ),
-                                      ...deptOptions.map(
-                                        (dept) => DropdownMenuItem(
-                                          value: dept,
-                                          child: Text(dept, overflow: TextOverflow.ellipsis),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              },
-                            ),
-                            const SizedBox(width: 10),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                          const SizedBox(width: 10),
+                          if (_tabController.index == 0) ...[
                             // Transaction Type dropdown
                             SizedBox(
                               width: 155,
@@ -8076,6 +8237,62 @@ class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
                                   ),
                                 ],
                               ),
+                            ),
+                            const SizedBox(width: 10),
+                          ],
+                          if (_tabController.index == 1) ...[
+                            // Leave Category dropdown
+                            Builder(
+                              builder: (context) {
+                                final catOptions = _leaveCategoryOptions;
+                                final effectiveCat = _leaveCategoryFilter == 'all'
+                                    ? 'all'
+                                    : (catOptions.firstWhere(
+                                        (c) => c.toLowerCase() == _leaveCategoryFilter.toLowerCase(),
+                                        orElse: () => 'all',
+                                      ));
+                                return SizedBox(
+                                  width: 170,
+                                  height: 38,
+                                  child: DropdownButtonFormField<String>(
+                                    key: ValueKey('val_leave_cat_$effectiveCat'),
+                                    initialValue: effectiveCat,
+                                    isExpanded: true,
+                                    onChanged: (v) => setState(() {
+                                      _leaveCategoryFilter = v ?? 'all';
+                                      _currentPage = 1;
+                                    }),
+                                    style: HygTypography.tableBody,
+                                    decoration: InputDecoration(
+                                      filled: true,
+                                      fillColor: HygColors.background,
+                                      contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 8,
+                                      ),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(9),
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(9),
+                                        borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                                      ),
+                                    ),
+                                    items: [
+                                      const DropdownMenuItem(
+                                        value: 'all',
+                                        child: Text('All Categories', overflow: TextOverflow.ellipsis),
+                                      ),
+                                      ...catOptions.map(
+                                        (cat) => DropdownMenuItem(
+                                          value: cat,
+                                          child: Text(cat, overflow: TextOverflow.ellipsis),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
                             ),
                             const SizedBox(width: 10),
                           ],
@@ -8165,12 +8382,15 @@ class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
                               ),
                             ),
                           ],
-                          if (_tabController.index == 0 && (_departmentFilter != 'all' || _txTypeFilter != 'all')) ...[
+                          if (_departmentFilter != 'all' ||
+                              (_tabController.index == 0 && _txTypeFilter != 'all') ||
+                              (_tabController.index == 1 && _leaveCategoryFilter != 'all')) ...[
                             const SizedBox(width: 8),
                             GestureDetector(
                               onTap: () => setState(() {
                                 _departmentFilter = 'all';
                                 _txTypeFilter = 'all';
+                                _leaveCategoryFilter = 'all';
                                 _currentPage = 1;
                               }),
                               child: Container(
@@ -8241,6 +8461,7 @@ class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
                           message: _searchQuery.isNotEmpty ||
                                   _departmentFilter != 'all' ||
                                   _txTypeFilter != 'all' ||
+                                  _leaveCategoryFilter != 'all' ||
                                   _dateFrom != null ||
                                   _dateTo != null
                               ? 'Try adjusting your search or date filters.'

@@ -4955,6 +4955,7 @@ class TutorialService {
     String description = '',
     int sortOrder = 0,
     bool isActive = true,
+    String category = 'General',
   }) async {
     final videoId = extractYouTubeVideoId(youtubeUrl);
     final normalizedUrl = normalizeYouTubeUrl(youtubeUrl);
@@ -4965,6 +4966,7 @@ class TutorialService {
       'description': description.trim(),
       'sort_order': sortOrder,
       'is_active': isActive,
+      'category': category.trim(),
     };
 
     try {
@@ -4976,24 +4978,48 @@ class TutorialService {
       return PortalTutorialItem.fromMap(response);
     } catch (e) {
       debugPrint('Direct insert failed, attempting RPC: $e');
-      final newId = await _client.rpc('admin_save_portal_tutorial', params: {
-        'p_title': title.trim(),
-        'p_youtube_url': normalizedUrl,
-        'p_video_id': videoId,
-        'p_description': description.trim(),
-        'p_sort_order': sortOrder,
-        'p_is_active': isActive,
-      });
-      return PortalTutorialItem(
-        id: newId?.toString() ?? '',
-        title: title.trim(),
-        youtubeUrl: normalizedUrl,
-        videoId: videoId,
-        description: description.trim(),
-        sortOrder: sortOrder,
-        isActive: isActive,
-        createdAt: DateTime.now(),
-      );
+      try {
+        final newId = await _client.rpc('admin_save_portal_tutorial', params: {
+          'p_title': title.trim(),
+          'p_youtube_url': normalizedUrl,
+          'p_video_id': videoId,
+          'p_description': description.trim(),
+          'p_sort_order': sortOrder,
+          'p_is_active': isActive,
+          'p_category': category.trim(),
+        });
+        return PortalTutorialItem(
+          id: newId?.toString() ?? '',
+          title: title.trim(),
+          youtubeUrl: normalizedUrl,
+          videoId: videoId,
+          description: description.trim(),
+          sortOrder: sortOrder,
+          isActive: isActive,
+          category: category.trim(),
+          createdAt: DateTime.now(),
+        );
+      } catch (rpcErr) {
+        final newId = await _client.rpc('admin_save_portal_tutorial', params: {
+          'p_title': title.trim(),
+          'p_youtube_url': normalizedUrl,
+          'p_video_id': videoId,
+          'p_description': description.trim(),
+          'p_sort_order': sortOrder,
+          'p_is_active': isActive,
+        });
+        return PortalTutorialItem(
+          id: newId?.toString() ?? '',
+          title: title.trim(),
+          youtubeUrl: normalizedUrl,
+          videoId: videoId,
+          description: description.trim(),
+          sortOrder: sortOrder,
+          isActive: isActive,
+          category: category.trim(),
+          createdAt: DateTime.now(),
+        );
+      }
     }
   }
 
@@ -5004,6 +5030,7 @@ class TutorialService {
     String description = '',
     int sortOrder = 0,
     bool isActive = true,
+    String category = 'General',
   }) async {
     final videoId = extractYouTubeVideoId(youtubeUrl);
     final normalizedUrl = normalizeYouTubeUrl(youtubeUrl);
@@ -5014,6 +5041,7 @@ class TutorialService {
       'description': description.trim(),
       'sort_order': sortOrder,
       'is_active': isActive,
+      'category': category.trim(),
       'updated_at': DateTime.now().toIso8601String(),
     };
 
@@ -5021,15 +5049,28 @@ class TutorialService {
       await _client.from('portal_tutorials').update(data).eq('id', id);
     } catch (e) {
       debugPrint('Direct update failed, attempting RPC: $e');
-      await _client.rpc('admin_save_portal_tutorial', params: {
-        'p_id': id,
-        'p_title': title.trim(),
-        'p_youtube_url': normalizedUrl,
-        'p_video_id': videoId,
-        'p_description': description.trim(),
-        'p_sort_order': sortOrder,
-        'p_is_active': isActive,
-      });
+      try {
+        await _client.rpc('admin_save_portal_tutorial', params: {
+          'p_id': id,
+          'p_title': title.trim(),
+          'p_youtube_url': normalizedUrl,
+          'p_video_id': videoId,
+          'p_description': description.trim(),
+          'p_sort_order': sortOrder,
+          'p_is_active': isActive,
+          'p_category': category.trim(),
+        });
+      } catch (rpcErr) {
+        await _client.rpc('admin_save_portal_tutorial', params: {
+          'p_id': id,
+          'p_title': title.trim(),
+          'p_youtube_url': normalizedUrl,
+          'p_video_id': videoId,
+          'p_description': description.trim(),
+          'p_sort_order': sortOrder,
+          'p_is_active': isActive,
+        });
+      }
     }
   }
 

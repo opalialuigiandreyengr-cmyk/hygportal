@@ -13,6 +13,17 @@ class _HygTutorialsScreenState extends State<HygTutorialsScreen> {
   bool _isLoading = true;
   String? _error;
   String _activeFilter = 'All'; // 'All', 'Active', 'Inactive'
+  String _activeCategoryFilter = 'All Categories';
+
+  static const List<String> tutorialCategories = [
+    'Update and Install',
+    'ESARF',
+    'Pre-approved OT/Offset',
+    'Leave',
+    'Perks',
+    'Travel Order',
+    'General',
+  ];
 
   @override
   void initState() {
@@ -55,10 +66,15 @@ class _HygTutorialsScreenState extends State<HygTutorialsScreen> {
     return _tutorials.where((item) {
       if (_activeFilter == 'Active' && !item.isActive) return false;
       if (_activeFilter == 'Inactive' && item.isActive) return false;
+      if (_activeCategoryFilter != 'All Categories' &&
+          item.category.toLowerCase() != _activeCategoryFilter.toLowerCase()) {
+        return false;
+      }
 
       if (query.isEmpty) return true;
       return item.title.toLowerCase().contains(query) ||
           item.description.toLowerCase().contains(query) ||
+          item.category.toLowerCase().contains(query) ||
           item.youtubeUrl.toLowerCase().contains(query);
     }).toList();
   }
@@ -68,6 +84,9 @@ class _HygTutorialsScreenState extends State<HygTutorialsScreen> {
     final titleController = TextEditingController(text: existing?.title ?? '');
     final urlController = TextEditingController(text: existing?.youtubeUrl ?? '');
     final descController = TextEditingController(text: existing?.description ?? '');
+    String selectedCategory = (existing != null && existing.category.isNotEmpty)
+        ? existing.category
+        : tutorialCategories.first;
     bool isActive = existing?.isActive ?? true;
     bool isSubmitting = false;
     String? dialogError;
@@ -176,6 +195,55 @@ class _HygTutorialsScreenState extends State<HygTutorialsScreen> {
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
                             borderSide: const BorderSide(color: Color(0xFF4F46E5), width: 1.5),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Category Dropdown
+                      const Text(
+                        'Category *',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF1E293B),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFCBD5E1)),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: tutorialCategories.contains(selectedCategory)
+                                ? selectedCategory
+                                : tutorialCategories.first,
+                            isExpanded: true,
+                            icon: const Icon(Icons.keyboard_arrow_down, color: Color(0xFF64748B)),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setDialogState(() => selectedCategory = val);
+                              }
+                            },
+                            items: tutorialCategories.map((cat) {
+                              return DropdownMenuItem(
+                                value: cat,
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.folder_outlined, size: 16, color: Color(0xFF4F46E5)),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      cat,
+                                      style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
                           ),
                         ),
                       ),
@@ -447,6 +515,7 @@ class _HygTutorialsScreenState extends State<HygTutorialsScreen> {
                                           youtubeUrl: url,
                                           description: descController.text.trim(),
                                           isActive: isActive,
+                                          category: selectedCategory,
                                         );
                                       } else {
                                         await TutorialService.createTutorial(
@@ -454,6 +523,7 @@ class _HygTutorialsScreenState extends State<HygTutorialsScreen> {
                                           youtubeUrl: url,
                                           description: descController.text.trim(),
                                           isActive: isActive,
+                                          category: selectedCategory,
                                         );
                                       }
                                       if (dialogCtx.mounted) {
@@ -747,7 +817,64 @@ class _HygTutorialsScreenState extends State<HygTutorialsScreen> {
               ),
             ),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 12),
+
+          // Category dropdown filter
+          Container(
+            height: 38,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: _activeCategoryFilter == 'All Categories'
+                    ? const Color(0xFFCBD5E1)
+                    : const Color(0xFF818CF8),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.folder_outlined,
+                  size: 16,
+                  color: _activeCategoryFilter == 'All Categories'
+                      ? const Color(0xFF64748B)
+                      : const Color(0xFF4F46E5),
+                ),
+                const SizedBox(width: 6),
+                DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _activeCategoryFilter,
+                    icon: const Icon(Icons.arrow_drop_down, size: 20, color: Color(0xFF64748B)),
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: _activeCategoryFilter == 'All Categories' ? FontWeight.w500 : FontWeight.w700,
+                      color: _activeCategoryFilter == 'All Categories' ? const Color(0xFF334155) : const Color(0xFF4F46E5),
+                    ),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setState(() => _activeCategoryFilter = val);
+                      }
+                    },
+                    items: [
+                      const DropdownMenuItem(
+                        value: 'All Categories',
+                        child: Text('All Categories'),
+                      ),
+                      ...tutorialCategories.map(
+                        (cat) => DropdownMenuItem(
+                          value: cat,
+                          child: Text(cat),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
 
           // Filter chips
           _buildFilterChip('All', 'All ($totalCount)'),
@@ -805,10 +932,10 @@ class _HygTutorialsScreenState extends State<HygTutorialsScreen> {
         final double itemWidth =
             (constraints.maxWidth - (crossAxisCount - 1) * crossAxisSpacing) / crossAxisCount;
         final double thumbnailHeight = itemWidth * 9 / 16;
-        // Info height: accommodates 2-line title, 2-line description, 8px spacing, and action row
-        const double infoHeight = 126;
+        // Info height: accommodates category tag, 2-line title, 2-line description, and action row
+        const double infoHeight = 168;
         final double totalCardHeight = thumbnailHeight + infoHeight;
-        final double dynamicAspectRatio = (itemWidth / totalCardHeight).clamp(1.05, 1.45);
+        final double dynamicAspectRatio = (itemWidth / totalCardHeight).clamp(0.70, 1.45);
 
         return GridView.builder(
           padding: const EdgeInsets.only(bottom: 20),
@@ -929,17 +1056,35 @@ class _HygTutorialsScreenState extends State<HygTutorialsScreen> {
           // Video Information & Actions
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Category tag
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEEF2FF),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: const Color(0xFFC7D2FE)),
+                    ),
+                    child: Text(
+                      tutorial.category,
+                      style: const TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF4338CA),
+                      ),
+                    ),
+                  ),
                   // Title (up to 2 lines)
                   Text(
                     tutorial.title,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 14,
+                      fontSize: 13.5,
                       fontWeight: FontWeight.w700,
                       color: Color(0xFF0F172A),
                       height: 1.25,
@@ -947,7 +1092,7 @@ class _HygTutorialsScreenState extends State<HygTutorialsScreen> {
                   ),
                   // Description (strictly limited to 2 lines in preview)
                   if (tutorial.description.isNotEmpty) ...[
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 3),
                     Text(
                       tutorial.description,
                       maxLines: 2,
@@ -959,8 +1104,8 @@ class _HygTutorialsScreenState extends State<HygTutorialsScreen> {
                       ),
                     ),
                   ],
-                  // Clean, adjusted spacing between description and YouTube Video URL
-                  const SizedBox(height: 8),
+                  // Flexible spacing between description and YouTube Video URL
+                  const Spacer(),
 
                   // URL Link & Action Buttons
                   Row(
@@ -1084,7 +1229,7 @@ class _HygTutorialsScreenState extends State<HygTutorialsScreen> {
     );
   }
 
-  static const String _migrationSql = '''-- Migration 0184: Create portal_tutorials table for YouTube video guides
+  static const String _migrationSql = '''-- Migration 0184 & 0219: Create portal_tutorials table for YouTube video guides
 CREATE TABLE IF NOT EXISTS public.portal_tutorials (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   title TEXT NOT NULL,
@@ -1093,10 +1238,12 @@ CREATE TABLE IF NOT EXISTS public.portal_tutorials (
   description TEXT DEFAULT '',
   sort_order INTEGER DEFAULT 0,
   is_active BOOLEAN DEFAULT true,
+  category TEXT DEFAULT 'General',
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
+ALTER TABLE public.portal_tutorials ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'General';
 ALTER TABLE public.portal_tutorials ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Allow read access to portal_tutorials" ON public.portal_tutorials;
@@ -1134,6 +1281,7 @@ RETURNS TABLE (
   description TEXT,
   sort_order INTEGER,
   is_active BOOLEAN,
+  category TEXT,
   created_at TIMESTAMPTZ,
   updated_at TIMESTAMPTZ
 )
@@ -1143,7 +1291,7 @@ SET search_path = public
 AS \$\$
 BEGIN
   RETURN QUERY
-  SELECT t.id, t.title, t.youtube_url, t.video_id, t.description, t.sort_order, t.is_active, t.created_at, t.updated_at
+  SELECT t.id, t.title, t.youtube_url, t.video_id, t.description, t.sort_order, t.is_active, COALESCE(t.category, 'General'), t.created_at, t.updated_at
   FROM public.portal_tutorials t
   ORDER BY t.sort_order ASC, t.created_at DESC;
 END;

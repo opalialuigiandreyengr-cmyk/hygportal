@@ -1878,6 +1878,7 @@ class PortalTutorialItem {
     this.description = '',
     this.sortOrder = 0,
     this.isActive = true,
+    this.category = 'General',
     this.createdAt,
     this.updatedAt,
   });
@@ -1889,6 +1890,7 @@ class PortalTutorialItem {
   final String description;
   final int sortOrder;
   final bool isActive;
+  final String category;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -1900,15 +1902,81 @@ class PortalTutorialItem {
       ? 'https://www.youtube.com/embed/$videoId'
       : '';
 
+  static String _inferCategory(String title, String description) {
+    final text = '$title $description'.toLowerCase();
+    if (text.contains('update') ||
+        text.contains('install') ||
+        text.contains('download') ||
+        text.contains('apk') ||
+        text.contains('version') ||
+        text.contains('setup') ||
+        text.contains('updating') ||
+        text.contains('installing')) {
+      return 'Update and Install';
+    }
+    if (text.contains('esarf') ||
+        text.contains('time request') ||
+        text.contains('time adjustment') ||
+        text.contains('attendance') ||
+        text.contains('dtr') ||
+        text.contains('biometric') ||
+        text.contains('clock in') ||
+        text.contains('clock out') ||
+        text.contains('punch') ||
+        text.contains('change schedule')) {
+      return 'ESARF';
+    }
+    if (text.contains('pre-approved') ||
+        text.contains('preapproved') ||
+        text.contains('overtime') ||
+        text.contains(' ot ') ||
+        text.contains('offset') ||
+        text.contains('ot/offset') ||
+        text.contains('ot / offset')) {
+      return 'Pre-approved OT/Offset';
+    }
+    if (text.contains('leave') ||
+        text.contains('vacation') ||
+        text.contains('sick') ||
+        text.contains('maternity') ||
+        text.contains('paternity') ||
+        text.contains('bereavement') ||
+        text.contains('credit')) {
+      return 'Leave';
+    }
+    if (text.contains('perk') ||
+        text.contains('reward') ||
+        text.contains('discount') ||
+        text.contains('point') ||
+        text.contains('benefit')) {
+      return 'Perks';
+    }
+    if (text.contains('travel') ||
+        text.contains('travel order') ||
+        text.contains('trip') ||
+        text.contains('errand') ||
+        text.contains('locator') ||
+        text.contains('pass slip')) {
+      return 'Travel Order';
+    }
+    return 'General';
+  }
+
   factory PortalTutorialItem.fromMap(Map<String, dynamic> map) {
+    final title = map['title']?.toString() ?? '';
+    final description = map['description']?.toString() ?? '';
+    final rawCategory = map['category']?.toString() ?? '';
+    final category = rawCategory.isNotEmpty ? rawCategory : _inferCategory(title, description);
+
     return PortalTutorialItem(
       id: map['id']?.toString() ?? '',
-      title: map['title']?.toString() ?? '',
+      title: title,
       youtubeUrl: map['youtube_url']?.toString() ?? '',
       videoId: map['video_id']?.toString() ?? '',
-      description: map['description']?.toString() ?? '',
+      description: description,
       sortOrder: (map['sort_order'] as num?)?.toInt() ?? 0,
       isActive: map['is_active'] == true || map['is_active'] == null,
+      category: category,
       createdAt: map['created_at'] != null ? DateTime.tryParse(map['created_at'].toString()) : null,
       updatedAt: map['updated_at'] != null ? DateTime.tryParse(map['updated_at'].toString()) : null,
     );
@@ -1923,6 +1991,7 @@ class PortalTutorialItem {
       'description': description,
       'sort_order': sortOrder,
       'is_active': isActive,
+      'category': category,
     };
   }
 
@@ -1934,6 +2003,7 @@ class PortalTutorialItem {
     String? description,
     int? sortOrder,
     bool? isActive,
+    String? category,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -1945,6 +2015,7 @@ class PortalTutorialItem {
       description: description ?? this.description,
       sortOrder: sortOrder ?? this.sortOrder,
       isActive: isActive ?? this.isActive,
+      category: category ?? this.category,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

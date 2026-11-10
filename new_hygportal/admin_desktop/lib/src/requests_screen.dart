@@ -3142,10 +3142,12 @@ class _RequestCardRowState extends State<_RequestCardRow> {
   }
 
   Widget _buildReasonCell(String value) {
+    final clean = value.replaceAll(RegExp(r'\[Break:\s*[^\]]+\]', caseSensitive: false), '').trim();
+    final display = clean.isNotEmpty ? clean : '—';
     return Tooltip(
-      message: value,
+      message: display,
       child: Text(
-        value,
+        display,
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
         style: HygTypography.tableBody,
@@ -3558,15 +3560,18 @@ class _RequestCardRowState extends State<_RequestCardRow> {
         status == 'validated' ||
         (isAutoApproved && status != 'rejected' && status != 'cancelled');
     final isRevalidate = widget.isValidatedScreen || status == 'validated';
-    final isEsarfOrLeave = item.category == AdminRequestCategory.esarf ||
-        item.category == AdminRequestCategory.leave;
+    final isDownloadable = item.category == AdminRequestCategory.esarf ||
+        item.category == AdminRequestCategory.leave ||
+        item.category == AdminRequestCategory.travelOrder;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (isEsarfOrLeave) ...[
+        if (isDownloadable) ...[
           Tooltip(
-            message: 'Download Request (PDF)',
+            message: item.category == AdminRequestCategory.travelOrder
+                ? 'Download Travel Order (PDF)'
+                : 'Download Request (PDF)',
             child: InkWell(
               borderRadius: BorderRadius.circular(6),
               onTap: () => RequestPdfService.downloadRequestPdf(context: context, item: item),
@@ -3945,7 +3950,7 @@ class _RequestCardRowState extends State<_RequestCardRow> {
             style: HygTypography.tableBody,
           ),
           _buildLeaveTypeCell(item),
-          _buildReasonCell(item.reason ?? '—'),
+          _buildReasonCell(item.cleanReasonText.isNotEmpty ? item.cleanReasonText : (item.reason ?? '—')),
           _buildApproverCell(item),
           _buildStatusCell(item),
           _buildSubmittedCell(item),
@@ -5665,15 +5670,32 @@ class _RequestDetailModalState extends State<_RequestDetailModal> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            children: const [
-              Icon(Icons.explore_outlined, size: 16, color: Color(0xFF64748B)),
-              SizedBox(width: 8),
-              Text(
-                'Travel Itinerary & Specific Work Intent',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  color: HygColors.ink,
+            children: [
+              const Icon(Icons.explore_outlined, size: 16, color: Color(0xFF64748B)),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Travel Itinerary & Specific Work Intent',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: HygColors.ink,
+                  ),
+                ),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => RequestPdfService.downloadRequestPdf(
+                  context: context,
+                  item: item,
+                  travelDetails: _travelDetails,
+                ),
+                icon: const Icon(Icons.picture_as_pdf_outlined, size: 14, color: Color(0xFFDC2626)),
+                label: const Text('Download PDF', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFDC2626))),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xFFFECACA), width: 0.8),
+                  backgroundColor: const Color(0xFFFEF2F2),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                 ),
               ),
             ],
@@ -6348,11 +6370,19 @@ class _RequestDetailModalState extends State<_RequestDetailModal> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  if (isEsarf || item.category == AdminRequestCategory.leave) ...[
+                  if (isEsarf ||
+                      item.category == AdminRequestCategory.leave ||
+                      item.category == AdminRequestCategory.travelOrder) ...[
                     ElevatedButton.icon(
-                      onPressed: () => RequestPdfService.downloadRequestPdf(context: context, item: item),
+                      onPressed: () => RequestPdfService.downloadRequestPdf(
+                        context: context,
+                        item: item,
+                        travelDetails: _travelDetails,
+                      ),
                       icon: const Icon(Icons.picture_as_pdf_outlined, size: 15, color: Colors.white),
-                      label: const Text('Download Request (PDF)'),
+                      label: Text(item.category == AdminRequestCategory.travelOrder
+                          ? 'Download Travel Order (PDF)'
+                          : 'Download Request (PDF)'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFDC2626),
                         foregroundColor: Colors.white,
@@ -6398,12 +6428,15 @@ class _RequestDetailModalState extends State<_RequestDetailModal> {
               payrollClass: item.payrollClass,
               transactionType: item.transactionType ?? item.requestTypeName,
               totalHours: item.totalHours,
-              reason: item.reason,
+              reason: item.cleanReasonText.isNotEmpty ? item.cleanReasonText : null,
               status: item.status,
               proofUrl: item.proofUrl,
               proofTime: item.proofTime,
               proofLocation: item.proofLocation,
               proofId: item.proofId,
+              breakTime: item.breakTime,
+              breakFrom: item.breakFrom,
+              breakTo: item.breakTo,
               proofs: item.proofs,
             ),
           ];
@@ -6497,9 +6530,7 @@ class _RequestDetailModalState extends State<_RequestDetailModal> {
     final entry = list.first;
     final singleReason = entry.cleanReasonText.isNotEmpty
         ? entry.cleanReasonText
-        : (item.cleanReasonText.isNotEmpty
-            ? item.cleanReasonText
-            : (item.reason ?? item.remarks ?? ''));
+        : item.cleanReasonText;
     final singleProofs = entry.proofs.isNotEmpty ? entry.proofs : item.proofs;
     final singleProofUrl = (entry.proofUrl != null && entry.proofUrl!.isNotEmpty)
         ? entry.proofUrl
@@ -6649,16 +6680,22 @@ class _RequestDetailModalState extends State<_RequestDetailModal> {
             ? _format12HourTime(entry.timesText)
             : '—');
 
+    final breakTimeVal = entry.breakTimeText.isNotEmpty
+        ? entry.breakTimeText
+        : item.breakTimeText;
+
+    final payrollClassVal = (entry.payrollClass ?? item.payrollClass)?.trim();
+
     final items = <(String, String)>[
-      ('Date', entry.datesText.isNotEmpty ? entry.datesText : '—'),
-      ('Time', displayTime),
-      ('Total Hours', entry.totalHours != null ? '${entry.totalHours!.toStringAsFixed(1)} hrs' : '—'),
-      ('Schedule', entry.timeScheduleText.isNotEmpty ? entry.timeScheduleText : '—'),
-      ('Day Off', entry.dayOffText.isNotEmpty ? entry.dayOffText : '—'),
+      ('Payroll Class', (payrollClassVal != null && payrollClassVal.isNotEmpty) ? payrollClassVal : '—'),
+      ('Schedule', entry.timeScheduleText.isNotEmpty ? entry.timeScheduleText : (item.timeSchedule ?? '—')),
+      ('Day Off', entry.dayOffText.isNotEmpty ? entry.dayOffText : (item.dayOff ?? '—')),
+      ('Date', entry.datesText.isNotEmpty ? entry.datesText : (item.dateFrom ?? '—')),
+      ('Time', displayTime != '—' ? displayTime : (_formatTimeRange(item.timeFrom, item.timeTo).isNotEmpty ? _formatTimeRange(item.timeFrom, item.timeTo) : '—')),
+      ('Total Hours', (entry.totalHours ?? item.totalHours) != null ? '${(entry.totalHours ?? item.totalHours)!.toStringAsFixed(1)} hrs' : '—'),
+      if (breakTimeVal.isNotEmpty)
+        ('Break Time', breakTimeVal),
     ];
-    if (entry.payrollClass != null && entry.payrollClass!.isNotEmpty) {
-      items.add(('Payroll Class', entry.payrollClass!));
-    }
     return items;
   }
 
@@ -6674,7 +6711,11 @@ class _RequestDetailModalState extends State<_RequestDetailModal> {
     String? fallbackProofId,
     String? fallbackProofSource,
   }) {
-    final hasReason = reasonText.trim().isNotEmpty;
+    final cleanedReasonText = reasonText
+        .replaceAll(RegExp(r'\[Break:\s*[^\]]+\]', caseSensitive: false), '')
+        .replaceAll(RegExp(r'[ \t]{2,}'), ' ')
+        .trim();
+    final hasReason = cleanedReasonText.isNotEmpty;
     final isFallbackGallery = fallbackProofSource == 'gallery' ||
         (fallbackProofTime == null && fallbackProofLocation == null && fallbackProofId == null && fallbackProofSource != 'camera' && fallbackProofSource != 'photo_proof');
     final allProofs = proofs.isNotEmpty
@@ -6710,7 +6751,7 @@ class _RequestDetailModalState extends State<_RequestDetailModal> {
           ),
           const SizedBox(height: 4),
           Text(
-            hasReason ? reasonText : '—',
+            hasReason ? cleanedReasonText : '—',
             style: const TextStyle(fontSize: 12, color: HygColors.ink),
           ),
           if (allProofs.isNotEmpty) ...[

@@ -148,11 +148,12 @@ class AdminNotificationsService {
     _isInitialized = true;
 
     await _initReadDb();
+    unawaited(_purgeOldNotifications());
     await loadNotifications();
 
-    // Auto-refresh notifications every 15 seconds to keep the admin up to date
+    // Auto-refresh notifications every 90 seconds to preserve Supabase Disk IO
     _pollingTimer?.cancel();
-    _pollingTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+    _pollingTimer = Timer.periodic(const Duration(seconds: 90), (_) {
       unawaited(loadNotifications(silent: true));
     });
   }
@@ -160,6 +161,15 @@ class AdminNotificationsService {
   static void dispose() {
     _pollingTimer?.cancel();
     _pollingTimer = null;
+  }
+
+  static Future<void> _purgeOldNotifications() async {
+    try {
+      final client = Supabase.instance.client;
+      await client.rpc('purge_old_notifications');
+    } catch (e) {
+      debugPrint('AdminNotificationsService: Auto-delete old notifications note: $e');
+    }
   }
 
   static Future<void> _initReadDb() async {
@@ -171,6 +181,14 @@ class AdminNotificationsService {
           read_at TEXT NOT NULL
         )
       ''');
+
+      // Auto-purge local read history older than 6 months (180 days)
+      final sixMonthsAgo = DateTime.now().subtract(const Duration(days: 180)).toIso8601String();
+      await db.delete(
+        'admin_notification_reads',
+        where: 'read_at < ?',
+        whereArgs: [sixMonthsAgo],
+      );
 
       final rows = await db.query('admin_notification_reads');
       for (final r in rows) {
@@ -191,6 +209,7 @@ class AdminNotificationsService {
     _isLoading = true;
 
     final items = <AdminNotificationItem>[];
+    final cutoff = DateTime.now().subtract(const Duration(days: 180));
 
     try {
       // 1. Fetch Requests (ESARF, Leave, Perks)
@@ -207,6 +226,11 @@ class AdminNotificationsService {
             submittedDate = DateTime.tryParse(req.submittedAt!);
           }
           submittedDate ??= DateTime.now();
+
+          // Auto-exclude notifications older than 6 months (180 days)
+          if (submittedDate.isBefore(cutoff)) {
+            continue;
+          }
 
           NotificationCategory category = NotificationCategory.esarf;
           String title = 'ESARF Request';
@@ -378,6 +402,11 @@ class AdminNotificationsService {
             }
             proofDate ??= DateTime.now();
 
+            // Auto-exclude notifications older than 6 months (180 days)
+            if (proofDate.isBefore(cutoff)) {
+              continue;
+            }
+
             final empName = row['employee_name']?.toString() ??
                 row['name']?.toString() ??
                 'Employee';
@@ -426,6 +455,11 @@ class AdminNotificationsService {
               notifDate = DateTime.tryParse(row['created_at'].toString());
             }
             notifDate ??= DateTime.now();
+
+            // Auto-exclude notifications older than 6 months (180 days)
+            if (notifDate.isBefore(cutoff)) {
+              continue;
+            }
 
             items.add(
               AdminNotificationItem(
@@ -482,6 +516,20 @@ class AdminNotificationsService {
       );
     } catch (e) {
       debugPrint('AdminNotificationsService: Error saving read state: $e');
+    }
+
+    // If it is a backend notification, update read state in Supabase
+    if (id.startsWith('sys_')) {
+      final rawId = id.substring(4);
+      unawaited(
+        Supabase.instance.client
+            .from('notifications')
+            .update({'is_read': true})
+            .eq('id', rawId)
+            .then((_) {}, onError: (err) {
+              debugPrint('AdminNotificationsService: Supabase mark read note: $err');
+            }),
+      );
     }
 
     // Update in-memory list

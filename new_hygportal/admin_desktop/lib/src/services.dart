@@ -127,6 +127,98 @@ class AdminLoginSession {
 
 class EmployeeDirectoryService {
   static final _client = Supabase.instance.client;
+  static List<EmployeePreview>? _cachedEmployees;
+  static DateTime? _lastFetchTime;
+  static Future<List<EmployeePreview>>? _inFlightFetch;
+
+  // SWR timings:
+  // Deduping interval: Within 2 minutes of fetching, skip remote queries unless forced.
+  static const Duration _dedupingInterval = Duration(minutes: 2);
+  // Profile cache
+  static final Map<String, EmployeeProfileDetails> _cachedProfiles = {};
+  static final Map<String, DateTime> _profileFetchTimes = {};
+
+  static void invalidateCache() {
+    _cachedEmployees = null;
+    _lastFetchTime = null;
+  }
+
+  /// Synchronously or locally access cached employees (0-5ms delay).
+  static Future<List<EmployeePreview>> loadLocalEmployees() async {
+    if (_cachedEmployees != null && _cachedEmployees!.isNotEmpty) {
+      return _cachedEmployees!;
+    }
+    try {
+      final cached = await LocalSyncService.loadCachedRows('employee_cache');
+      if (cached.isNotEmpty) {
+        final list = _sortNewestFirst(
+          cached.map(EmployeeDirectoryService._fromRow).toList(growable: false),
+        );
+        _cachedEmployees = list;
+        return list;
+      }
+    } catch (_) {}
+    return const [];
+  }
+
+  /// SWR (Stale-While-Revalidate) Loader:
+  /// 1. Immediately triggers [onData] with local/cached data if available (0ms delay).
+  /// 2. If data is fresh (< 2 mins) and [forceRefresh] is false, finishes without querying the database.
+  /// 3. Otherwise, revalidates in the background from Supabase RPC, updates local SQLite + memory cache,
+  ///    and triggers [onData] with the fresh data.
+  static Future<void> loadEmployeesSwr({
+    required void Function(List<EmployeePreview> employees, {required bool isFresh}) onData,
+    void Function(Object error)? onError,
+    bool forceRefresh = false,
+  }) async {
+    // 1. STALE: Deliver memory or SQLite cache immediately
+    List<EmployeePreview>? current = _cachedEmployees;
+    if (current == null || current.isEmpty) {
+      current = await loadLocalEmployees();
+    }
+    if (current.isNotEmpty) {
+      onData(current, isFresh: false);
+    }
+
+    _lastFetchTime ??= await LocalSyncService.getCacheTimestamp('employee_cache');
+
+    // 2. DEDUPING:
+    final isWithinDeduping = !forceRefresh &&
+        current.isNotEmpty &&
+        _lastFetchTime != null &&
+        DateTime.now().difference(_lastFetchTime!) < _dedupingInterval;
+
+    if (isWithinDeduping) {
+      return;
+    }
+
+    // 3. REVALIDATE (Background fetch, deduplicated across concurrent requests):
+    if (_inFlightFetch != null) {
+      try {
+        final result = await _inFlightFetch!;
+        onData(result, isFresh: true);
+      } catch (e) {
+        if (current.isEmpty && onError != null) onError(e);
+      }
+      return;
+    }
+
+    _inFlightFetch = _fetchRemoteEmployees();
+    try {
+      final fresh = await _inFlightFetch!;
+      _cachedEmployees = fresh;
+      _lastFetchTime = DateTime.now();
+      await LocalSyncService.setCacheTimestamp('employee_cache', _lastFetchTime!);
+      onData(fresh, isFresh: true);
+    } catch (e) {
+      debugPrint('[EmployeeDirectoryService] SWR revalidation error: $e');
+      if (current.isEmpty && onError != null) {
+        onError(e);
+      }
+    } finally {
+      _inFlightFetch = null;
+    }
+  }
 
   static Future<T> _withNetworkTimeout<T>(
     Future<T> operation, {
@@ -140,102 +232,137 @@ class EmployeeDirectoryService {
     );
   }
 
-  static Future<List<EmployeePreview>> loadEmployees() async {
-    Object? fetchError;
+  static Future<List<EmployeePreview>> loadEmployees({bool forceRefresh = false}) async {
+    if (!forceRefresh && _cachedEmployees != null && _cachedEmployees!.isNotEmpty) {
+      if (_lastFetchTime != null && DateTime.now().difference(_lastFetchTime!) < _dedupingInterval) {
+        return _cachedEmployees!;
+      }
+    }
+
+    if (_inFlightFetch != null) {
+      return _inFlightFetch!;
+    }
+
+    _inFlightFetch = _fetchRemoteEmployees();
     try {
-      final response = await _withNetworkTimeout(
-        _client.rpc(
-          'hr_employee_directory',
-          params: {
-            'p_username': AppConfig.hrUsername,
-            'p_password': AppConfig.hrPassword,
-          },
-        ),
-      );
-      if (response is List) {
-        final rows = response.whereType<Map<String, dynamic>>().toList();
-        final missingBirthdates = rows
-            .where((r) {
-              final bd = r['birth_date'] ?? r['birthdate'] ?? r['date_of_birth'];
-              return bd == null || bd.toString().trim().isEmpty;
-            })
-            .toList();
+      final result = await _inFlightFetch!;
+      _cachedEmployees = result;
+      _lastFetchTime = DateTime.now();
+      await LocalSyncService.setCacheTimestamp('employee_cache', _lastFetchTime!);
+      return result;
+    } catch (fetchError) {
+      if (_cachedEmployees != null && _cachedEmployees!.isNotEmpty) {
+        return _cachedEmployees!;
+      }
+      final cached = await LocalSyncService.loadCachedRows('employee_cache');
+      if (cached.isNotEmpty) {
+        final list = _sortNewestFirst(
+          cached.map(EmployeeDirectoryService._fromRow).toList(growable: false),
+        );
+        _cachedEmployees = list;
+        return list;
+      }
+      rethrow;
+    } finally {
+      _inFlightFetch = null;
+    }
+  }
 
-        if (missingBirthdates.isNotEmpty) {
-          final futures = missingBirthdates.map((row) async {
-            final empId = row['employee_id']?.toString() ?? '';
-            if (empId.isEmpty) return null;
-            try {
-              final profResponse = await _withNetworkTimeout(
-                _client.rpc(
-                  'hr_employee_profile_detail',
-                  params: {
-                    'p_username': AppConfig.hrUsername,
-                    'p_password': AppConfig.hrPassword,
-                    'p_employee_id': empId,
-                  },
-                ),
-                duration: const Duration(seconds: 3),
-              );
-              if (profResponse is List && profResponse.isNotEmpty) {
-                final profMap = profResponse.first as Map<String, dynamic>;
-                final bdate = profMap['birth_date']?.toString().trim();
-                if (bdate != null && bdate.isNotEmpty) {
-                  return MapEntry(empId, bdate);
-                }
+  static Future<List<EmployeePreview>> _fetchRemoteEmployees() async {
+    final response = await _withNetworkTimeout(
+      _client.rpc(
+        'hr_employee_directory',
+        params: {
+          'p_username': AppConfig.hrUsername,
+          'p_password': AppConfig.hrPassword,
+        },
+      ),
+    );
+    if (response is List) {
+      final rows = response.whereType<Map<String, dynamic>>().toList();
+      final missingBirthdates = rows
+          .where((r) {
+            final bd = r['birth_date'] ?? r['birthdate'] ?? r['date_of_birth'];
+            return bd == null || bd.toString().trim().isEmpty;
+          })
+          .toList();
+
+      if (missingBirthdates.isNotEmpty) {
+        final futures = missingBirthdates.map((row) async {
+          final empId = row['employee_id']?.toString() ?? '';
+          if (empId.isEmpty) return null;
+          try {
+            final profResponse = await _withNetworkTimeout(
+              _client.rpc(
+                'hr_employee_profile_detail',
+                params: {
+                  'p_username': AppConfig.hrUsername,
+                  'p_password': AppConfig.hrPassword,
+                  'p_employee_id': empId,
+                },
+              ),
+              duration: const Duration(seconds: 3),
+            );
+            if (profResponse is List && profResponse.isNotEmpty) {
+              final profMap = profResponse.first as Map<String, dynamic>;
+              final bdate = profMap['birth_date']?.toString().trim();
+              if (bdate != null && bdate.isNotEmpty) {
+                return MapEntry(empId, bdate);
               }
-            } catch (_) {}
-            return null;
-          });
-
-          final results = await Future.wait(futures);
-          final bmap = <String, String>{};
-          for (final res in results) {
-            if (res != null) {
-              bmap[res.key] = res.value;
             }
-          }
+          } catch (_) {}
+          return null;
+        });
 
-          for (final row in rows) {
-            final empId = row['employee_id']?.toString() ?? '';
-            if (bmap.containsKey(empId)) {
-              row['birth_date'] = bmap[empId];
-            }
+        final results = await Future.wait(futures);
+        final bmap = <String, String>{};
+        for (final res in results) {
+          if (res != null) {
+            bmap[res.key] = res.value;
           }
         }
 
-        await LocalSyncService.cacheRows('employee_cache', rows);
-        unawaited(LocalSyncService.syncNow());
-        return _sortNewestFirst(
-          rows.map(EmployeeDirectoryService._fromRow).toList(growable: false),
-        );
+        for (final row in rows) {
+          final empId = row['employee_id']?.toString() ?? '';
+          if (bmap.containsKey(empId)) {
+            row['birth_date'] = bmap[empId];
+          }
+        }
       }
-    } catch (e) {
-      fetchError = e;
+
+      await LocalSyncService.cacheRows('employee_cache', rows);
+      unawaited(LocalSyncService.syncNow());
+      return _sortNewestFirst(
+        rows.map(EmployeeDirectoryService._fromRow).toList(growable: false),
+      );
     }
-    final cached = await LocalSyncService.loadCachedRows('employee_cache');
-    if (cached.isEmpty && fetchError != null) {
-      throw fetchError;
-    }
-    return _sortNewestFirst(
-      cached.map(EmployeeDirectoryService._fromRow).toList(growable: false),
-    );
+    return const [];
   }
 
   static Future<EmployeeProfileDetails?> loadEmployeeProfile(
-    String employeeId,
-  ) async {
-    if (employeeId.trim().isEmpty) {
+    String employeeId, {
+    bool forceRefresh = false,
+  }) async {
+    final cleanId = employeeId.trim();
+    if (cleanId.isEmpty) {
       return null;
     }
 
+    if (!forceRefresh && _cachedProfiles.containsKey(cleanId)) {
+      final cachedAt = _profileFetchTimes[cleanId];
+      if (cachedAt != null && DateTime.now().difference(cachedAt) < const Duration(minutes: 5)) {
+        return _cachedProfiles[cleanId];
+      }
+    }
+
+    EmployeeProfileDetails? profile;
     try {
       final response = await _client.rpc(
         'hr_employee_profile_detail',
         params: {
           'p_username': AppConfig.hrUsername,
           'p_password': AppConfig.hrPassword,
-          'p_employee_id': employeeId,
+          'p_employee_id': cleanId,
         },
       );
       if (response is List &&
@@ -243,53 +370,62 @@ class EmployeeDirectoryService {
           response.first is Map<String, dynamic>) {
         final row = response.first as Map<String, dynamic>;
         final mergedRow = await _mergeSupplementalProfileDetails(
-          employeeId,
+          cleanId,
           row,
         );
-        await LocalSyncService.cacheProfile(employeeId, mergedRow);
-        return _profileFromRow(
+        await LocalSyncService.cacheProfile(cleanId, mergedRow);
+        profile = _profileFromRow(
           mergedRow,
-          storeName: await _loadEmployeeStoreName(employeeId),
-          additionalStores: await _loadEmployeeAssignedStores(employeeId),
+          storeName: await _loadEmployeeStoreName(cleanId),
+          additionalStores: await _loadEmployeeAssignedStores(cleanId),
         );
       }
     } catch (e) {
       debugPrint('[EmployeeDirectoryService] hr_employee_profile_detail RPC error: $e');
     }
 
-    // Direct table fetch fallback if RPC failed:
-    try {
-      final empRow = await _client
-          .from('employees')
-          .select('id, employee_no, first_name, middle_name, last_name, suffix, birth_date, gender, civil_status, email, phone, photo_url, employment_status')
-          .eq('id', employeeId)
-          .maybeSingle();
-      if (empRow != null) {
-        final merged = await _mergeSupplementalProfileDetails(employeeId, empRow);
-        await LocalSyncService.cacheProfile(employeeId, merged);
-        return _profileFromRow(
-          merged,
-          storeName: await _loadEmployeeStoreName(employeeId),
-          additionalStores: await _loadEmployeeAssignedStores(employeeId),
-        );
+    if (profile == null) {
+      // Direct table fetch fallback if RPC failed:
+      try {
+        final empRow = await _client
+            .from('employees')
+            .select('id, employee_no, first_name, middle_name, last_name, suffix, birth_date, gender, civil_status, email, phone, photo_url, employment_status')
+            .eq('id', cleanId)
+            .maybeSingle();
+        if (empRow != null) {
+          final merged = await _mergeSupplementalProfileDetails(cleanId, empRow);
+          await LocalSyncService.cacheProfile(cleanId, merged);
+          profile = _profileFromRow(
+            merged,
+            storeName: await _loadEmployeeStoreName(cleanId),
+            additionalStores: await _loadEmployeeAssignedStores(cleanId),
+          );
+        }
+      } catch (e) {
+        debugPrint('[EmployeeDirectoryService] direct employee table fallback error: $e');
       }
-    } catch (e) {
-      debugPrint('[EmployeeDirectoryService] direct employee table fallback error: $e');
     }
 
-    final cached = await LocalSyncService.loadCachedProfile(employeeId);
-    if (cached == null) {
-      return null;
+    if (profile == null) {
+      final cached = await LocalSyncService.loadCachedProfile(cleanId);
+      if (cached != null) {
+        final mergedCached = await _mergeSupplementalProfileDetails(
+          cleanId,
+          cached,
+        );
+        profile = _profileFromRow(
+          mergedCached,
+          storeName: await _loadEmployeeStoreName(cleanId),
+          additionalStores: await _loadEmployeeAssignedStores(cleanId),
+        );
+      }
     }
-    final mergedCached = await _mergeSupplementalProfileDetails(
-      employeeId,
-      cached,
-    );
-    return _profileFromRow(
-      mergedCached,
-      storeName: await _loadEmployeeStoreName(employeeId),
-      additionalStores: await _loadEmployeeAssignedStores(employeeId),
-    );
+
+    if (profile != null) {
+      _cachedProfiles[cleanId] = profile;
+      _profileFetchTimes[cleanId] = DateTime.now();
+    }
+    return profile;
   }
 
   static Future<Map<String, dynamic>> _mergeSupplementalProfileDetails(
@@ -328,6 +464,7 @@ class EmployeeDirectoryService {
   }
 
   static Future<String> createEmployee(EmployeeProfilePayload payload) async {
+    invalidateCache();
     if (await LocalSyncService.isOnline()) {
       return _withNetworkTimeout(_createEmployeeRemote(payload));
     }
@@ -390,6 +527,9 @@ class EmployeeDirectoryService {
   }) async {
     await _withNetworkTimeout(_updateEmployeeRemote(id: id, payload: payload));
     await LocalSyncService.purgeCachedProfile(id);
+    invalidateCache();
+    _cachedProfiles.remove(id);
+    _profileFetchTimes.remove(id);
     return 'Employee updated successfully.';
   }
 
@@ -644,6 +784,10 @@ class EmployeeDirectoryService {
       },
     );
 
+    invalidateCache();
+    _cachedProfiles.remove(id);
+    _profileFetchTimes.remove(id);
+
     try {
       final cachedRows =
           await LocalSyncService.loadCachedRows('employee_cache');
@@ -657,6 +801,9 @@ class EmployeeDirectoryService {
   }
 
   static Future<void> purgeCachedEmployee(String id) async {
+    invalidateCache();
+    _cachedProfiles.remove(id);
+    _profileFetchTimes.remove(id);
     try {
       final cachedRows =
           await LocalSyncService.loadCachedRows('employee_cache');
@@ -872,6 +1019,9 @@ class EmployeeDirectoryService {
         'p_photo_url': photoUrl,
       },
     );
+    invalidateCache();
+    _cachedProfiles.remove(employeeId);
+    _profileFetchTimes.remove(employeeId);
   }
 
   static EmployeePreview _fromRow(Map<String, dynamic> row) {
@@ -1081,33 +1231,134 @@ class EmployeeDirectoryService {
 
 class CompanyDirectoryService {
   static final _client = Supabase.instance.client;
+  static List<CompanyPreview>? _cachedCompanies;
+  static DateTime? _lastFetchTime;
+  static Future<List<CompanyPreview>>? _inFlightFetch;
+  static const Duration _dedupingInterval = Duration(minutes: 5);
 
-  static Future<List<CompanyPreview>> loadCompanies() async {
+  static void invalidateCache() {
+    _cachedCompanies = null;
+    _lastFetchTime = null;
+  }
+
+  static Future<List<CompanyPreview>> loadLocalCompanies() async {
+    if (_cachedCompanies != null && _cachedCompanies!.isNotEmpty) {
+      return _cachedCompanies!;
+    }
     try {
-      final response = await _client.rpc(
-        'hr_company_directory',
-        params: {
-          'p_username': AppConfig.hrUsername,
-          'p_password': AppConfig.hrPassword,
-        },
-      ).timeout(const Duration(seconds: 12));
-
-      if (response is List) {
-        final rows = response.whereType<Map<String, dynamic>>().toList(
-          growable: false,
-        );
-        unawaited(LocalSyncService.cacheRows('company_cache', rows));
-        unawaited(LocalSyncService.syncNow());
-        return rows
-            .map(CompanyDirectoryService._fromRow)
-            .toList(growable: false);
+      final cached = await LocalSyncService.loadCachedRows('company_cache');
+      if (cached.isNotEmpty) {
+        final list = cached.map(CompanyDirectoryService._fromRow).toList(growable: false);
+        _cachedCompanies = list;
+        return list;
       }
-    } catch (e) {
-      debugPrint('hr_company_directory RPC failed: $e');
+    } catch (_) {}
+    return const [];
+  }
+
+  static Future<void> loadCompaniesSwr({
+    required void Function(List<CompanyPreview> companies, {required bool isFresh}) onData,
+    void Function(Object error)? onError,
+    bool forceRefresh = false,
+  }) async {
+    List<CompanyPreview>? current = _cachedCompanies;
+    if (current == null || current.isEmpty) {
+      current = await loadLocalCompanies();
+    }
+    if (current.isNotEmpty) {
+      onData(current, isFresh: false);
     }
 
-    final cached = await LocalSyncService.loadCachedRows('company_cache');
-    return cached.map(CompanyDirectoryService._fromRow).toList(growable: false);
+    _lastFetchTime ??= await LocalSyncService.getCacheTimestamp('company_cache');
+
+    final isWithinDeduping = !forceRefresh &&
+        current.isNotEmpty &&
+        _lastFetchTime != null &&
+        DateTime.now().difference(_lastFetchTime!) < _dedupingInterval;
+
+    if (isWithinDeduping) {
+      return;
+    }
+
+    if (_inFlightFetch != null) {
+      try {
+        final result = await _inFlightFetch!;
+        onData(result, isFresh: true);
+      } catch (e) {
+        if (current.isEmpty && onError != null) onError(e);
+      }
+      return;
+    }
+
+    _inFlightFetch = _performRemoteFetch();
+    try {
+      final fresh = await _inFlightFetch!;
+      _cachedCompanies = fresh;
+      _lastFetchTime = DateTime.now();
+      await LocalSyncService.setCacheTimestamp('company_cache', _lastFetchTime!);
+      onData(fresh, isFresh: true);
+    } catch (e) {
+      debugPrint('[CompanyDirectoryService] SWR revalidation error: $e');
+      if (current.isEmpty && onError != null) onError(e);
+    } finally {
+      _inFlightFetch = null;
+    }
+  }
+
+  static Future<List<CompanyPreview>> loadCompanies({bool forceRefresh = false}) async {
+    if (!forceRefresh && _cachedCompanies != null && _cachedCompanies!.isNotEmpty) {
+      if (_lastFetchTime != null && DateTime.now().difference(_lastFetchTime!) < _dedupingInterval) {
+        return _cachedCompanies!;
+      }
+    }
+
+    if (_inFlightFetch != null) {
+      return _inFlightFetch!;
+    }
+
+    _inFlightFetch = _performRemoteFetch();
+    try {
+      final result = await _inFlightFetch!;
+      _cachedCompanies = result;
+      _lastFetchTime = DateTime.now();
+      await LocalSyncService.setCacheTimestamp('company_cache', _lastFetchTime!);
+      return result;
+    } catch (fetchError) {
+      if (_cachedCompanies != null && _cachedCompanies!.isNotEmpty) {
+        return _cachedCompanies!;
+      }
+      final cached = await LocalSyncService.loadCachedRows('company_cache');
+      if (cached.isNotEmpty) {
+        final list = cached.map(CompanyDirectoryService._fromRow).toList(growable: false);
+        _cachedCompanies = list;
+        return list;
+      }
+      rethrow;
+    } finally {
+      _inFlightFetch = null;
+    }
+  }
+
+  static Future<List<CompanyPreview>> _performRemoteFetch() async {
+    final response = await _client.rpc(
+      'hr_company_directory',
+      params: {
+        'p_username': AppConfig.hrUsername,
+        'p_password': AppConfig.hrPassword,
+      },
+    ).timeout(const Duration(seconds: 12));
+
+    if (response is List) {
+      final rows = response.whereType<Map<String, dynamic>>().toList(
+        growable: false,
+      );
+      unawaited(LocalSyncService.cacheRows('company_cache', rows));
+      unawaited(LocalSyncService.syncNow());
+      return rows
+          .map(CompanyDirectoryService._fromRow)
+          .toList(growable: false);
+    }
+    return const [];
   }
 
   static Future<String> uploadCompanyLogo({
@@ -1147,6 +1398,7 @@ class CompanyDirectoryService {
     required String address,
     required String logoUrl,
   }) async {
+    invalidateCache();
     if (await LocalSyncService.isOnline()) {
       return await _createCompanyRemote(
         name: name,
@@ -1196,6 +1448,7 @@ class CompanyDirectoryService {
     required String address,
     required String logoUrl,
   }) async {
+    invalidateCache();
     if (await LocalSyncService.isOnline()) {
       return await _updateCompanyRemote(
         id: id,
@@ -1243,6 +1496,7 @@ class CompanyDirectoryService {
   }
 
   static Future<String> deleteCompany(String id) async {
+    invalidateCache();
     if (await LocalSyncService.isOnline()) {
       return await _deleteCompanyRemote(id);
     }
@@ -1319,8 +1573,104 @@ class CompanyDirectoryService {
 
 class DepartmentDirectoryService {
   static final _client = Supabase.instance.client;
+  static List<DepartmentPreview>? _cachedDepartments;
+  static DateTime? _lastFetchTime;
+  static Future<List<DepartmentPreview>>? _inFlightFetch;
+  static const Duration _dedupingInterval = Duration(minutes: 5);
 
-  static Future<List<DepartmentPreview>> loadDepartments() async {
+  static void invalidateCache() {
+    _cachedDepartments = null;
+    _lastFetchTime = null;
+  }
+
+  static Future<List<DepartmentPreview>> loadLocalDepartments() async {
+    if (_cachedDepartments != null && _cachedDepartments!.isNotEmpty) {
+      return _cachedDepartments!;
+    }
+    try {
+      final cached = await LocalSyncService.loadCachedRows('department_cache');
+      if (cached.isNotEmpty) {
+        final list = cached.map(DepartmentDirectoryService._fromRow).toList();
+        _cachedDepartments = list;
+        return list;
+      }
+    } catch (_) {}
+    return const [];
+  }
+
+  static Future<void> loadDepartmentsSwr({
+    required void Function(List<DepartmentPreview> departments, {required bool isFresh}) onData,
+    void Function(Object error)? onError,
+    bool forceRefresh = false,
+  }) async {
+    List<DepartmentPreview>? current = _cachedDepartments;
+    if (current == null || current.isEmpty) {
+      current = await loadLocalDepartments();
+    }
+    if (current.isNotEmpty) {
+      onData(current, isFresh: false);
+    }
+
+    _lastFetchTime ??= await LocalSyncService.getCacheTimestamp('department_cache');
+
+    final isWithinDeduping = !forceRefresh &&
+        current.isNotEmpty &&
+        _lastFetchTime != null &&
+        DateTime.now().difference(_lastFetchTime!) < _dedupingInterval;
+
+    if (isWithinDeduping) {
+      return;
+    }
+
+    if (_inFlightFetch != null) {
+      try {
+        final result = await _inFlightFetch!;
+        onData(result, isFresh: true);
+      } catch (e) {
+        if (current.isEmpty && onError != null) onError(e);
+      }
+      return;
+    }
+
+    _inFlightFetch = _performRemoteFetch();
+    try {
+      final fresh = await _inFlightFetch!;
+      _cachedDepartments = fresh;
+      _lastFetchTime = DateTime.now();
+      await LocalSyncService.setCacheTimestamp('department_cache', _lastFetchTime!);
+      onData(fresh, isFresh: true);
+    } catch (e) {
+      debugPrint('[DepartmentDirectoryService] SWR revalidation error: $e');
+      if (current.isEmpty && onError != null) onError(e);
+    } finally {
+      _inFlightFetch = null;
+    }
+  }
+
+  static Future<List<DepartmentPreview>> loadDepartments({bool forceRefresh = false}) async {
+    if (!forceRefresh && _cachedDepartments != null && _cachedDepartments!.isNotEmpty) {
+      if (_lastFetchTime != null && DateTime.now().difference(_lastFetchTime!) < _dedupingInterval) {
+        return _cachedDepartments!;
+      }
+    }
+
+    if (_inFlightFetch != null) {
+      return _inFlightFetch!;
+    }
+
+    _inFlightFetch = _performRemoteFetch();
+    try {
+      final result = await _inFlightFetch!;
+      _cachedDepartments = result;
+      _lastFetchTime = DateTime.now();
+      await LocalSyncService.setCacheTimestamp('department_cache', _lastFetchTime!);
+      return result;
+    } finally {
+      _inFlightFetch = null;
+    }
+  }
+
+  static Future<List<DepartmentPreview>> _performRemoteFetch() async {
     final response = await _client.rpc(
       'hr_department_directory',
       params: {
@@ -1333,13 +1683,13 @@ class DepartmentDirectoryService {
       return const [];
     }
 
-    return response
-        .whereType<Map<String, dynamic>>()
-        .map(DepartmentDirectoryService._fromRow)
-        .toList();
+    final rawRows = response.whereType<Map<String, dynamic>>().toList();
+    unawaited(LocalSyncService.cacheRows('department_cache', rawRows));
+    return rawRows.map(DepartmentDirectoryService._fromRow).toList();
   }
 
   static Future<String> createDepartment(String name) async {
+    invalidateCache();
     final response = await _client.rpc(
       'hr_create_department',
       params: {
@@ -1356,6 +1706,7 @@ class DepartmentDirectoryService {
     required String id,
     required String name,
   }) async {
+    invalidateCache();
     final response = await _client.rpc(
       'hr_update_department',
       params: {
@@ -1370,6 +1721,7 @@ class DepartmentDirectoryService {
   }
 
   static Future<String> deleteDepartment(String id) async {
+    invalidateCache();
     final response = await _client.rpc(
       'hr_delete_department',
       params: {
@@ -1440,6 +1792,15 @@ class DepartmentDirectoryService {
 class PositionDirectoryService {
   static final _client = Supabase.instance.client;
   static final Map<String, int> _authorityLevelByName = {};
+  static List<PositionPreview>? _cachedPositions;
+  static DateTime? _lastFetchTime;
+  static Future<List<PositionPreview>>? _inFlightFetch;
+  static const Duration _dedupingInterval = Duration(minutes: 5);
+
+  static void invalidateCache() {
+    _cachedPositions = null;
+    _lastFetchTime = null;
+  }
 
   static bool get isCacheEmpty => _authorityLevelByName.isEmpty;
 
@@ -1474,7 +1835,95 @@ class PositionDirectoryService {
     }
   }
 
-  static Future<List<PositionPreview>> loadPositions() async {
+  static Future<List<PositionPreview>> loadLocalPositions() async {
+    if (_cachedPositions != null && _cachedPositions!.isNotEmpty) {
+      return _cachedPositions!;
+    }
+    try {
+      final cached = await LocalSyncService.loadCachedRows('position_cache');
+      if (cached.isNotEmpty) {
+        final list = cached.map(PositionDirectoryService._fromRow).toList();
+        _cachedPositions = list;
+        cachePositions(list);
+        return list;
+      }
+    } catch (_) {}
+    return const [];
+  }
+
+  static Future<void> loadPositionsSwr({
+    required void Function(List<PositionPreview> positions, {required bool isFresh}) onData,
+    void Function(Object error)? onError,
+    bool forceRefresh = false,
+  }) async {
+    List<PositionPreview>? current = _cachedPositions;
+    if (current == null || current.isEmpty) {
+      current = await loadLocalPositions();
+    }
+    if (current.isNotEmpty) {
+      onData(current, isFresh: false);
+    }
+
+    _lastFetchTime ??= await LocalSyncService.getCacheTimestamp('position_cache');
+
+    final isWithinDeduping = !forceRefresh &&
+        current.isNotEmpty &&
+        _lastFetchTime != null &&
+        DateTime.now().difference(_lastFetchTime!) < _dedupingInterval;
+
+    if (isWithinDeduping) {
+      return;
+    }
+
+    if (_inFlightFetch != null) {
+      try {
+        final result = await _inFlightFetch!;
+        onData(result, isFresh: true);
+      } catch (e) {
+        if (current.isEmpty && onError != null) onError(e);
+      }
+      return;
+    }
+
+    _inFlightFetch = _performRemoteFetch();
+    try {
+      final fresh = await _inFlightFetch!;
+      _cachedPositions = fresh;
+      _lastFetchTime = DateTime.now();
+      await LocalSyncService.setCacheTimestamp('position_cache', _lastFetchTime!);
+      onData(fresh, isFresh: true);
+    } catch (e) {
+      debugPrint('[PositionDirectoryService] SWR revalidation error: $e');
+      if (current.isEmpty && onError != null) onError(e);
+    } finally {
+      _inFlightFetch = null;
+    }
+  }
+
+  static Future<List<PositionPreview>> loadPositions({bool forceRefresh = false}) async {
+    if (!forceRefresh && _cachedPositions != null && _cachedPositions!.isNotEmpty) {
+      if (_lastFetchTime != null && DateTime.now().difference(_lastFetchTime!) < _dedupingInterval) {
+        return _cachedPositions!;
+      }
+    }
+
+    if (_inFlightFetch != null) {
+      return _inFlightFetch!;
+    }
+
+    _inFlightFetch = _performRemoteFetch();
+    try {
+      final result = await _inFlightFetch!;
+      _cachedPositions = result;
+      _lastFetchTime = DateTime.now();
+      await LocalSyncService.setCacheTimestamp('position_cache', _lastFetchTime!);
+      return result;
+    } finally {
+      _inFlightFetch = null;
+    }
+  }
+
+  static Future<List<PositionPreview>> _performRemoteFetch() async {
     final response = await _client.rpc(
       'hr_position_directory',
       params: {
@@ -1487,15 +1936,15 @@ class PositionDirectoryService {
       return const [];
     }
 
-    final list = response
-        .whereType<Map<String, dynamic>>()
-        .map(PositionDirectoryService._fromRow)
-        .toList();
+    final rawRows = response.whereType<Map<String, dynamic>>().toList();
+    unawaited(LocalSyncService.cacheRows('position_cache', rawRows));
+    final list = rawRows.map(PositionDirectoryService._fromRow).toList();
     cachePositions(list);
     return list;
   }
 
   static Future<String> createPosition(String name) async {
+    invalidateCache();
     final response = await _client.rpc(
       'hr_create_position',
       params: {
@@ -1512,6 +1961,7 @@ class PositionDirectoryService {
     required String id,
     required String name,
   }) async {
+    invalidateCache();
     final response = await _client.rpc(
       'hr_update_position',
       params: {
@@ -1526,6 +1976,7 @@ class PositionDirectoryService {
   }
 
   static Future<String> deletePosition(String id) async {
+    invalidateCache();
     final response = await _client.rpc(
       'hr_delete_position',
       params: {
@@ -1662,15 +2113,124 @@ class DepartmentPositionCatalogService {
 
 class RegisteredUsersService {
   static final _client = Supabase.instance.client;
+  static List<RegisteredUserPreview>? _cachedUsers;
+  static DateTime? _lastFetchTime;
+  static Future<List<RegisteredUserPreview>>? _inFlightFetch;
+  static const Duration _dedupingInterval = Duration(minutes: 2);
 
-  static Future<List<RegisteredUserPreview>> loadUsers() async {
+  static void invalidateCache() {
+    _cachedUsers = null;
+    _lastFetchTime = null;
+  }
+
+  /// Synchronously or locally access cached users (0-5ms delay).
+  static Future<List<RegisteredUserPreview>> loadLocalUsers() async {
+    if (_cachedUsers != null && _cachedUsers!.isNotEmpty) {
+      return _cachedUsers!;
+    }
+    try {
+      final cachedRows = await LocalSyncService.loadCachedRows('users_cache');
+      if (cachedRows.isNotEmpty) {
+        final list = cachedRows.map(_fromRow).toList();
+        _cachedUsers = list;
+        return list;
+      }
+    } catch (_) {}
+    return const [];
+  }
+
+  /// SWR (Stale-While-Revalidate) Loader:
+  /// 1. Immediately triggers [onData] with local/cached users (0ms delay).
+  /// 2. If data is fresh (< 2 mins) and [forceRefresh] is false, finishes without querying the database.
+  /// 3. Otherwise, revalidates in the background from Supabase RPC, updates local SQLite + memory cache,
+  ///    and triggers [onData] with the fresh data.
+  static Future<void> loadUsersSwr({
+    required void Function(List<RegisteredUserPreview> users, {required bool isFresh}) onData,
+    void Function(Object error)? onError,
+    bool forceRefresh = false,
+  }) async {
+    // 1. STALE: Deliver memory or SQLite cache immediately
+    List<RegisteredUserPreview>? current = _cachedUsers;
+    if (current == null || current.isEmpty) {
+      current = await loadLocalUsers();
+    }
+    if (current.isNotEmpty) {
+      onData(current, isFresh: false);
+    }
+
+    _lastFetchTime ??= await LocalSyncService.getCacheTimestamp('users_cache');
+
+    // 2. DEDUPING:
+    final isWithinDeduping = !forceRefresh &&
+        current.isNotEmpty &&
+        _lastFetchTime != null &&
+        DateTime.now().difference(_lastFetchTime!) < _dedupingInterval;
+
+    if (isWithinDeduping) {
+      return;
+    }
+
+    // 3. REVALIDATE (Background fetch, deduplicated):
+    if (_inFlightFetch != null) {
+      try {
+        final result = await _inFlightFetch!;
+        onData(result, isFresh: true);
+      } catch (e) {
+        if (current.isEmpty && onError != null) onError(e);
+      }
+      return;
+    }
+
+    _inFlightFetch = _performRemoteFetch();
+    try {
+      final fresh = await _inFlightFetch!;
+      _cachedUsers = fresh;
+      _lastFetchTime = DateTime.now();
+      await LocalSyncService.setCacheTimestamp('users_cache', _lastFetchTime!);
+      onData(fresh, isFresh: true);
+    } catch (e) {
+      debugPrint('[RegisteredUsersService] SWR revalidation error: $e');
+      if (current.isEmpty && onError != null) {
+        onError(e);
+      }
+    } finally {
+      _inFlightFetch = null;
+    }
+  }
+
+  static Future<List<RegisteredUserPreview>> loadUsers({bool forceRefresh = false}) async {
+    if (!forceRefresh && _cachedUsers != null && _cachedUsers!.isNotEmpty) {
+      if (_lastFetchTime != null && DateTime.now().difference(_lastFetchTime!) < _dedupingInterval) {
+        return _cachedUsers!;
+      }
+    }
+
+    if (_inFlightFetch != null) {
+      return _inFlightFetch!;
+    }
+
+    _inFlightFetch = _performRemoteFetch();
+    try {
+      final result = await _inFlightFetch!;
+      _cachedUsers = result;
+      _lastFetchTime = DateTime.now();
+      await LocalSyncService.setCacheTimestamp('users_cache', _lastFetchTime!);
+      return result;
+    } finally {
+      _inFlightFetch = null;
+    }
+  }
+
+  static Future<List<RegisteredUserPreview>> _performRemoteFetch() async {
     final response = await _client.rpc('admin_registered_users');
 
     if (response is! List) {
       return const [];
     }
 
-    return response.whereType<Map<String, dynamic>>().map(_fromRow).toList();
+    final rawRows = response.whereType<Map<String, dynamic>>().toList();
+    unawaited(LocalSyncService.cacheRows('users_cache', rawRows));
+    return rawRows.map(_fromRow).toList();
   }
 
   static Future<List<String>> loadUserCompanyAssignments(
@@ -1690,6 +2250,7 @@ class RegisteredUsersService {
     required String userProfileId,
     required bool isBanned,
   }) async {
+    invalidateCache();
     final response = await _client.rpc(
       'admin_set_user_ban',
       params: {'p_user_profile_id': userProfileId, 'p_is_banned': isBanned},
@@ -1703,6 +2264,7 @@ class RegisteredUsersService {
     required String appRole,
     List<String>? companyIds,
   }) async {
+    invalidateCache();
     final params = <String, dynamic>{
       'p_user_profile_id': userProfileId,
       'p_app_role': appRole,
@@ -1719,6 +2281,7 @@ class RegisteredUsersService {
     required String userProfileId,
     required String newPassword,
   }) async {
+    invalidateCache();
     final response = await _client.rpc(
       'admin_reset_user_password',
       params: {
@@ -1734,6 +2297,7 @@ class RegisteredUsersService {
     required String userProfileId,
     required double annualCreditDays,
   }) async {
+    invalidateCache();
     final response = await _client.rpc(
       'admin_set_employee_leave_credits',
       params: {
@@ -1750,6 +2314,7 @@ class RegisteredUsersService {
     required double deductDays,
     String? reason,
   }) async {
+    invalidateCache();
     try {
       final response = await _client.rpc(
         'admin_deduct_employee_leave_credits',
@@ -2889,8 +3454,104 @@ class RegisteredUsersService {
 
 class StoreDirectoryService {
   static final _client = Supabase.instance.client;
+  static List<StorePreview>? _cachedStores;
+  static DateTime? _lastFetchTime;
+  static Future<List<StorePreview>>? _inFlightFetch;
+  static const Duration _dedupingInterval = Duration(minutes: 5);
 
-  static Future<List<StorePreview>> loadStores() async {
+  static void invalidateCache() {
+    _cachedStores = null;
+    _lastFetchTime = null;
+  }
+
+  static Future<List<StorePreview>> loadLocalStores() async {
+    if (_cachedStores != null && _cachedStores!.isNotEmpty) {
+      return _cachedStores!;
+    }
+    try {
+      final cached = await LocalSyncService.loadCachedRows('store_cache');
+      if (cached.isNotEmpty) {
+        final list = cached.map(_fromRow).toList();
+        _cachedStores = list;
+        return list;
+      }
+    } catch (_) {}
+    return const [];
+  }
+
+  static Future<void> loadStoresSwr({
+    required void Function(List<StorePreview> stores, {required bool isFresh}) onData,
+    void Function(Object error)? onError,
+    bool forceRefresh = false,
+  }) async {
+    List<StorePreview>? current = _cachedStores;
+    if (current == null || current.isEmpty) {
+      current = await loadLocalStores();
+    }
+    if (current.isNotEmpty) {
+      onData(current, isFresh: false);
+    }
+
+    _lastFetchTime ??= await LocalSyncService.getCacheTimestamp('store_cache');
+
+    final isWithinDeduping = !forceRefresh &&
+        current.isNotEmpty &&
+        _lastFetchTime != null &&
+        DateTime.now().difference(_lastFetchTime!) < _dedupingInterval;
+
+    if (isWithinDeduping) {
+      return;
+    }
+
+    if (_inFlightFetch != null) {
+      try {
+        final result = await _inFlightFetch!;
+        onData(result, isFresh: true);
+      } catch (e) {
+        if (current.isEmpty && onError != null) onError(e);
+      }
+      return;
+    }
+
+    _inFlightFetch = _performRemoteFetch();
+    try {
+      final fresh = await _inFlightFetch!;
+      _cachedStores = fresh;
+      _lastFetchTime = DateTime.now();
+      await LocalSyncService.setCacheTimestamp('store_cache', _lastFetchTime!);
+      onData(fresh, isFresh: true);
+    } catch (e) {
+      debugPrint('[StoreDirectoryService] SWR revalidation error: $e');
+      if (current.isEmpty && onError != null) onError(e);
+    } finally {
+      _inFlightFetch = null;
+    }
+  }
+
+  static Future<List<StorePreview>> loadStores({bool forceRefresh = false}) async {
+    if (!forceRefresh && _cachedStores != null && _cachedStores!.isNotEmpty) {
+      if (_lastFetchTime != null && DateTime.now().difference(_lastFetchTime!) < _dedupingInterval) {
+        return _cachedStores!;
+      }
+    }
+
+    if (_inFlightFetch != null) {
+      return _inFlightFetch!;
+    }
+
+    _inFlightFetch = _performRemoteFetch();
+    try {
+      final result = await _inFlightFetch!;
+      _cachedStores = result;
+      _lastFetchTime = DateTime.now();
+      await LocalSyncService.setCacheTimestamp('store_cache', _lastFetchTime!);
+      return result;
+    } finally {
+      _inFlightFetch = null;
+    }
+  }
+
+  static Future<List<StorePreview>> _performRemoteFetch() async {
     final response = await _client.rpc(
       'hr_store_directory',
       params: {
@@ -2899,7 +3560,9 @@ class StoreDirectoryService {
       },
     );
     if (response is! List) return const [];
-    return response.whereType<Map<String, dynamic>>().map(_fromRow).toList();
+    final rawRows = response.whereType<Map<String, dynamic>>().toList();
+    unawaited(LocalSyncService.cacheRows('store_cache', rawRows));
+    return rawRows.map(_fromRow).toList();
   }
 
   static Future<String> createStore({
@@ -2907,6 +3570,7 @@ class StoreDirectoryService {
     required String companyName,
     required String clusterName,
   }) async {
+    invalidateCache();
     return (await _client.rpc(
       'hr_create_store',
       params: {
@@ -2925,6 +3589,7 @@ class StoreDirectoryService {
     required String companyName,
     required String clusterName,
   }) async {
+    invalidateCache();
     return (await _client.rpc(
       'hr_update_store',
       params: {
@@ -2939,6 +3604,7 @@ class StoreDirectoryService {
   }
 
   static Future<String> deleteStore(String id) async {
+    invalidateCache();
     return (await _client.rpc(
       'hr_delete_store',
       params: {
@@ -2977,8 +3643,104 @@ class StoreDirectoryService {
 
 class ClusterDirectoryService {
   static final _client = Supabase.instance.client;
+  static List<ClusterPreview>? _cachedClusters;
+  static DateTime? _lastFetchTime;
+  static Future<List<ClusterPreview>>? _inFlightFetch;
+  static const Duration _dedupingInterval = Duration(minutes: 5);
 
-  static Future<List<ClusterPreview>> loadClusters() async {
+  static void invalidateCache() {
+    _cachedClusters = null;
+    _lastFetchTime = null;
+  }
+
+  static Future<List<ClusterPreview>> loadLocalClusters() async {
+    if (_cachedClusters != null && _cachedClusters!.isNotEmpty) {
+      return _cachedClusters!;
+    }
+    try {
+      final cached = await LocalSyncService.loadCachedRows('cluster_cache');
+      if (cached.isNotEmpty) {
+        final list = cached.map(_fromRow).toList();
+        _cachedClusters = list;
+        return list;
+      }
+    } catch (_) {}
+    return const [];
+  }
+
+  static Future<void> loadClustersSwr({
+    required void Function(List<ClusterPreview> clusters, {required bool isFresh}) onData,
+    void Function(Object error)? onError,
+    bool forceRefresh = false,
+  }) async {
+    List<ClusterPreview>? current = _cachedClusters;
+    if (current == null || current.isEmpty) {
+      current = await loadLocalClusters();
+    }
+    if (current.isNotEmpty) {
+      onData(current, isFresh: false);
+    }
+
+    _lastFetchTime ??= await LocalSyncService.getCacheTimestamp('cluster_cache');
+
+    final isWithinDeduping = !forceRefresh &&
+        current.isNotEmpty &&
+        _lastFetchTime != null &&
+        DateTime.now().difference(_lastFetchTime!) < _dedupingInterval;
+
+    if (isWithinDeduping) {
+      return;
+    }
+
+    if (_inFlightFetch != null) {
+      try {
+        final result = await _inFlightFetch!;
+        onData(result, isFresh: true);
+      } catch (e) {
+        if (current.isEmpty && onError != null) onError(e);
+      }
+      return;
+    }
+
+    _inFlightFetch = _performRemoteFetch();
+    try {
+      final fresh = await _inFlightFetch!;
+      _cachedClusters = fresh;
+      _lastFetchTime = DateTime.now();
+      await LocalSyncService.setCacheTimestamp('cluster_cache', _lastFetchTime!);
+      onData(fresh, isFresh: true);
+    } catch (e) {
+      debugPrint('[ClusterDirectoryService] SWR revalidation error: $e');
+      if (current.isEmpty && onError != null) onError(e);
+    } finally {
+      _inFlightFetch = null;
+    }
+  }
+
+  static Future<List<ClusterPreview>> loadClusters({bool forceRefresh = false}) async {
+    if (!forceRefresh && _cachedClusters != null && _cachedClusters!.isNotEmpty) {
+      if (_lastFetchTime != null && DateTime.now().difference(_lastFetchTime!) < _dedupingInterval) {
+        return _cachedClusters!;
+      }
+    }
+
+    if (_inFlightFetch != null) {
+      return _inFlightFetch!;
+    }
+
+    _inFlightFetch = _performRemoteFetch();
+    try {
+      final result = await _inFlightFetch!;
+      _cachedClusters = result;
+      _lastFetchTime = DateTime.now();
+      await LocalSyncService.setCacheTimestamp('cluster_cache', _lastFetchTime!);
+      return result;
+    } finally {
+      _inFlightFetch = null;
+    }
+  }
+
+  static Future<List<ClusterPreview>> _performRemoteFetch() async {
     final response = await _client.rpc(
       'hr_cluster_directory',
       params: {
@@ -2987,13 +3749,16 @@ class ClusterDirectoryService {
       },
     );
     if (response is! List) return const [];
-    return response.whereType<Map<String, dynamic>>().map(_fromRow).toList();
+    final rawRows = response.whereType<Map<String, dynamic>>().toList();
+    unawaited(LocalSyncService.cacheRows('cluster_cache', rawRows));
+    return rawRows.map(_fromRow).toList();
   }
 
   static Future<String> createCluster({
     required String name,
     required List<String> storeIds,
   }) async {
+    invalidateCache();
     return (await _client.rpc(
       'hr_create_cluster_with_stores',
       params: {
@@ -3010,6 +3775,7 @@ class ClusterDirectoryService {
     required String name,
     required List<String> storeIds,
   }) async {
+    invalidateCache();
     return (await _client.rpc(
       'hr_update_cluster_with_stores',
       params: {
@@ -3023,6 +3789,7 @@ class ClusterDirectoryService {
   }
 
   static Future<String> deleteCluster(String id) async {
+    invalidateCache();
     return (await _client.rpc(
       'hr_delete_cluster',
       params: {
@@ -3059,8 +3826,104 @@ class ClusterDirectoryService {
 
 class AreaDirectoryService {
   static final _client = Supabase.instance.client;
+  static List<AreaPreview>? _cachedAreas;
+  static DateTime? _lastFetchTime;
+  static Future<List<AreaPreview>>? _inFlightFetch;
+  static const Duration _dedupingInterval = Duration(minutes: 5);
 
-  static Future<List<AreaPreview>> loadAreas() async {
+  static void invalidateCache() {
+    _cachedAreas = null;
+    _lastFetchTime = null;
+  }
+
+  static Future<List<AreaPreview>> loadLocalAreas() async {
+    if (_cachedAreas != null && _cachedAreas!.isNotEmpty) {
+      return _cachedAreas!;
+    }
+    try {
+      final cached = await LocalSyncService.loadCachedRows('area_cache');
+      if (cached.isNotEmpty) {
+        final list = cached.map(_fromRow).toList();
+        _cachedAreas = list;
+        return list;
+      }
+    } catch (_) {}
+    return const [];
+  }
+
+  static Future<void> loadAreasSwr({
+    required void Function(List<AreaPreview> areas, {required bool isFresh}) onData,
+    void Function(Object error)? onError,
+    bool forceRefresh = false,
+  }) async {
+    List<AreaPreview>? current = _cachedAreas;
+    if (current == null || current.isEmpty) {
+      current = await loadLocalAreas();
+    }
+    if (current.isNotEmpty) {
+      onData(current, isFresh: false);
+    }
+
+    _lastFetchTime ??= await LocalSyncService.getCacheTimestamp('area_cache');
+
+    final isWithinDeduping = !forceRefresh &&
+        current.isNotEmpty &&
+        _lastFetchTime != null &&
+        DateTime.now().difference(_lastFetchTime!) < _dedupingInterval;
+
+    if (isWithinDeduping) {
+      return;
+    }
+
+    if (_inFlightFetch != null) {
+      try {
+        final result = await _inFlightFetch!;
+        onData(result, isFresh: true);
+      } catch (e) {
+        if (current.isEmpty && onError != null) onError(e);
+      }
+      return;
+    }
+
+    _inFlightFetch = _performRemoteFetch();
+    try {
+      final fresh = await _inFlightFetch!;
+      _cachedAreas = fresh;
+      _lastFetchTime = DateTime.now();
+      await LocalSyncService.setCacheTimestamp('area_cache', _lastFetchTime!);
+      onData(fresh, isFresh: true);
+    } catch (e) {
+      debugPrint('[AreaDirectoryService] SWR revalidation error: $e');
+      if (current.isEmpty && onError != null) onError(e);
+    } finally {
+      _inFlightFetch = null;
+    }
+  }
+
+  static Future<List<AreaPreview>> loadAreas({bool forceRefresh = false}) async {
+    if (!forceRefresh && _cachedAreas != null && _cachedAreas!.isNotEmpty) {
+      if (_lastFetchTime != null && DateTime.now().difference(_lastFetchTime!) < _dedupingInterval) {
+        return _cachedAreas!;
+      }
+    }
+
+    if (_inFlightFetch != null) {
+      return _inFlightFetch!;
+    }
+
+    _inFlightFetch = _performRemoteFetch();
+    try {
+      final result = await _inFlightFetch!;
+      _cachedAreas = result;
+      _lastFetchTime = DateTime.now();
+      await LocalSyncService.setCacheTimestamp('area_cache', _lastFetchTime!);
+      return result;
+    } finally {
+      _inFlightFetch = null;
+    }
+  }
+
+  static Future<List<AreaPreview>> _performRemoteFetch() async {
     final response = await _client.rpc(
       'hr_area_directory',
       params: {
@@ -3069,13 +3932,16 @@ class AreaDirectoryService {
       },
     );
     if (response is! List) return const [];
-    return response.whereType<Map<String, dynamic>>().map(_fromRow).toList();
+    final rawRows = response.whereType<Map<String, dynamic>>().toList();
+    unawaited(LocalSyncService.cacheRows('area_cache', rawRows));
+    return rawRows.map(_fromRow).toList();
   }
 
   static Future<String> createArea({
     required String name,
     required List<String> clusterIds,
   }) async {
+    invalidateCache();
     return (await _client.rpc(
       'hr_create_area_with_clusters',
       params: {
@@ -3092,6 +3958,7 @@ class AreaDirectoryService {
     required String name,
     required List<String> clusterIds,
   }) async {
+    invalidateCache();
     return (await _client.rpc(
       'hr_update_area_with_clusters',
       params: {
@@ -3105,6 +3972,7 @@ class AreaDirectoryService {
   }
 
   static Future<String> deleteArea(String id) async {
+    invalidateCache();
     return (await _client.rpc(
       'hr_delete_area',
       params: {
@@ -3141,6 +4009,20 @@ class AreaDirectoryService {
 
 class AdminWorkflowService {
   static final _client = Supabase.instance.client;
+  static List<AuthorityCandidatePreview>? _cachedAuthorityCandidates;
+  static List<StoreRouteScopePreview>? _cachedStoreRouteScopes;
+  static List<AdminPositionAuthorityPreview>? _cachedPositionAuthorities;
+  static List<DepartmentLadderPreview>? _cachedDepartmentLadders;
+  static DateTime? _lastFetchTime;
+  static const Duration _dedupingInterval = Duration(minutes: 5);
+
+  static void invalidateCache() {
+    _cachedAuthorityCandidates = null;
+    _cachedStoreRouteScopes = null;
+    _cachedPositionAuthorities = null;
+    _cachedDepartmentLadders = null;
+    _lastFetchTime = null;
+  }
 
   static Map<String, dynamic> get _credentials => {
     'p_username': AppConfig.hrUsername,
@@ -3148,28 +4030,44 @@ class AdminWorkflowService {
   };
 
   static Future<List<AuthorityCandidatePreview>>
-  loadAuthorityCandidates() async {
+  loadAuthorityCandidates({bool forceRefresh = false}) async {
+    if (!forceRefresh && _cachedAuthorityCandidates != null && _lastFetchTime != null) {
+      if (DateTime.now().difference(_lastFetchTime!) < _dedupingInterval) {
+        return _cachedAuthorityCandidates!;
+      }
+    }
     final response = await _client.rpc(
       'hr_admin_authority_candidates',
       params: _credentials,
     );
     if (response is! List) return const [];
-    return response
+    final list = response
         .whereType<Map<String, dynamic>>()
         .map(_authorityCandidateFromRow)
         .toList();
+    _cachedAuthorityCandidates = list;
+    _lastFetchTime = DateTime.now();
+    return list;
   }
 
-  static Future<List<StoreRouteScopePreview>> loadStoreRouteScopes() async {
+  static Future<List<StoreRouteScopePreview>> loadStoreRouteScopes({bool forceRefresh = false}) async {
+    if (!forceRefresh && _cachedStoreRouteScopes != null && _lastFetchTime != null) {
+      if (DateTime.now().difference(_lastFetchTime!) < _dedupingInterval) {
+        return _cachedStoreRouteScopes!;
+      }
+    }
     final response = await _client.rpc(
       'hr_admin_store_route_scopes',
       params: _credentials,
     );
     if (response is! List) return const [];
-    return response
+    final list = response
         .whereType<Map<String, dynamic>>()
         .map(_storeRouteScopeFromRow)
         .toList();
+    _cachedStoreRouteScopes = list;
+    _lastFetchTime = DateTime.now();
+    return list;
   }
 
   static Future<String> setAuthorityAssignment({
@@ -3180,6 +4078,7 @@ class AdminWorkflowService {
     String? clusterId,
     String? areaId,
   }) async {
+    invalidateCache();
     return (await _client.rpc(
       'hr_admin_set_authority_assignment',
       params: {
@@ -3195,7 +4094,12 @@ class AdminWorkflowService {
   }
 
   static Future<List<AdminPositionAuthorityPreview>>
-  loadPositionAuthorityLevels() async {
+  loadPositionAuthorityLevels({bool forceRefresh = false}) async {
+    if (!forceRefresh && _cachedPositionAuthorities != null && _lastFetchTime != null) {
+      if (DateTime.now().difference(_lastFetchTime!) < _dedupingInterval) {
+        return _cachedPositionAuthorities!;
+      }
+    }
     final response = await _client.rpc(
       'hr_admin_position_authority_levels',
       params: _credentials,
@@ -3206,6 +4110,8 @@ class AdminWorkflowService {
         .map(_positionAuthorityFromRow)
         .toList();
     PositionDirectoryService.cachePositionAuthorities(list);
+    _cachedPositionAuthorities = list;
+    _lastFetchTime = DateTime.now();
     return list;
   }
 
@@ -3213,6 +4119,7 @@ class AdminWorkflowService {
     required String positionId,
     required int authorityLevel,
   }) async {
+    invalidateCache();
     return (await _client.rpc(
       'hr_admin_set_position_authority_level',
       params: {
@@ -3224,6 +4131,7 @@ class AdminWorkflowService {
   }
 
   static Future<String> clearPositionAuthorityLevel(String positionId) async {
+    invalidateCache();
     return (await _client.rpc(
       'hr_admin_clear_position_authority_level',
       params: {..._credentials, 'p_position_id': positionId},
@@ -3231,16 +4139,24 @@ class AdminWorkflowService {
   }
 
   static Future<List<DepartmentLadderPreview>>
-  loadDepartmentApprovalLadders() async {
+  loadDepartmentApprovalLadders({bool forceRefresh = false}) async {
+    if (!forceRefresh && _cachedDepartmentLadders != null && _lastFetchTime != null) {
+      if (DateTime.now().difference(_lastFetchTime!) < _dedupingInterval) {
+        return _cachedDepartmentLadders!;
+      }
+    }
     final response = await _client.rpc(
       'hr_admin_department_approval_ladders',
       params: _credentials,
     );
     if (response is! List) return const [];
-    return response
+    final list = response
         .whereType<Map<String, dynamic>>()
         .map(_departmentLadderFromRow)
         .toList();
+    _cachedDepartmentLadders = list;
+    _lastFetchTime = DateTime.now();
+    return list;
   }
 
   static Future<String> setDepartmentApprovalLadder({
@@ -3248,6 +4164,7 @@ class AdminWorkflowService {
     required List<int> levels,
     required Map<int, String> roles,
   }) async {
+    invalidateCache();
     final params = {
       ..._credentials,
       'p_department_id': departmentId,
@@ -3554,6 +4471,9 @@ class LocalSyncService {
     List<Map<String, dynamic>> rows,
   ) async {
     final db = await _database;
+    await db.execute(
+      'CREATE TABLE IF NOT EXISTS $table (id INTEGER PRIMARY KEY AUTOINCREMENT, payload TEXT NOT NULL)',
+    );
     await db.transaction((txn) async {
       await txn.delete(table);
       for (final row in rows) {
@@ -3562,15 +4482,55 @@ class LocalSyncService {
     });
   }
 
+  static Future<void> setCacheTimestamp(String key, DateTime time) async {
+    try {
+      final db = await _database;
+      await db.insert(
+        'cache_metadata',
+        {
+          'cache_key': key,
+          'updated_at': time.toIso8601String(),
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (_) {}
+  }
+
+  static Future<DateTime?> getCacheTimestamp(String key) async {
+    try {
+      final db = await _database;
+      final rows = await db.query(
+        'cache_metadata',
+        where: 'cache_key = ?',
+        whereArgs: [key],
+        limit: 1,
+      );
+      if (rows.isNotEmpty) {
+        final str = rows.first['updated_at']?.toString();
+        if (str != null && str.isNotEmpty) {
+          return DateTime.tryParse(str);
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
   static Future<List<Map<String, dynamic>>> loadCachedRows(String table) async {
-    final db = await _database;
-    final rows = await db.query(table, orderBy: 'id ASC');
-    return rows
-        .map(
-          (r) => (jsonDecode((r['payload'] ?? '{}').toString()) as Map)
-              .cast<String, dynamic>(),
-        )
-        .toList(growable: false);
+    try {
+      final db = await _database;
+      await db.execute(
+        'CREATE TABLE IF NOT EXISTS $table (id INTEGER PRIMARY KEY AUTOINCREMENT, payload TEXT NOT NULL)',
+      );
+      final rows = await db.query(table, orderBy: 'id ASC');
+      return rows
+          .map(
+            (r) => (jsonDecode((r['payload'] ?? '{}').toString()) as Map)
+                .cast<String, dynamic>(),
+          )
+          .toList(growable: false);
+    } catch (_) {
+      return const [];
+    }
   }
 
   static Future<void> cacheProfile(
@@ -3865,6 +4825,12 @@ class LocalSyncService {
           )
         ''');
         await db.execute('''
+          CREATE TABLE cache_metadata (
+            cache_key TEXT PRIMARY KEY,
+            updated_at TEXT NOT NULL
+          )
+        ''');
+        await db.execute('''
           CREATE TABLE sync_outbox (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             entity TEXT NOT NULL,
@@ -3878,6 +4844,14 @@ class LocalSyncService {
         ''');
       },
     );
+    try {
+      await _db!.execute('''
+        CREATE TABLE IF NOT EXISTS cache_metadata (
+          cache_key TEXT PRIMARY KEY,
+          updated_at TEXT NOT NULL
+        )
+      ''');
+    } catch (_) {}
     return _db!;
   }
 }
@@ -4092,8 +5066,116 @@ $userQuestion
 
 class AdminRequestsService {
   static final _client = Supabase.instance.client;
+  static List<AdminRequestItem>? _cachedRequests;
+  static DateTime? _lastFetchTime;
+  static Future<List<AdminRequestItem>>? _inFlightFetch;
+  static const Duration _dedupingInterval = Duration(minutes: 2);
 
-  static Future<List<AdminRequestItem>> loadAllRequests() async {
+  static void invalidateCache() {
+    _cachedRequests = null;
+    _lastFetchTime = null;
+  }
+
+  /// Synchronously or locally access cached requests (0-5ms delay).
+  static Future<List<AdminRequestItem>> loadLocalRequests() async {
+    if (_cachedRequests != null && _cachedRequests!.isNotEmpty) {
+      return _cachedRequests!;
+    }
+    try {
+      final cachedRows = await LocalSyncService.loadCachedRows('requests_cache');
+      if (cachedRows.isNotEmpty) {
+        final rawRequests = cachedRows.map(AdminRequestItem.fromRow).toList();
+        final requests = _groupEsarfRequests(rawRequests);
+        _cachedRequests = requests;
+        return requests;
+      }
+    } catch (_) {}
+    return const [];
+  }
+
+  /// SWR (Stale-While-Revalidate) Loader:
+  /// 1. Immediately triggers [onData] with local/cached requests (0ms delay).
+  /// 2. If data is fresh (< 2 mins) and [forceRefresh] is false, finishes without querying the database.
+  /// 3. Otherwise, revalidates in the background from Supabase RPC, updates local SQLite + memory cache,
+  ///    and triggers [onData] with the fresh data.
+  static Future<void> loadRequestsSwr({
+    required void Function(List<AdminRequestItem> requests, {required bool isFresh}) onData,
+    void Function(Object error)? onError,
+    bool forceRefresh = false,
+  }) async {
+    // 1. STALE: Deliver memory or SQLite cache immediately
+    List<AdminRequestItem>? current = _cachedRequests;
+    if (current == null || current.isEmpty) {
+      current = await loadLocalRequests();
+    }
+    if (current.isNotEmpty) {
+      onData(current, isFresh: false);
+    }
+
+    _lastFetchTime ??= await LocalSyncService.getCacheTimestamp('requests_cache');
+
+    // 2. DEDUPING:
+    final isWithinDeduping = !forceRefresh &&
+        current.isNotEmpty &&
+        _lastFetchTime != null &&
+        DateTime.now().difference(_lastFetchTime!) < _dedupingInterval;
+
+    if (isWithinDeduping) {
+      return;
+    }
+
+    // 3. REVALIDATE (Background fetch, deduplicated):
+    if (_inFlightFetch != null) {
+      try {
+        final result = await _inFlightFetch!;
+        onData(result, isFresh: true);
+      } catch (e) {
+        if (current.isEmpty && onError != null) onError(e);
+      }
+      return;
+    }
+
+    _inFlightFetch = _performLoadAllRequests();
+    try {
+      final fresh = await _inFlightFetch!;
+      _cachedRequests = fresh;
+      _lastFetchTime = DateTime.now();
+      await LocalSyncService.setCacheTimestamp('requests_cache', _lastFetchTime!);
+      onData(fresh, isFresh: true);
+    } catch (e) {
+      debugPrint('[AdminRequestsService] SWR revalidation error: $e');
+      if (current.isEmpty && onError != null) {
+        onError(e);
+      }
+    } finally {
+      _inFlightFetch = null;
+    }
+  }
+
+  static Future<List<AdminRequestItem>> loadAllRequests({bool forceRefresh = false}) async {
+    if (!forceRefresh && _cachedRequests != null && _lastFetchTime != null) {
+      if (DateTime.now().difference(_lastFetchTime!) < _dedupingInterval) {
+        return _cachedRequests!;
+      }
+    }
+
+    if (_inFlightFetch != null) {
+      return _inFlightFetch!;
+    }
+
+    _inFlightFetch = _performLoadAllRequests();
+    try {
+      final result = await _inFlightFetch!;
+      _cachedRequests = result;
+      _lastFetchTime = DateTime.now();
+      await LocalSyncService.setCacheTimestamp('requests_cache', _lastFetchTime!);
+      return result;
+    } finally {
+      _inFlightFetch = null;
+    }
+  }
+
+  static Future<List<AdminRequestItem>> _performLoadAllRequests() async {
     if (PositionDirectoryService.isCacheEmpty) {
       try {
         await PositionDirectoryService.loadPositions();
@@ -4105,11 +5187,10 @@ class AdminRequestsService {
       return const [];
     }
 
-    final rawRequests = response
-        .whereType<Map<String, dynamic>>()
-        .map(AdminRequestItem.fromRow)
-        .toList();
+    final rawRows = response.whereType<Map<String, dynamic>>().toList();
+    unawaited(LocalSyncService.cacheRows('requests_cache', rawRows));
 
+    final rawRequests = rawRows.map(AdminRequestItem.fromRow).toList();
     final requests = _groupEsarfRequests(rawRequests);
 
     try {
@@ -4171,6 +5252,7 @@ class AdminRequestsService {
     required String requestId,
     required bool isPerk,
   }) async {
+    invalidateCache();
     try {
       final response = await _client.rpc(
         'admin_delete_request',
@@ -4192,6 +5274,7 @@ class AdminRequestsService {
     required double oldPaidDays,
     required String? userProfileId,
   }) async {
+    invalidateCache();
     try {
       final response = await _client.rpc(
         'admin_validate_leave_request',
@@ -4215,6 +5298,7 @@ class AdminRequestsService {
     required String? userProfileId,
     String? newReason,
   }) async {
+    invalidateCache();
     try {
       final response = await _client.rpc(
         'admin_validate_esarf_request',
@@ -4236,6 +5320,7 @@ class AdminRequestsService {
     required bool isPerk,
     required String newStatus,
   }) async {
+    invalidateCache();
     try {
       final response = await _client.rpc(
         'admin_update_request_status',
@@ -4280,6 +5365,7 @@ class AdminRequestsService {
     double? finalAmount,
     String? txnDate,
   }) async {
+    invalidateCache();
     try {
       final params = <String, dynamic>{
         'p_request_id': requestId,
@@ -4318,6 +5404,7 @@ class AdminRequestsService {
     required String newApproverEmployeeId,
     String? stepId,
   }) async {
+    invalidateCache();
     try {
       final params = <String, dynamic>{
         'p_request_id': requestId,
@@ -4336,6 +5423,7 @@ class AdminRequestsService {
 
   /// Refreshes assigned approvers for all pending/active requests based on current organizational hierarchy.
   static Future<String> refreshAssignedApprovers() async {
+    invalidateCache();
     try {
       final response = await _client.rpc('admin_refresh_assigned_approvers');
       return response?.toString() ??
@@ -4477,13 +5565,126 @@ class InventoryProductsService {
 
 class RewardService {
   static final _client = Supabase.instance.client;
+  static List<RewardItem>? _cachedRewards;
+  static DateTime? _lastFetchTime;
+  static Future<List<RewardItem>>? _inFlightFetch;
+  static const Duration _dedupingInterval = Duration(minutes: 5);
 
-  static Future<List<RewardItem>> fetchRewards() async {
+  static void invalidateCache() {
+    _cachedRewards = null;
+    _lastFetchTime = null;
+  }
+
+  static Future<List<RewardItem>> loadLocalRewards() async {
+    if (_cachedRewards != null && _cachedRewards!.isNotEmpty) {
+      return _cachedRewards!;
+    }
+    try {
+      final cachedRows = await LocalSyncService.loadCachedRows('rewards_cache');
+      if (cachedRows.isNotEmpty) {
+        final list = cachedRows.map((map) {
+          return RewardItem(
+            id: map['id']?.toString() ?? '',
+            productName: map['product_name']?.toString() ?? '',
+            stocks: (map['stocks'] as num?)?.toInt() ?? 0,
+            pointsValue: (map['points_value'] as num?)?.toInt() ?? 0,
+            status: map['status']?.toString() ?? 'Active',
+            createdAt: map['created_at'] != null
+                ? DateTime.tryParse(map['created_at'].toString())
+                : null,
+          );
+        }).toList();
+        _cachedRewards = list;
+        return list;
+      }
+    } catch (_) {}
+    return const [];
+  }
+
+  static Future<void> loadRewardsSwr({
+    required void Function(List<RewardItem> rewards, {required bool isFresh}) onData,
+    void Function(Object error)? onError,
+    bool forceRefresh = false,
+  }) async {
+    List<RewardItem>? current = _cachedRewards;
+    if (current == null || current.isEmpty) {
+      current = await loadLocalRewards();
+    }
+    if (current.isNotEmpty) {
+      onData(current, isFresh: false);
+    }
+
+    _lastFetchTime ??= await LocalSyncService.getCacheTimestamp('rewards_cache');
+
+    final isWithinDeduping = !forceRefresh &&
+        current.isNotEmpty &&
+        _lastFetchTime != null &&
+        DateTime.now().difference(_lastFetchTime!) < _dedupingInterval;
+
+    if (isWithinDeduping) {
+      return;
+    }
+
+    if (_inFlightFetch != null) {
+      try {
+        final result = await _inFlightFetch!;
+        onData(result, isFresh: true);
+      } catch (e) {
+        if (current.isEmpty && onError != null) onError(e);
+      }
+      return;
+    }
+
+    _inFlightFetch = _performRemoteFetch();
+    try {
+      final fresh = await _inFlightFetch!;
+      _cachedRewards = fresh;
+      _lastFetchTime = DateTime.now();
+      await LocalSyncService.setCacheTimestamp('rewards_cache', _lastFetchTime!);
+      onData(fresh, isFresh: true);
+    } catch (e) {
+      debugPrint('[RewardService] SWR revalidation error: $e');
+      if (current.isEmpty && onError != null) onError(e);
+    } finally {
+      _inFlightFetch = null;
+    }
+  }
+
+  static Future<List<RewardItem>> fetchRewards({bool forceRefresh = false}) async {
+    if (!forceRefresh && _cachedRewards != null && _cachedRewards!.isNotEmpty) {
+      if (_lastFetchTime != null && DateTime.now().difference(_lastFetchTime!) < _dedupingInterval) {
+        return _cachedRewards!;
+      }
+    }
+
+    if (_inFlightFetch != null) {
+      return _inFlightFetch!;
+    }
+
+    _inFlightFetch = _performRemoteFetch();
+    try {
+      final result = await _inFlightFetch!;
+      _cachedRewards = result;
+      _lastFetchTime = DateTime.now();
+      await LocalSyncService.setCacheTimestamp('rewards_cache', _lastFetchTime!);
+      return result;
+    } catch (e) {
+      if (_cachedRewards != null && _cachedRewards!.isNotEmpty) {
+        return _cachedRewards!;
+      }
+      return await loadLocalRewards();
+    } finally {
+      _inFlightFetch = null;
+    }
+  }
+
+  static Future<List<RewardItem>> _performRemoteFetch() async {
     try {
       final response = await _client.rpc('admin_get_rewards');
       if (response is List) {
-        return response.map((json) {
-          final map = json as Map<String, dynamic>;
+        final rows = response.whereType<Map<String, dynamic>>().toList();
+        unawaited(LocalSyncService.cacheRows('rewards_cache', rows));
+        return rows.map((map) {
           return RewardItem(
             id: map['id']?.toString() ?? '',
             productName: map['product_name']?.toString() ?? '',
@@ -4508,6 +5709,7 @@ class RewardService {
     required int pointsValue,
     String status = 'Active',
   }) async {
+    invalidateCache();
     try {
       final response = await _client.rpc(
         'admin_create_reward',
@@ -4544,6 +5746,7 @@ class RewardService {
     required int pointsValue,
     String status = 'Active',
   }) async {
+    invalidateCache();
     try {
       final response = await _client.rpc(
         'admin_update_reward',
@@ -4575,6 +5778,7 @@ class RewardService {
   }
 
   static Future<bool> deleteReward(String id) async {
+    invalidateCache();
     try {
       final response = await _client.rpc(
         'admin_delete_reward',
@@ -4646,15 +5850,34 @@ class BadgesDatabaseService {
     return '#${color.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
   }
 
+  static List<BadgeItem>? _cachedBadges;
+  static DateTime? _badgesLastFetched;
+  static List<AwardedBadgeRecord>? _cachedAwardedHistory;
+  static DateTime? _historyLastFetched;
+  static const Duration _dedupingInterval = Duration(minutes: 5);
+
+  static void invalidateCache() {
+    _cachedBadges = null;
+    _badgesLastFetched = null;
+    _cachedAwardedHistory = null;
+    _historyLastFetched = null;
+  }
+
   // 1. FETCH BADGES CATALOG FROM SUPABASE
-  static Future<List<BadgeItem>> loadBadges() async {
+  static Future<List<BadgeItem>> loadBadges({bool forceRefresh = false}) async {
+    if (!forceRefresh &&
+        _cachedBadges != null &&
+        _badgesLastFetched != null &&
+        DateTime.now().difference(_badgesLastFetched!) < _dedupingInterval) {
+      return List<BadgeItem>.from(_cachedBadges!);
+    }
     try {
       final List<dynamic> response = await _client
           .from('badges')
           .select()
           .order('created_at', ascending: false);
 
-      return response.map((map) {
+      final list = response.map((map) {
         final m = map as Map<String, dynamic>;
         return BadgeItem(
           id: m['id']?.toString() ?? '',
@@ -4671,21 +5894,31 @@ class BadgesDatabaseService {
           createdAt: m['created_at'] != null ? DateTime.tryParse(m['created_at'].toString()) : null,
         );
       }).toList();
+      _cachedBadges = List<BadgeItem>.from(list);
+      _badgesLastFetched = DateTime.now();
+      return list;
     } catch (e) {
       debugPrint('Error loading badges from Supabase: $e');
+      if (_cachedBadges != null) return List<BadgeItem>.from(_cachedBadges!);
       return [];
     }
   }
 
   // 2. FETCH AWARDED HISTORY FROM SUPABASE
-  static Future<List<AwardedBadgeRecord>> loadAwardedHistory() async {
+  static Future<List<AwardedBadgeRecord>> loadAwardedHistory({bool forceRefresh = false}) async {
+    if (!forceRefresh &&
+        _cachedAwardedHistory != null &&
+        _historyLastFetched != null &&
+        DateTime.now().difference(_historyLastFetched!) < _dedupingInterval) {
+      return List<AwardedBadgeRecord>.from(_cachedAwardedHistory!);
+    }
     try {
       final List<dynamic> response = await _client
           .from('awarded_badges')
           .select()
           .order('awarded_at', ascending: false);
 
-      return response.map((map) {
+      final list = response.map((map) {
         final m = map as Map<String, dynamic>;
         return AwardedBadgeRecord(
           id: m['id']?.toString() ?? '',
@@ -4707,14 +5940,19 @@ class BadgesDatabaseService {
           pointsAwarded: (m['points_awarded'] as num?)?.toInt() ?? 0,
         );
       }).toList();
+      _cachedAwardedHistory = List<AwardedBadgeRecord>.from(list);
+      _historyLastFetched = DateTime.now();
+      return list;
     } catch (e) {
       debugPrint('Error loading awarded badges from Supabase: $e');
+      if (_cachedAwardedHistory != null) return List<AwardedBadgeRecord>.from(_cachedAwardedHistory!);
       return [];
     }
   }
 
   // 3. SAVE / UPDATE BADGE TEMPLATE IN SUPABASE
   static Future<void> saveBadge(BadgeItem badge) async {
+    invalidateCache();
     try {
       final payload = {
         'id': badge.id,
@@ -4738,6 +5976,7 @@ class BadgesDatabaseService {
 
   // 4. SAVE AWARDED BADGE RECORD & INCREMENT BADGE COUNT
   static Future<void> saveAwardedRecord(AwardedBadgeRecord record) async {
+    invalidateCache();
     try {
       final payload = <String, dynamic>{
         'id': record.id,
@@ -4799,6 +6038,7 @@ class BadgesDatabaseService {
     required String note,
     required List<BadgeItem> selectedBadges,
   }) async {
+    invalidateCache();
     try {
       final badgeIds = selectedBadges.map((b) => b.id).toList();
 
@@ -4852,6 +6092,7 @@ class BadgesDatabaseService {
 
   // 6. DELETE BADGE TEMPLATE FROM SUPABASE
   static Future<void> deleteBadge(String badgeId) async {
+    invalidateCache();
     try {
       await _client.from('badges').delete().eq('id', badgeId);
     } catch (e) {
@@ -4861,6 +6102,7 @@ class BadgesDatabaseService {
 
   // 7. DELETE AWARDED BADGE RECORD FROM SUPABASE
   static Future<void> deleteAwardedRecord(String recordId) async {
+    invalidateCache();
     try {
       await _client.from('awarded_badges').delete().eq('id', recordId);
     } catch (e) {
@@ -5106,7 +6348,26 @@ class TutorialService {
 class PortalEventActivityService {
   static final _client = Supabase.instance.client;
 
-  static Future<List<PortalEventActivityItem>> getEvents({bool onlyActive = false}) async {
+  static List<PortalEventActivityItem>? _cachedEvents;
+  static DateTime? _eventsLastFetched;
+  static const Duration _dedupingInterval = Duration(minutes: 5);
+
+  static void invalidateCache() {
+    _cachedEvents = null;
+    _eventsLastFetched = null;
+  }
+
+  static Future<List<PortalEventActivityItem>> getEvents({
+    bool onlyActive = false,
+    bool forceRefresh = false,
+  }) async {
+    if (!forceRefresh &&
+        !onlyActive &&
+        _cachedEvents != null &&
+        _eventsLastFetched != null &&
+        DateTime.now().difference(_eventsLastFetched!) < _dedupingInterval) {
+      return List<PortalEventActivityItem>.from(_cachedEvents!);
+    }
     try {
       var query = _client.from('portal_events').select();
       if (onlyActive) {
@@ -5116,9 +6377,14 @@ class PortalEventActivityService {
           .order('event_date', ascending: false)
           .order('time_from', ascending: true);
 
-      return (response as List)
+      final items = (response as List)
           .map((row) => PortalEventActivityItem.fromMap(row as Map<String, dynamic>))
           .toList();
+      if (!onlyActive) {
+        _cachedEvents = List<PortalEventActivityItem>.from(items);
+        _eventsLastFetched = DateTime.now();
+      }
+      return items;
     } catch (e) {
       final errStr = e.toString().toLowerCase();
       if (errStr.contains('portal_events') ||
@@ -5137,9 +6403,14 @@ class PortalEventActivityService {
           'get_portal_events',
           params: {'p_only_active': onlyActive},
         );
-        return (rpcResponse as List)
+        final items = (rpcResponse as List)
             .map((row) => PortalEventActivityItem.fromMap(row as Map<String, dynamic>))
             .toList();
+        if (!onlyActive) {
+          _cachedEvents = List<PortalEventActivityItem>.from(items);
+          _eventsLastFetched = DateTime.now();
+        }
+        return items;
       } catch (rpcErr) {
         final rpcStr = rpcErr.toString().toLowerCase();
         if (rpcStr.contains('pgrst202') ||
@@ -5152,6 +6423,9 @@ class PortalEventActivityService {
           );
         }
         debugPrint('Error fetching portal events: $rpcErr');
+        if (!onlyActive && _cachedEvents != null) {
+          return List<PortalEventActivityItem>.from(_cachedEvents!);
+        }
         rethrow;
       }
     }
@@ -5170,6 +6444,7 @@ class PortalEventActivityService {
     bool isActive = true,
     String createdBy = '',
   }) async {
+    invalidateCache();
     final dateStr = eventDate.toIso8601String().split('T').first;
     final endDateStr = (endDate ?? eventDate).toIso8601String().split('T').first;
     final data = {
@@ -5239,6 +6514,7 @@ class PortalEventActivityService {
     required double totalHours,
     bool isActive = true,
   }) async {
+    invalidateCache();
     final dateStr = eventDate.toIso8601String().split('T').first;
     final endDateStr = (endDate ?? eventDate).toIso8601String().split('T').first;
     final data = {
@@ -5276,6 +6552,7 @@ class PortalEventActivityService {
   }
 
   static Future<void> toggleActive(String id, bool newStatus) async {
+    invalidateCache();
     try {
       await _client
           .from('portal_events')
@@ -5288,6 +6565,7 @@ class PortalEventActivityService {
   }
 
   static Future<void> deleteEvent(String id) async {
+    invalidateCache();
     try {
       await _client.from('portal_events').delete().eq('id', id);
     } catch (e) {

@@ -1059,16 +1059,20 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
   List<String> get _availableAdditionalStoreOptions {
     final normalizedPrimary = _normalizeOption(_store);
     final normalizedAdditional = _additionalStores.map(_normalizeOption).toSet();
-    return _storeOptions
-        .where((name) {
-          final norm = _normalizeOption(name);
-          return norm.isNotEmpty &&
-              norm != _normalizeOption('Select') &&
-              norm != _normalizeOption('N/A') &&
-              norm != normalizedPrimary &&
-              !normalizedAdditional.contains(norm);
-        })
-        .toList();
+    final seen = <String>{};
+    final options = <String>[];
+    for (final name in _storeOptions) {
+      final norm = _normalizeOption(name);
+      if (norm.isNotEmpty &&
+          norm != _normalizeOption('Select') &&
+          norm != _normalizeOption('N/A') &&
+          norm != normalizedPrimary &&
+          !normalizedAdditional.contains(norm) &&
+          seen.add(norm)) {
+        options.add(name);
+      }
+    }
+    return options;
   }
 
   String _resolveLoadedOption(String currentValue, List<String> options) {
@@ -2216,13 +2220,7 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
             Row(
               children: [
                 Expanded(
-                  child: DropdownButtonFormField<String>(
-                    value: null,
-                    hint: const Text(
-                      '+ Add another store assignment...',
-                      style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                    ),
-                    isDense: true,
+                  child: InputDecorator(
                     decoration: InputDecoration(
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 12,
@@ -2232,27 +2230,51 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
                         borderRadius: BorderRadius.circular(8),
                         borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
                       ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
+                      ),
                       filled: true,
                       fillColor: Colors.white,
                     ),
-                    items: available.map((store) {
-                      return DropdownMenuItem<String>(
-                        value: store,
-                        child: Text(
-                          store,
-                          style: const TextStyle(fontSize: 13),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        key: ValueKey('additional_store_picker_${_additionalStores.length}_${_additionalStores.join(",")}'),
+                        value: null,
+                        hint: const Text(
+                          '+ Add another store assignment...',
+                          style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
                         ),
-                      );
-                    }).toList(),
-                    onChanged: (selected) {
-                      if (selected != null && selected.isNotEmpty) {
-                        setState(() {
-                          if (!_additionalStores.any((s) => _normalizeOption(s) == _normalizeOption(selected))) {
-                            _additionalStores.add(selected);
+                        isDense: true,
+                        isExpanded: true,
+                        icon: const Icon(
+                          Icons.keyboard_arrow_down,
+                          color: Color(0xFF334155),
+                        ),
+                        items: available.map((store) {
+                          return DropdownMenuItem<String>(
+                            value: store,
+                            child: Text(
+                              store,
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (selected) {
+                          if (selected != null && selected.isNotEmpty) {
+                            setState(() {
+                              if (!_additionalStores.any((s) => _normalizeOption(s) == _normalizeOption(selected))) {
+                                _additionalStores.add(selected);
+                              }
+                            });
                           }
-                        });
-                      }
-                    },
+                        },
+                      ),
+                    ),
                   ),
                 ),
               ],

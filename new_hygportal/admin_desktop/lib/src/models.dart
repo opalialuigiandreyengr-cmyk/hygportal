@@ -1244,20 +1244,106 @@ class AdminRequestItem {
         .replaceAll(RegExp(r'\[ProofLoc(?:ation)?:\s*([^\]]+)\]', caseSensitive: false), '')
         .replaceAll(RegExp(r'\[ProofId:\s*([^\]]+)\]', caseSensitive: false), '')
         .replaceAll(RegExp(r'\[ProofSource:\s*([^\]]+)\]', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\[Break:\s*[^\]]+\]', caseSensitive: false), '')
         .replaceAll(RegExp(r'\[(?:PreApproved|Scheduled)\]\s*', caseSensitive: false), '')
         .replaceAll('[REJECTED]', '')
         .replaceAll('[APPROVED]', '')
+        .replaceAll(RegExp(r'[ \t]{2,}'), ' ')
         .trim();
 
     final eventMatch = RegExp(r'\[Event:\s*([^\]]+)\]', caseSensitive: false).firstMatch(cleaned);
     if (eventMatch != null) {
       final evTitle = eventMatch.group(1)?.trim() ?? '';
-      cleaned = cleaned.replaceAll(eventMatch.group(0)!, '').trim();
+      cleaned = cleaned.replaceAll(eventMatch.group(0)!, '').replaceAll(RegExp(r'[ \t]{2,}'), ' ').trim();
       if (!cleaned.toLowerCase().contains(evTitle.toLowerCase())) {
         cleaned = cleaned.isEmpty ? 'Event: $evTitle' : '$cleaned (Event: $evTitle)';
       }
     }
     return cleaned;
+  }
+
+  String? get breakTime {
+    final r = reason ?? remarks ?? '';
+    final breakMatch = RegExp(r'\[Break:\s*([^\]]+)\]', caseSensitive: false).firstMatch(r);
+    if (breakMatch != null) {
+      final inner = breakMatch.group(1)?.trim() ?? '';
+      if (inner.isNotEmpty) {
+        final parts = inner.split(RegExp(r'\s*(?:-|to)\s*', caseSensitive: false));
+        if (parts.length == 2) {
+          final f = _format12HourTime(parts[0].trim());
+          final t = _format12HourTime(parts[1].trim());
+          if (f.isNotEmpty && t.isNotEmpty) {
+            return '$f - $t';
+          }
+        }
+        final formatted = _format12HourTime(inner);
+        return formatted.isNotEmpty ? formatted : inner;
+      }
+    }
+    final bf = rawRow['break_from']?.toString()?.trim();
+    final bt = rawRow['break_to']?.toString()?.trim();
+    if (bf != null && bt != null && bf.isNotEmpty && bt.isNotEmpty) {
+      final f = _format12HourTime(bf);
+      final t = _format12HourTime(bt);
+      return (f.isNotEmpty && t.isNotEmpty) ? '$f - $t' : '$bf - $bt';
+    }
+    final directBt = rawRow['break_time']?.toString()?.trim();
+    if (directBt != null && directBt.isNotEmpty) {
+      final formatted = _format12HourTime(directBt);
+      return formatted.isNotEmpty ? formatted : directBt;
+    }
+    return null;
+  }
+
+  String? get breakFrom {
+    final r = reason ?? remarks ?? '';
+    final breakMatch = RegExp(r'\[Break:\s*([^\]]+)\]', caseSensitive: false).firstMatch(r);
+    if (breakMatch != null) {
+      final inner = breakMatch.group(1)?.trim() ?? '';
+      final parts = inner.split(RegExp(r'\s*(?:-|to)\s*', caseSensitive: false));
+      if (parts.isNotEmpty && parts[0].trim().isNotEmpty) {
+        final f = _format12HourTime(parts[0].trim());
+        return f.isNotEmpty ? f : parts[0].trim();
+      }
+    }
+    final bf = rawRow['break_from']?.toString()?.trim();
+    if (bf != null && bf.isNotEmpty) {
+      final f = _format12HourTime(bf);
+      return f.isNotEmpty ? f : bf;
+    }
+    return null;
+  }
+
+  String? get breakTo {
+    final r = reason ?? remarks ?? '';
+    final breakMatch = RegExp(r'\[Break:\s*([^\]]+)\]', caseSensitive: false).firstMatch(r);
+    if (breakMatch != null) {
+      final inner = breakMatch.group(1)?.trim() ?? '';
+      final parts = inner.split(RegExp(r'\s*(?:-|to)\s*', caseSensitive: false));
+      if (parts.length >= 2 && parts[1].trim().isNotEmpty) {
+        final t = _format12HourTime(parts[1].trim());
+        return t.isNotEmpty ? t : parts[1].trim();
+      }
+    }
+    final bt = rawRow['break_to']?.toString()?.trim();
+    if (bt != null && bt.isNotEmpty) {
+      final t = _format12HourTime(bt);
+      return t.isNotEmpty ? t : bt;
+    }
+    return null;
+  }
+
+  String get breakTimeText {
+    final bt = breakTime;
+    if (bt != null && bt.trim().isNotEmpty) {
+      return bt.trim();
+    }
+    final bf = breakFrom;
+    final bto = breakTo;
+    if (bf != null && bto != null && bf.isNotEmpty && bto.isNotEmpty) {
+      return '$bf - $bto';
+    }
+    return '';
   }
 
 
@@ -1472,6 +1558,9 @@ class EsarfEntryItem {
     this.proofId,
     this.proofSource,
     this.actualHours,
+    this.breakTime,
+    this.breakFrom,
+    this.breakTo,
     this.proofs = const [],
   });
 
@@ -1494,6 +1583,9 @@ class EsarfEntryItem {
   final String? proofId;
   final String? proofSource;
   final String? actualHours;
+  final String? breakTime;
+  final String? breakFrom;
+  final String? breakTo;
   final List<RequestProofItem> proofs;
 
   String? get eventName {
@@ -1534,6 +1626,18 @@ class EsarfEntryItem {
   String get timesText => _formatTimeRange(timeFrom, timeTo);
   String get dayOffText => dayOff ?? '';
   String get timeScheduleText => timeSchedule ?? '';
+  String get breakTimeText {
+    if (breakTime != null && breakTime!.trim().isNotEmpty) {
+      final formatted = _format12HourTime(breakTime!.trim());
+      return formatted.isNotEmpty ? formatted : breakTime!.trim();
+    }
+    if (breakFrom != null && breakTo != null && breakFrom!.trim().isNotEmpty && breakTo!.trim().isNotEmpty) {
+      final f = _format12HourTime(breakFrom!);
+      final t = _format12HourTime(breakTo!);
+      return (f.isNotEmpty && t.isNotEmpty) ? '$f - $t' : '$breakFrom - $breakTo';
+    }
+    return '';
+  }
   String get cleanReasonText {
     final r = reason ?? '';
     String cleaned = r
@@ -1544,15 +1648,17 @@ class EsarfEntryItem {
         .replaceAll(RegExp(r'\[ProofLoc(?:ation)?:\s*([^\]]+)\]', caseSensitive: false), '')
         .replaceAll(RegExp(r'\[ProofId:\s*([^\]]+)\]', caseSensitive: false), '')
         .replaceAll(RegExp(r'\[ProofSource:\s*([^\]]+)\]', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\[Break:\s*[^\]]+\]', caseSensitive: false), '')
         .replaceAll(RegExp(r'\[(?:PreApproved|Scheduled)\]\s*', caseSensitive: false), '')
         .replaceAll('[REJECTED]', '')
         .replaceAll('[APPROVED]', '')
+        .replaceAll(RegExp(r'[ \t]{2,}'), ' ')
         .trim();
 
     final eventMatch = RegExp(r'\[Event:\s*([^\]]+)\]', caseSensitive: false).firstMatch(cleaned);
     if (eventMatch != null) {
       final evTitle = eventMatch.group(1)?.trim() ?? '';
-      cleaned = cleaned.replaceAll(eventMatch.group(0)!, '').trim();
+      cleaned = cleaned.replaceAll(eventMatch.group(0)!, '').replaceAll(RegExp(r'[ \t]{2,}'), ' ').trim();
       if (!cleaned.toLowerCase().contains(evTitle.toLowerCase())) {
         cleaned = cleaned.isEmpty ? 'Event: $evTitle' : '$cleaned (Event: $evTitle)';
       }
@@ -1594,6 +1700,44 @@ class EsarfEntryItem {
     final actualMatch = RegExp(r'\[Actual:\s*([\d.]+)\s*hrs?\]', caseSensitive: false).firstMatch(rawReason);
     final actualHours = actualMatch?.group(1)?.trim();
 
+    String? rowBreakFrom;
+    String? rowBreakTo;
+    String? rowBreakTime;
+
+    final breakMatch = RegExp(r'\[Break:\s*([^\]]+)\]', caseSensitive: false).firstMatch(rawReason);
+    if (breakMatch != null) {
+      final inner = breakMatch.group(1)?.trim() ?? '';
+      final parts = inner.split(RegExp(r'\s*(?:-|to)\s*', caseSensitive: false));
+      if (parts.length == 2) {
+        rowBreakFrom = parts[0].trim();
+        rowBreakTo = parts[1].trim();
+        final f = _format12HourTime(rowBreakFrom);
+        final t = _format12HourTime(rowBreakTo);
+        rowBreakTime = (f.isNotEmpty && t.isNotEmpty) ? '$f - $t' : '$rowBreakFrom - $rowBreakTo';
+      } else if (inner.isNotEmpty) {
+        rowBreakTime = _format12HourTime(inner).isNotEmpty ? _format12HourTime(inner) : inner;
+      }
+    }
+
+    if (rowBreakFrom == null || rowBreakTo == null) {
+      final bf = row['break_from']?.toString()?.trim();
+      final bt = row['break_to']?.toString()?.trim();
+      if (bf != null && bt != null && bf.isNotEmpty && bt.isNotEmpty) {
+        rowBreakFrom ??= bf;
+        rowBreakTo ??= bt;
+        final f = _format12HourTime(bf);
+        final t = _format12HourTime(bt);
+        rowBreakTime ??= (f.isNotEmpty && t.isNotEmpty) ? '$f - $t' : '$bf - $bt';
+      }
+    }
+
+    if (rowBreakTime == null) {
+      final directBt = row['break_time']?.toString()?.trim();
+      if (directBt != null && directBt.isNotEmpty) {
+        rowBreakTime = _format12HourTime(directBt).isNotEmpty ? _format12HourTime(directBt) : directBt;
+      }
+    }
+
     final cleanReason = rawReason
         .replaceAll(RegExp(r'\[Actual:\s*[\d.]+\s*hrs?\]', caseSensitive: false), '')
         .replaceAll(RegExp(r'\[Proof:\s*[^Suggested\]]+\]', caseSensitive: false), '')
@@ -1602,8 +1746,11 @@ class EsarfEntryItem {
         .replaceAll(RegExp(r'\[ProofLoc(?:ation)?:\s*([^\]]+)\]', caseSensitive: false), '')
         .replaceAll(RegExp(r'\[ProofId:\s*([^\]]+)\]', caseSensitive: false), '')
         .replaceAll(RegExp(r'\[ProofSource:\s*([^\]]+)\]', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\[Break:\s*[^\]]+\]', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\[(?:PreApproved|Scheduled)\]\s*', caseSensitive: false), '')
         .replaceAll('[REJECTED]', '')
         .replaceAll('[APPROVED]', '')
+        .replaceAll(RegExp(r'[ \t]{2,}'), ' ')
         .trim();
 
     return EsarfEntryItem(
@@ -1618,7 +1765,7 @@ class EsarfEntryItem {
       payrollClass: row['payroll_class']?.toString(),
       transactionType: row['transaction_type']?.toString(),
       totalHours: AdminRequestItem._parseDouble(row['total_hours']),
-      reason: cleanReason.isNotEmpty ? cleanReason : (rawReason.isNotEmpty ? rawReason : null),
+      reason: cleanReason.isNotEmpty ? cleanReason : null,
       status: row['entry_status']?.toString() ?? row['status']?.toString(),
       proofUrl: (proofUrl != null && proofUrl.isNotEmpty) ? proofUrl : null,
       proofTime: (proofTime != null && proofTime.isNotEmpty) ? proofTime : null,
@@ -1626,6 +1773,9 @@ class EsarfEntryItem {
       proofId: (proofId != null && proofId.isNotEmpty) ? proofId : null,
       proofSource: proofSource,
       actualHours: (actualHours != null && actualHours.isNotEmpty) ? actualHours : null,
+      breakTime: rowBreakTime,
+      breakFrom: rowBreakFrom,
+      breakTo: rowBreakTo,
       proofs: entryProofs,
     );
   }
@@ -1709,6 +1859,28 @@ class EsarfEntryItem {
         final actualMatch = RegExp(r'\[Actual:\s*([\d.]+)\s*hrs?\]', caseSensitive: false).firstMatch(reasonText);
         final entryActualHours = actualMatch?.group(1)?.trim() ?? defaultEntry.actualHours;
 
+        String? entryBreakFrom;
+        String? entryBreakTo;
+        String? entryBreakTime;
+
+        final breakMatch = RegExp(r'\[Break:\s*([^\]]+)\]', caseSensitive: false).firstMatch(reasonText);
+        if (breakMatch != null) {
+          final inner = breakMatch.group(1)?.trim() ?? '';
+          final parts = inner.split(RegExp(r'\s*(?:-|to)\s*', caseSensitive: false));
+          if (parts.length == 2) {
+            entryBreakFrom = parts[0].trim();
+            entryBreakTo = parts[1].trim();
+            final f = _format12HourTime(entryBreakFrom);
+            final t = _format12HourTime(entryBreakTo);
+            entryBreakTime = (f.isNotEmpty && t.isNotEmpty) ? '$f - $t' : '$entryBreakFrom - $entryBreakTo';
+          } else if (inner.isNotEmpty) {
+            entryBreakTime = _format12HourTime(inner).isNotEmpty ? _format12HourTime(inner) : inner;
+          }
+        }
+        entryBreakFrom ??= defaultEntry.breakFrom;
+        entryBreakTo ??= defaultEntry.breakTo;
+        entryBreakTime ??= defaultEntry.breakTime;
+
         final isEntryRejected = fullText.contains('[REJECTED]') || fullText.toLowerCase().contains('status: rejected');
         final isEntryApproved = fullText.contains('[APPROVED]');
         final cleanReasonText = reasonText
@@ -1719,9 +1891,11 @@ class EsarfEntryItem {
             .replaceAll(RegExp(r'\[ProofLoc(?:ation)?:\s*([^\]]+)\]', caseSensitive: false), '')
             .replaceAll(RegExp(r'\[ProofId:\s*([^\]]+)\]', caseSensitive: false), '')
             .replaceAll(RegExp(r'\[ProofSource:\s*([^\]]+)\]', caseSensitive: false), '')
+            .replaceAll(RegExp(r'\[Break:\s*[^\]]+\]', caseSensitive: false), '')
             .replaceAll(RegExp(r'\[(?:PreApproved|Scheduled)\]\s*', caseSensitive: false), '')
             .replaceAll('[REJECTED]', '')
             .replaceAll('[APPROVED]', '')
+            .replaceAll(RegExp(r'[ \t]{2,}'), ' ')
             .trim();
 
         final parentStatus = (defaultEntry.status ?? '').toLowerCase().trim();
@@ -1744,7 +1918,7 @@ class EsarfEntryItem {
             payrollClass: defaultEntry.payrollClass,
             transactionType: transactionLabel ?? defaultEntry.transactionType,
             totalHours: hrsVal ?? defaultEntry.totalHours,
-            reason: cleanReasonText.isNotEmpty ? cleanReasonText : defaultEntry.reason,
+            reason: cleanReasonText.isNotEmpty ? cleanReasonText : null,
             status: entryStatus,
             proofUrl: (entryProofUrl != null && entryProofUrl.isNotEmpty) ? entryProofUrl : null,
             proofTime: (entryProofTime != null && entryProofTime.isNotEmpty) ? entryProofTime : null,
@@ -1752,6 +1926,9 @@ class EsarfEntryItem {
             proofId: (entryProofId != null && entryProofId.isNotEmpty) ? entryProofId : null,
             proofSource: entryProofSource,
             actualHours: (entryActualHours != null && entryActualHours.isNotEmpty) ? entryActualHours : null,
+            breakTime: entryBreakTime,
+            breakFrom: entryBreakFrom,
+            breakTo: entryBreakTo,
             proofs: effectiveProofs,
           ),
         );

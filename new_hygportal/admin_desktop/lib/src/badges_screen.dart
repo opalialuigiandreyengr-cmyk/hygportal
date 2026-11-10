@@ -48,14 +48,16 @@ class _BadgesScreenState extends State<BadgesScreen> {
     _loadDatabaseData();
   }
 
-  Future<void> _loadDatabaseData() async {
-    setState(() => _isLoadingDb = true);
+  Future<void> _loadDatabaseData({bool forceRefresh = false}) async {
+    if (_badges.isEmpty) {
+      setState(() => _isLoadingDb = true);
+    }
     try {
-      final badges = await BadgesDatabaseService.loadBadges();
-      final history = await BadgesDatabaseService.loadAwardedHistory();
+      final badges = await BadgesDatabaseService.loadBadges(forceRefresh: forceRefresh);
+      final history = await BadgesDatabaseService.loadAwardedHistory(forceRefresh: forceRefresh);
       List<EmployeePreview> emps = widget.employees;
       if (emps.isEmpty) {
-        emps = await EmployeeDirectoryService.loadEmployees();
+        emps = await EmployeeDirectoryService.loadEmployees(forceRefresh: forceRefresh);
       }
       if (mounted) {
         setState(() {

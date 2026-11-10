@@ -11,7 +11,7 @@ class AdminShell extends StatefulWidget {
 }
 
 class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
-  static const Duration _directoryAutoRefreshInterval = Duration(seconds: 10);
+  static const Duration _directoryAutoRefreshInterval = Duration(minutes: 5);
   static const Duration _networkRequestTimeout = Duration(seconds: 15);
   late HrSection _activeSection;
   var _allRequests = <AdminRequestItem>[];
@@ -49,6 +49,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
   bool _isLoadingAdminWorkflow = false;
   bool _isLoadingPositions = false;
   bool _isLoadingUsers = false;
+  bool _isLoadingRewards = false;
   final _rewardsSearchController = TextEditingController();
   final _pointsSearchController = TextEditingController();
   final List<RewardItem> _rewardsList = [];
@@ -121,27 +122,28 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
     if (!mounted) return;
     switch (_activeSection) {
       case HrSection.requests:
-        unawaited(_loadAllRequests());
+        unawaited(_loadAllRequests(forceRefresh: true));
       case HrSection.employees:
-        unawaited(_loadEmployees(silent: true));
+        unawaited(_loadEmployees(silent: true, forceRefresh: true));
       case HrSection.companies:
-        unawaited(_loadCompanies());
+        unawaited(_loadCompanies(forceRefresh: true));
       case HrSection.departments:
-        unawaited(_loadDepartments());
+        unawaited(_loadDepartments(forceRefresh: true));
       case HrSection.positions:
-        unawaited(_loadPositions());
+        unawaited(_loadPositions(forceRefresh: true));
       case HrSection.users:
-        unawaited(_loadUsers(silent: true));
+        unawaited(_loadUsers(silent: true, forceRefresh: true));
       case HrSection.stores:
-        unawaited(_loadStores());
+        unawaited(_loadStores(forceRefresh: true));
       case HrSection.clusters:
-        unawaited(_loadClusters());
-        unawaited(_loadAreas());
+        unawaited(_loadClusters(forceRefresh: true));
+        unawaited(_loadAreas(forceRefresh: true));
       case HrSection.approvalRoutes:
       case HrSection.authorityLevels:
       case HrSection.approverAssignments:
-        unawaited(_loadAdminWorkflow());
+        unawaited(_loadAdminWorkflow(forceRefresh: true));
       case HrSection.rewards:
+        unawaited(_loadRewards(forceRefresh: true));
       case HrSection.pointsManagement:
       case HrSection.redemptionRequests:
       case HrSection.badges:
@@ -165,140 +167,219 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _loadAllRequests() async {
+  Future<void> _loadAllRequests({bool forceRefresh = false}) async {
     setState(() {
-      _isLoadingRequests = _allRequests.isEmpty;
+      if (_allRequests.isEmpty) {
+        _isLoadingRequests = true;
+      }
       _requestsError = null;
     });
     try {
-      final items = await _withNetworkTimeout(
-        AdminRequestsService.loadAllRequests(),
+      await AdminRequestsService.loadRequestsSwr(
+        forceRefresh: forceRefresh,
+        onData: (items, {required bool isFresh}) {
+          if (!mounted) return;
+          setState(() {
+            _allRequests = items;
+            _isLoadingRequests = false;
+          });
+        },
+        onError: (error) {
+          if (!mounted) return;
+          if (_allRequests.isEmpty) {
+            setState(() {
+              _requestsError = error.toString().replaceFirst('Exception: ', '');
+              _isLoadingRequests = false;
+            });
+          }
+        },
       );
-      if (!mounted) return;
-      setState(() {
-        _allRequests = items;
-        _isLoadingRequests = false;
-      });
     } catch (error) {
       if (!mounted) return;
-      setState(() {
-        _requestsError = error.toString().replaceFirst('Exception: ', '');
-        _isLoadingRequests = false;
-      });
+      if (_allRequests.isEmpty) {
+        setState(() {
+          _requestsError = error.toString().replaceFirst('Exception: ', '');
+          _isLoadingRequests = false;
+        });
+      }
     }
   }
 
-  Future<void> _loadEmployees({bool silent = false}) async {
+  Future<void> _loadEmployees({
+    bool silent = false,
+    bool forceRefresh = false,
+  }) async {
     setState(() {
-      if (!silent) {
-        _isLoadingEmployees = _employees.isEmpty;
+      if (!silent && _employees.isEmpty) {
+        _isLoadingEmployees = true;
       }
       _employeeError = null;
     });
 
     try {
-      final employees = await _withNetworkTimeout(
-        EmployeeDirectoryService.loadEmployees(),
+      await EmployeeDirectoryService.loadEmployeesSwr(
+        forceRefresh: forceRefresh,
+        onData: (employees, {required bool isFresh}) {
+          if (!mounted) return;
+          setState(() {
+            _employees = employees;
+            _isLoadingEmployees = false;
+          });
+        },
+        onError: (error) {
+          if (!mounted) return;
+          if (_employees.isEmpty) {
+            setState(() {
+              _employeeError = error.toString().replaceFirst('Exception: ', '');
+              _isLoadingEmployees = false;
+            });
+          }
+        },
       );
-      if (!mounted) return;
-      setState(() {
-        _employees = employees;
-        if (!silent) {
-          _isLoadingEmployees = false;
-        }
-      });
     } catch (error) {
       if (!mounted) return;
-      setState(() {
-        _employeeError = error.toString().replaceFirst('Exception: ', '');
-        if (!silent) {
+      if (_employees.isEmpty) {
+        setState(() {
+          _employeeError = error.toString().replaceFirst('Exception: ', '');
           _isLoadingEmployees = false;
-        }
-      });
+        });
+      }
     }
   }
 
-  Future<void> _loadCompanies() async {
+  Future<void> _loadCompanies({bool forceRefresh = false}) async {
     setState(() {
-      _isLoadingCompanies = _companies.isEmpty;
+      if (_companies.isEmpty) {
+        _isLoadingCompanies = true;
+      }
       _companyError = null;
     });
 
     try {
-      final companies = await _withNetworkTimeout(
-        CompanyDirectoryService.loadCompanies(),
+      await CompanyDirectoryService.loadCompaniesSwr(
+        forceRefresh: forceRefresh,
+        onData: (companies, {required bool isFresh}) {
+          if (!mounted) return;
+          setState(() {
+            _companies = companies;
+            _isLoadingCompanies = false;
+          });
+        },
+        onError: (error) {
+          if (!mounted) return;
+          if (_companies.isEmpty) {
+            setState(() {
+              _companyError = error.toString().replaceFirst('Exception: ', '');
+              _isLoadingCompanies = false;
+            });
+          }
+        },
       );
-      if (!mounted) return;
-      setState(() {
-        _companies = companies;
-        _isLoadingCompanies = false;
-      });
     } catch (error) {
       if (!mounted) return;
-      setState(() {
-        _companyError = error.toString().replaceFirst('Exception: ', '');
-        _isLoadingCompanies = false;
-      });
+      if (_companies.isEmpty) {
+        setState(() {
+          _companyError = error.toString().replaceFirst('Exception: ', '');
+          _isLoadingCompanies = false;
+        });
+      }
     }
   }
 
-  Future<void> _loadDepartments() async {
+  Future<void> _loadDepartments({bool forceRefresh = false}) async {
     setState(() {
-      _isLoadingDepartments = _departments.isEmpty;
+      if (_departments.isEmpty) {
+        _isLoadingDepartments = true;
+      }
       _departmentError = null;
     });
 
     try {
-      final results = await _withNetworkTimeout(Future.wait([
-        DepartmentDirectoryService.loadDepartments(),
-        DepartmentPositionCatalogService.loadDepartmentPositionCatalog(),
-        DepartmentPositionCatalogService.loadPositionCatalog(),
-      ]));
-      if (!mounted) return;
-      setState(() {
-        _departments = results[0] as List<DepartmentPreview>;
-        _departmentPositionCatalog =
-            results[1] as List<DepartmentPositionCatalogPreview>;
-        _positionCatalog = results[2] as List<AdminPositionCatalogPreview>;
-        _isLoadingDepartments = false;
-      });
+      await DepartmentDirectoryService.loadDepartmentsSwr(
+        forceRefresh: forceRefresh,
+        onData: (departments, {required bool isFresh}) {
+          if (!mounted) return;
+          setState(() {
+            _departments = departments;
+            _isLoadingDepartments = false;
+          });
+        },
+        onError: (error) {
+          if (!mounted) return;
+          if (_departments.isEmpty) {
+            setState(() {
+              _departmentError = error.toString().replaceFirst('Exception: ', '');
+              _isLoadingDepartments = false;
+            });
+          }
+        },
+      );
+      if (_departmentPositionCatalog.isEmpty || _positionCatalog.isEmpty || forceRefresh) {
+        final results = await _withNetworkTimeout(Future.wait([
+          DepartmentPositionCatalogService.loadDepartmentPositionCatalog(),
+          DepartmentPositionCatalogService.loadPositionCatalog(),
+        ]));
+        if (!mounted) return;
+        setState(() {
+          _departmentPositionCatalog =
+              results[0] as List<DepartmentPositionCatalogPreview>;
+          _positionCatalog = results[1] as List<AdminPositionCatalogPreview>;
+        });
+      }
     } catch (error) {
       if (!mounted) return;
-      setState(() {
-        _departmentError = error.toString().replaceFirst('Exception: ', '');
-        _isLoadingDepartments = false;
-      });
+      if (_departments.isEmpty) {
+        setState(() {
+          _departmentError = error.toString().replaceFirst('Exception: ', '');
+          _isLoadingDepartments = false;
+        });
+      }
     }
   }
 
-  Future<void> _loadPositions() async {
+  Future<void> _loadPositions({bool forceRefresh = false}) async {
     setState(() {
-      _isLoadingPositions = _positions.isEmpty;
+      if (_positions.isEmpty) {
+        _isLoadingPositions = true;
+      }
       _positionError = null;
     });
 
     try {
-      final positions = await _withNetworkTimeout(
-        PositionDirectoryService.loadPositions(),
+      await PositionDirectoryService.loadPositionsSwr(
+        forceRefresh: forceRefresh,
+        onData: (positions, {required bool isFresh}) {
+          if (!mounted) return;
+          setState(() {
+            _positions = positions;
+            _isLoadingPositions = false;
+          });
+        },
+        onError: (error) {
+          if (!mounted) return;
+          if (_positions.isEmpty) {
+            setState(() {
+              _positionError = error.toString().replaceFirst('Exception: ', '');
+              _isLoadingPositions = false;
+            });
+          }
+        },
       );
-      if (!mounted) return;
-      setState(() {
-        _positions = positions;
-        _isLoadingPositions = false;
-      });
     } catch (error) {
       if (!mounted) return;
-      setState(() {
-        _positionError = error.toString().replaceFirst('Exception: ', '');
-        _isLoadingPositions = false;
-      });
+      if (_positions.isEmpty) {
+        setState(() {
+          _positionError = error.toString().replaceFirst('Exception: ', '');
+          _isLoadingPositions = false;
+        });
+      }
     }
   }
 
-  Future<void> _loadUsers({bool silent = false}) async {
+  Future<void> _loadUsers({bool silent = false, bool forceRefresh = false}) async {
     setState(() {
-      if (!silent) {
-        _isLoadingUsers = _registeredUsers.isEmpty;
+      if (!silent && _registeredUsers.isEmpty) {
+        _isLoadingUsers = true;
       }
       _usersError = null;
     });
@@ -310,24 +391,33 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
       if (_employees.isEmpty && !_isLoadingEmployees) {
         unawaited(_loadEmployees(silent: silent));
       }
-      final users = await _withNetworkTimeout(
-        RegisteredUsersService.loadUsers(),
+      await RegisteredUsersService.loadUsersSwr(
+        forceRefresh: forceRefresh,
+        onData: (users, {required bool isFresh}) {
+          if (!mounted) return;
+          setState(() {
+            _registeredUsers = users;
+            _isLoadingUsers = false;
+          });
+        },
+        onError: (error) {
+          if (!mounted) return;
+          if (_registeredUsers.isEmpty) {
+            setState(() {
+              _usersError = error.toString().replaceFirst('Exception: ', '');
+              _isLoadingUsers = false;
+            });
+          }
+        },
       );
-      if (!mounted) return;
-      setState(() {
-        _registeredUsers = users;
-        if (!silent) {
-          _isLoadingUsers = false;
-        }
-      });
     } catch (error) {
       if (!mounted) return;
-      setState(() {
-        _usersError = error.toString().replaceFirst('Exception: ', '');
-        if (!silent) {
+      if (_registeredUsers.isEmpty) {
+        setState(() {
+          _usersError = error.toString().replaceFirst('Exception: ', '');
           _isLoadingUsers = false;
-        }
-      });
+        });
+      }
     }
   }
 
@@ -593,74 +683,121 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _loadStores() async {
+  Future<void> _loadStores({bool forceRefresh = false}) async {
     setState(() {
-      _isLoadingStores = _stores.isEmpty;
+      if (_stores.isEmpty) {
+        _isLoadingStores = true;
+      }
       _storeError = null;
     });
     try {
-      final stores = await _withNetworkTimeout(
-        StoreDirectoryService.loadStores(),
+      await StoreDirectoryService.loadStoresSwr(
+        forceRefresh: forceRefresh,
+        onData: (stores, {required bool isFresh}) {
+          if (!mounted) return;
+          setState(() {
+            _stores = stores;
+            _isLoadingStores = false;
+          });
+        },
+        onError: (error) {
+          if (!mounted) return;
+          if (_stores.isEmpty) {
+            setState(() {
+              _storeError = error.toString().replaceFirst('Exception: ', '');
+              _isLoadingStores = false;
+            });
+          }
+        },
       );
-      if (!mounted) return;
-      setState(() {
-        _stores = stores;
-        _isLoadingStores = false;
-      });
     } catch (error) {
       if (!mounted) return;
-      setState(() {
-        _storeError = error.toString().replaceFirst('Exception: ', '');
-        _isLoadingStores = false;
-      });
+      if (_stores.isEmpty) {
+        setState(() {
+          _storeError = error.toString().replaceFirst('Exception: ', '');
+          _isLoadingStores = false;
+        });
+      }
     }
   }
 
-  Future<void> _loadClusters() async {
+  Future<void> _loadClusters({bool forceRefresh = false}) async {
     setState(() {
-      _isLoadingClusters = _clusters.isEmpty;
+      if (_clusters.isEmpty) {
+        _isLoadingClusters = true;
+      }
       _clusterError = null;
     });
     try {
-      final clusters = await _withNetworkTimeout(
-        ClusterDirectoryService.loadClusters(),
+      await ClusterDirectoryService.loadClustersSwr(
+        forceRefresh: forceRefresh,
+        onData: (clusters, {required bool isFresh}) {
+          if (!mounted) return;
+          setState(() {
+            _clusters = clusters;
+            _isLoadingClusters = false;
+          });
+        },
+        onError: (error) {
+          if (!mounted) return;
+          if (_clusters.isEmpty) {
+            setState(() {
+              _clusterError = error.toString().replaceFirst('Exception: ', '');
+              _isLoadingClusters = false;
+            });
+          }
+        },
       );
-      if (!mounted) return;
-      setState(() {
-        _clusters = clusters;
-        _isLoadingClusters = false;
-      });
     } catch (error) {
       if (!mounted) return;
-      setState(() {
-        _clusterError = error.toString().replaceFirst('Exception: ', '');
-        _isLoadingClusters = false;
-      });
+      if (_clusters.isEmpty) {
+        setState(() {
+          _clusterError = error.toString().replaceFirst('Exception: ', '');
+          _isLoadingClusters = false;
+        });
+      }
     }
   }
 
-  Future<void> _loadAreas() async {
+  Future<void> _loadAreas({bool forceRefresh = false}) async {
     setState(() {
-      _isLoadingAreas = _areas.isEmpty;
+      if (_areas.isEmpty) {
+        _isLoadingAreas = true;
+      }
       _areaError = null;
     });
     try {
-      final areas = await _withNetworkTimeout(AreaDirectoryService.loadAreas());
-      if (!mounted) return;
-      setState(() {
-        _areas = areas;
-        _isLoadingAreas = false;
-      });
+      await AreaDirectoryService.loadAreasSwr(
+        forceRefresh: forceRefresh,
+        onData: (areas, {required bool isFresh}) {
+          if (!mounted) return;
+          setState(() {
+            _areas = areas;
+            _isLoadingAreas = false;
+          });
+        },
+        onError: (error) {
+          if (!mounted) return;
+          if (_areas.isEmpty) {
+            setState(() {
+              _areaError = error.toString().replaceFirst('Exception: ', '');
+              _isLoadingAreas = false;
+            });
+          }
+        },
+      );
     } catch (error) {
       if (!mounted) return;
-      setState(() {
-        _areaError = error.toString().replaceFirst('Exception: ', '');
-        _isLoadingAreas = false;
-      });
+      if (_areas.isEmpty) {
+        setState(() {
+          _areaError = error.toString().replaceFirst('Exception: ', '');
+          _isLoadingAreas = false;
+        });
+      }
     }
   }
 
-  Future<void> _loadAdminWorkflow() async {
+  Future<void> _loadAdminWorkflow({bool forceRefresh = false}) async {
     setState(() {
       _isLoadingAdminWorkflow =
           _authorityCandidates.isEmpty &&
@@ -670,13 +807,13 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
     });
     try {
       final results = await _withNetworkTimeout(Future.wait([
-        AdminWorkflowService.loadAuthorityCandidates(),
-        AdminWorkflowService.loadStoreRouteScopes(),
-        AdminWorkflowService.loadPositionAuthorityLevels(),
-        AdminWorkflowService.loadDepartmentApprovalLadders(),
+        AdminWorkflowService.loadAuthorityCandidates(forceRefresh: forceRefresh),
+        AdminWorkflowService.loadStoreRouteScopes(forceRefresh: forceRefresh),
+        AdminWorkflowService.loadPositionAuthorityLevels(forceRefresh: forceRefresh),
+        AdminWorkflowService.loadDepartmentApprovalLadders(forceRefresh: forceRefresh),
         DepartmentPositionCatalogService.loadDepartmentPositionCatalog(),
-        ClusterDirectoryService.loadClusters(),
-        AreaDirectoryService.loadAreas(),
+        ClusterDirectoryService.loadClusters(forceRefresh: forceRefresh),
+        AreaDirectoryService.loadAreas(forceRefresh: forceRefresh),
       ]));
       final candidates = results[0] as List<AuthorityCandidatePreview>;
       final storeRouteScopes =
@@ -734,44 +871,27 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
           HrSection.approverAssignments,
           HrSection.authorityLevels,
           HrSection.approvalRoutes,
-        }.contains(section) &&
-        !_isLoadingAdminWorkflow &&
-        _authorityCandidates.isEmpty &&
-        _adminWorkflowError == null) {
-      _loadAdminWorkflow();
+        }.contains(section)) {
+      unawaited(_loadAdminWorkflow());
     }
-    if (section == HrSection.companies &&
-        !_isLoadingCompanies &&
-        _companies.isEmpty &&
-        _companyError == null) {
-      _loadCompanies();
+    if (section == HrSection.companies) {
+      unawaited(_loadCompanies());
     }
-    if (section == HrSection.departments &&
-        !_isLoadingDepartments &&
-        _departments.isEmpty &&
-        _departmentError == null) {
-      _loadDepartments();
+    if (section == HrSection.departments) {
+      unawaited(_loadDepartments());
     }
-    if (section == HrSection.positions &&
-        !_isLoadingPositions &&
-        _positions.isEmpty &&
-        _positionError == null) {
-      _loadPositions();
+    if (section == HrSection.positions) {
+      unawaited(_loadPositions());
     }
-    if (section == HrSection.stores && !_isLoadingStores) {
-      _loadStores();
+    if (section == HrSection.stores) {
+      unawaited(_loadStores());
     }
-    if (section == HrSection.clusters &&
-        !_isLoadingClusters &&
-        _clusters.isEmpty &&
-        _clusterError == null) {
-      _loadClusters();
+    if (section == HrSection.clusters) {
+      unawaited(_loadClusters());
+      unawaited(_loadAreas());
     }
-    if (section == HrSection.clusters &&
-        !_isLoadingAreas &&
-        _areas.isEmpty &&
-        _areaError == null) {
-      _loadAreas();
+    if (section == HrSection.rewards) {
+      unawaited(_loadRewards());
     }
   }
 
@@ -780,7 +900,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
       const AddEmployeeProfileModal(),
     );
     if (created == true) {
-      await _loadEmployees();
+      await _loadEmployees(forceRefresh: true);
       _showDepartmentMessage('Employee created successfully.');
     }
   }
@@ -790,7 +910,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
       AddEmployeeProfileModal(employee: employee),
     );
     if (updated == true) {
-      await _loadEmployees();
+      await _loadEmployees(forceRefresh: true);
       _showDepartmentMessage('Employee updated successfully.');
     }
   }
@@ -811,7 +931,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
         id: employee.id,
         mode: mode,
       );
-      await _loadEmployees();
+      await _loadEmployees(forceRefresh: true);
       _showDepartmentMessage(
         mode == EmployeeDeleteMode.soft
             ? 'Employee set to inactive successfully.'
@@ -822,7 +942,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
       final message = error.toString().replaceFirst('Exception: ', '');
       if (message.contains('Employee profile was not found')) {
         await EmployeeDirectoryService.purgeCachedEmployee(employee.id);
-        await _loadEmployees();
+        await _loadEmployees(forceRefresh: true);
         _showDepartmentMessage(
           'Employee was already deleted from the database and has now been removed from your local table.',
         );
@@ -1110,27 +1230,36 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
     setState(() {});
   }
 
-  Future<void> _loadRewards() async {
+  Future<void> _loadRewards({bool forceRefresh = false}) async {
+    setState(() => _isLoadingRewards = true);
     try {
-      final results = await Future.wait([
-        RewardService.fetchRewards(),
-        InventoryProductsService.fetchStoreInventory(),
-      ]);
-      if (!mounted) return;
-      final list = results[0] as List<RewardItem>;
-      final inventory = results[1] as List<InventoryProductItem>;
-      setState(() {
-        _rewardsList.clear();
-        _rewardsList.addAll(list);
-        _storeInventoryProducts = inventory;
-      });
+      await RewardService.loadRewardsSwr(
+        forceRefresh: forceRefresh,
+        onData: (list, {required bool isFresh}) {
+          if (!mounted) return;
+          setState(() {
+            _rewardsList.clear();
+            _rewardsList.addAll(list);
+            if (isFresh) _isLoadingRewards = false;
+          });
+        },
+      );
+      if (_storeInventoryProducts.isEmpty || forceRefresh) {
+        final inventory = await InventoryProductsService.fetchStoreInventory();
+        if (!mounted) return;
+        setState(() {
+          _storeInventoryProducts = inventory;
+        });
+      }
     } catch (_) {
-      final list = await RewardService.fetchRewards();
+      final list = await RewardService.fetchRewards(forceRefresh: forceRefresh);
       if (!mounted) return;
       setState(() {
         _rewardsList.clear();
         _rewardsList.addAll(list);
       });
+    } finally {
+      if (mounted) setState(() => _isLoadingRewards = false);
     }
   }
 
@@ -1946,7 +2075,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
                       children: [
                         if (_activeSection == HrSection.requests) ...[
                           RequestsHeader(
-                            onRefresh: _loadAllRequests,
+                            onRefresh: () => _loadAllRequests(forceRefresh: true),
                             requests: _allRequests,
                           ),
                           const SizedBox(height: 14),
@@ -1954,7 +2083,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
                             requests: _allRequests,
                             isLoading: _isLoadingRequests,
                             error: _requestsError,
-                            onRefresh: _loadAllRequests,
+                            onRefresh: () => _loadAllRequests(forceRefresh: true),
                             initialTabIndex: _requestsInitialTab,
                             showDeleteAction: widget.session.appRole.toLowerCase() != 'hr',
                             onDeleteRequest: (String id, bool isPerk) async =>
@@ -1981,7 +2110,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
                             ladders: _departmentLadders,
                             isLoading: _isLoadingAdminWorkflow,
                             error: _adminWorkflowError,
-                            onRefresh: _loadAdminWorkflow,
+                            onRefresh: () => _loadAdminWorkflow(forceRefresh: true),
                             onSetAuthority: _setAuthorityLevel,
                             onSetPositionLevel: _setPositionAuthorityLevel,
                             onClearPositionLevel: _clearPositionAuthorityLevel,
@@ -2007,7 +2136,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
                             ladders: _departmentLadders,
                             isLoading: _isLoadingAdminWorkflow,
                             error: _adminWorkflowError,
-                            onRefresh: _loadAdminWorkflow,
+                            onRefresh: () => _loadAdminWorkflow(forceRefresh: true),
                             onSetAuthority: _setAuthorityLevel,
                             onSetPositionLevel: _setPositionAuthorityLevel,
                             onClearPositionLevel: _clearPositionAuthorityLevel,
@@ -2033,7 +2162,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
                             ladders: _departmentLadders,
                             isLoading: _isLoadingAdminWorkflow,
                             error: _adminWorkflowError,
-                            onRefresh: _loadAdminWorkflow,
+                            onRefresh: () => _loadAdminWorkflow(forceRefresh: true),
                             onSetAuthority: _setAuthorityLevel,
                             onSetPositionLevel: _setPositionAuthorityLevel,
                             onClearPositionLevel: _clearPositionAuthorityLevel,
@@ -2042,7 +2171,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
                         ] else if (_activeSection == HrSection.employees) ...[
                           EmployeesHeader(
                             onAddEmployee: _openAddEmployeeModal,
-                            onRefresh: _loadEmployees,
+                            onRefresh: () => _loadEmployees(forceRefresh: true),
                             isRefreshing: _isLoadingEmployees,
                           ),
                           const SizedBox(height: 14),
@@ -2050,7 +2179,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
                             employees: _employees,
                             isLoading: _isLoadingEmployees,
                             error: _employeeError,
-                            onRefresh: _loadEmployees,
+                            onRefresh: () => _loadEmployees(forceRefresh: true),
                             onEditEmployee: _openEditEmployeeModal,
                             onDeleteEmployee: _confirmDeleteEmployee,
                           ),
@@ -2061,7 +2190,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
                             companies: _companies,
                             isLoading: _isLoadingCompanies,
                             error: _companyError,
-                            onRefresh: _loadCompanies,
+                            onRefresh: () => _loadCompanies(forceRefresh: true),
                             onEditCompany: _openEditCompanyModal,
                             onDeleteCompany: _confirmDeleteCompany,
                           ),
@@ -2074,7 +2203,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
                             companies: _companies,
                             isLoading: _isLoadingUsers,
                             error: _usersError,
-                            onRefresh: _loadUsers,
+                            onRefresh: () => _loadUsers(forceRefresh: true),
                             onSetBan: _setUserBan,
                             onSetRole: _setUserRole,
                             onResetPassword: _resetUserPassword,
@@ -2094,7 +2223,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
                             positions: _positionCatalog,
                             isLoading: _isLoadingDepartments,
                             error: _departmentError,
-                            onRefresh: _loadDepartments,
+                            onRefresh: () => _loadDepartments(forceRefresh: true),
                             onEditDepartment: _openEditDepartmentModal,
                             onDeleteDepartment: _confirmDeleteDepartment,
                             onAssignPosition: _assignDepartmentPosition,
@@ -2107,7 +2236,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
                             positions: _positions,
                             isLoading: _isLoadingPositions,
                             error: _positionError,
-                            onRefresh: _loadPositions,
+                            onRefresh: () => _loadPositions(forceRefresh: true),
                             onEditPosition: _openEditPositionModal,
                             onDeletePosition: _confirmDeletePosition,
                             canEditAndDelete: widget.session.canEditAndDeleteMasterData,
@@ -2122,7 +2251,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
                             areas: _areas,
                             isLoading: _isLoadingAreas,
                             error: _areaError,
-                            onRefresh: _loadAreas,
+                            onRefresh: () => _loadAreas(forceRefresh: true),
                             onEditArea: _openEditAreaModal,
                             onDeleteArea: _confirmDeleteArea,
                             canEditAndDelete: widget.session.canEditAndDeleteMasterData,
@@ -2132,7 +2261,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
                             clusters: _clusters,
                             isLoading: _isLoadingClusters,
                             error: _clusterError,
-                            onRefresh: _loadClusters,
+                            onRefresh: () => _loadClusters(forceRefresh: true),
                             onEditCluster: _openEditClusterModal,
                             onDeleteCluster: _confirmDeleteCluster,
                             canEditAndDelete: widget.session.canEditAndDeleteMasterData,
@@ -2144,7 +2273,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
                             stores: _stores,
                             isLoading: _isLoadingStores,
                             error: _storeError,
-                            onRefresh: _loadStores,
+                            onRefresh: () => _loadStores(forceRefresh: true),
                             onEditStore: _openEditStoreModal,
                             onDeleteStore: _confirmDeleteStore,
                             canEditAndDelete: widget.session.canEditAndDeleteMasterData,
@@ -2152,6 +2281,8 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
                         ] else if (_activeSection == HrSection.rewards) ...[
                           RewardsHeader(
                             onAddReward: _openAddRewardModal,
+                            onRefresh: () => _loadRewards(forceRefresh: true),
+                            isRefreshing: _isLoadingRewards,
                           ),
                           const SizedBox(height: 14),
                           RewardsSearchBar(
@@ -2182,6 +2313,8 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
                             searchQuery: _rewardsSearchController.text,
                             selectedCategory: _selectedRewardCategory,
                             inventoryProducts: _storeInventoryProducts,
+                            isLoading: _isLoadingRewards,
+                            onRefresh: () => _loadRewards(forceRefresh: true),
                             onEditReward: (item) => _openAddRewardModal(item),
                             onDeleteReward: _confirmDeleteReward,
                           ),

@@ -1,8 +1,15 @@
 part of '../main.dart';
 
 class RewardsHeader extends StatelessWidget {
-  const RewardsHeader({required this.onAddReward, super.key});
+  const RewardsHeader({
+    required this.onAddReward,
+    this.onRefresh,
+    this.isRefreshing = false,
+    super.key,
+  });
   final VoidCallback onAddReward;
+  final VoidCallback? onRefresh;
+  final bool isRefreshing;
 
   @override
   Widget build(BuildContext context) {
@@ -59,6 +66,28 @@ class RewardsHeader extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 16),
+          if (onRefresh != null) ...[
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(120, 44),
+                foregroundColor: HygColors.ink,
+                side: const BorderSide(color: HygColors.border),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              onPressed: isRefreshing ? null : onRefresh,
+              icon: isRefreshing
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.refresh, size: 18),
+              label: Text(isRefreshing ? 'Refreshing...' : 'Refresh'),
+            ),
+            const SizedBox(width: 10),
+          ],
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
               backgroundColor: HygColors.gold,
@@ -234,6 +263,8 @@ class RewardsPanel extends StatelessWidget {
     required this.onDeleteReward,
     this.selectedCategory = 'All Categories',
     this.inventoryProducts = const [],
+    this.isLoading = false,
+    this.onRefresh,
     super.key,
   });
 
@@ -243,6 +274,8 @@ class RewardsPanel extends StatelessWidget {
   final ValueChanged<RewardItem> onDeleteReward;
   final String selectedCategory;
   final List<InventoryProductItem> inventoryProducts;
+  final bool isLoading;
+  final VoidCallback? onRefresh;
 
   String _getCategoryForProduct(String productName) {
     final match = inventoryProducts.firstWhere(
@@ -269,6 +302,21 @@ class RewardsPanel extends StatelessWidget {
       }
       return true;
     }).toList();
+
+    if (rewards.isEmpty && isLoading) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 60, horizontal: 24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
 
     if (rewards.isEmpty) {
       return Container(

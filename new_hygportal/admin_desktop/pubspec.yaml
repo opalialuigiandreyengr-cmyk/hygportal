@@ -71,6 +71,12 @@ flutter:
     - assets/hyg_logo.png
     - assets/hygcoins.png
     - assets/awardpoints.png
+    - assets/travel_order_company_logos.png
+    - assets/logo_goldilocks.png
+    - assets/logo_chawnah.png
+    - assets/logo_cakes_occasions.png
+    - assets/logo_fresh_berry.png
+    - assets/logo_cake_haven.png
 
   fonts:
     - family: Poppins

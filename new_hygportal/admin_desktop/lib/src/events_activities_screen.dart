@@ -27,14 +27,16 @@ class _EventsAndActivitiesScreenState extends State<EventsAndActivitiesScreen> {
     super.dispose();
   }
 
-  Future<void> _loadEvents() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
+  Future<void> _loadEvents({bool forceRefresh = false}) async {
+    if (_events.isEmpty) {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+    }
 
     try {
-      final items = await PortalEventActivityService.getEvents();
+      final items = await PortalEventActivityService.getEvents(forceRefresh: forceRefresh);
       if (mounted) {
         setState(() {
           _events = items;

@@ -2104,52 +2104,55 @@ class _AddUserDialogState extends State<AddUserDialog> {
                 itemBuilder: (context, index) {
                   final company = widget.companies[index];
                   final isSelected = _selectedCompanyIds.contains(company.id);
-                  return CheckboxListTile(
-                    activeColor: HygColors.gold,
-                    checkColor: HygColors.ink,
-                    controlAffinity: ListTileControlAffinity.leading,
-                    title: Row(
-                      children: [
-                        Container(
-                          width: 28,
-                          height: 28,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFEF3C7),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Center(
-                            child: Text(
-                              company.initials,
-                              style: const TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: HygColors.goldStrong,
+                  return Material(
+                    color: Colors.transparent,
+                    child: CheckboxListTile(
+                      activeColor: HygColors.gold,
+                      checkColor: HygColors.ink,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      title: Row(
+                        children: [
+                          Container(
+                            width: 28,
+                            height: 28,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFEF3C7),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Center(
+                              child: Text(
+                                company.initials,
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: HygColors.goldStrong,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            company.name,
-                            style: HygTypography.body.copyWith(
-                              fontSize: 14,
-                              color: HygColors.ink,
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              company.name,
+                              style: HygTypography.body.copyWith(
+                                fontSize: 14,
+                                color: HygColors.ink,
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
+                      value: isSelected,
+                      onChanged: (bool? checked) {
+                        setState(() {
+                          if (checked == true) {
+                            _selectedCompanyIds.add(company.id);
+                          } else {
+                            _selectedCompanyIds.remove(company.id);
+                          }
+                        });
+                      },
                     ),
-                    value: isSelected,
-                    onChanged: (bool? checked) {
-                      setState(() {
-                        if (checked == true) {
-                          _selectedCompanyIds.add(company.id);
-                        } else {
-                          _selectedCompanyIds.remove(company.id);
-                        }
-                      });
-                    },
                   );
                 },
               ),
@@ -3099,53 +3102,56 @@ class _UserRoleDialogState extends State<UserRoleDialog> {
                   itemBuilder: (context, index) {
                     final company = widget.companies[index];
                     final isSelected = _selectedCompanyIds.contains(company.id);
-                    return CheckboxListTile(
-                      activeColor: HygColors.gold,
-                      checkColor: HygColors.ink,
-                      controlAffinity: ListTileControlAffinity.leading,
-                      title: Row(
-                        children: [
-                          Container(
-                            width: 28,
-                            height: 28,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFEF3C7),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Center(
-                              child: Text(
-                                company.initials,
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: HygColors.goldStrong,
+                    return Material(
+                      color: Colors.transparent,
+                      child: CheckboxListTile(
+                        activeColor: HygColors.gold,
+                        checkColor: HygColors.ink,
+                        controlAffinity: ListTileControlAffinity.leading,
+                        title: Row(
+                          children: [
+                            Container(
+                              width: 28,
+                              height: 28,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFEF3C7),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  company.initials,
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: HygColors.goldStrong,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              company.name,
-                              style: HygTypography.body.copyWith(
-                                fontSize: 14,
-                                color: HygColors.ink,
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                company.name,
+                                style: HygTypography.body.copyWith(
+                                  fontSize: 14,
+                                  color: HygColors.ink,
+                                ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
+                        value: isSelected,
+                        onChanged: (bool? checked) {
+                          setState(() {
+                            if (checked == true) {
+                              _selectedCompanyIds.add(company.id);
+                            } else {
+                              _selectedCompanyIds.remove(company.id);
+                            }
+                            _error = null;
+                          });
+                        },
                       ),
-                      value: isSelected,
-                      onChanged: (bool? checked) {
-                        setState(() {
-                          if (checked == true) {
-                            _selectedCompanyIds.add(company.id);
-                          } else {
-                            _selectedCompanyIds.remove(company.id);
-                          }
-                          _error = null;
-                        });
-                      },
                     );
                   },
                 ),

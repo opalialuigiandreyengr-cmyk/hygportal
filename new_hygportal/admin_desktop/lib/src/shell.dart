@@ -41,6 +41,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
   String? _positionError;
   String? _usersError;
   bool _isLoadingEmployees = false;
+  bool _isExportingEmployees = false;
   bool _isLoadingCompanies = false;
   bool _isLoadingDepartments = false;
   bool _isLoadingStores = false;
@@ -149,6 +150,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
       case HrSection.badges:
       case HrSection.rewardsReports:
       case HrSection.eventsAndActivities:
+      case HrSection.auditTrail:
         break;
     }
   }
@@ -853,6 +855,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
           HrSection.approverAssignments,
           HrSection.users,
           HrSection.departments,
+          HrSection.auditTrail,
         }.contains(section)) {
       section = HrSection.employees;
     }
@@ -860,6 +863,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
     setState(() => _activeSection = section);
     if (section == HrSection.requests) {
       unawaited(_loadAllRequests());
+      if (_stores.isEmpty) unawaited(_loadStores());
     }
     if (section == HrSection.employees) {
       unawaited(_loadEmployees(silent: true));
@@ -902,6 +906,44 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
     if (created == true) {
       await _loadEmployees(forceRefresh: true);
       _showDepartmentMessage('Employee created successfully.');
+    }
+  }
+
+  Future<void> _exportEmployeesExcel() async {
+    if (_isExportingEmployees) return;
+    if (_employees.isEmpty) {
+      if (_isLoadingEmployees) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Employee records are loading. Please wait...'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+        return;
+      }
+      await _loadEmployees();
+      if (_employees.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No employees found to export.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+        return;
+      }
+    }
+
+    setState(() => _isExportingEmployees = true);
+    try {
+      await EmployeeExportService.exportToExcel(
+        context: context,
+        employees: _employees,
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isExportingEmployees = false);
+      }
     }
   }
 
@@ -2077,10 +2119,12 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
                           RequestsHeader(
                             onRefresh: () => _loadAllRequests(forceRefresh: true),
                             requests: _allRequests,
+                            stores: _stores,
                           ),
                           const SizedBox(height: 14),
                           RequestsPanel(
                             requests: _allRequests,
+                            stores: _stores,
                             isLoading: _isLoadingRequests,
                             error: _requestsError,
                             onRefresh: () => _loadAllRequests(forceRefresh: true),
@@ -2173,6 +2217,8 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
                             onAddEmployee: _openAddEmployeeModal,
                             onRefresh: () => _loadEmployees(forceRefresh: true),
                             isRefreshing: _isLoadingEmployees,
+                            onExportEmployees: _exportEmployeesExcel,
+                            isExporting: _isExportingEmployees,
                           ),
                           const SizedBox(height: 14),
                           EmployeesPanel(
@@ -2335,6 +2381,8 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
                           const RewardsReportsScreen(),
                         ] else if (_activeSection == HrSection.eventsAndActivities) ...[
                           const EventsAndActivitiesScreen(),
+                        ] else if (_activeSection == HrSection.auditTrail) ...[
+                          AuditTrailScreen(session: widget.session),
                         ],
                       ],
                     ),
@@ -2519,37 +2567,36 @@ class HrSidebar extends StatelessWidget {
                       HrDropdownItem(
                         icon: Icons.emoji_events_outlined,
                         label: 'Rewards',
-                        enabled: false,
-                        tooltip: 'Coming Soon.',
                         active: activeSection == HrSection.rewards,
                         onTap: () => onSelectSection(HrSection.rewards),
                       ),
                       HrDropdownItem(
                         icon: Icons.card_giftcard_outlined,
                         label: 'Redemption Request',
-                        enabled: false,
-                        tooltip: 'Coming Soon.',
                         active: activeSection == HrSection.redemptionRequests,
                         onTap: () => onSelectSection(HrSection.redemptionRequests),
                       ),
                       HrDropdownItem(
                         icon: Icons.verified_outlined,
                         label: 'Badges',
-                        enabled: false,
-                        tooltip: 'Coming Soon.',
                         active: activeSection == HrSection.badges,
                         onTap: () => onSelectSection(HrSection.badges),
                       ),
                       HrDropdownItem(
                         icon: Icons.bar_chart_outlined,
                         label: 'Reports',
-                        enabled: false,
-                        tooltip: 'Coming Soon.',
                         active: activeSection == HrSection.rewardsReports,
                         onTap: () => onSelectSection(HrSection.rewardsReports),
                       ),
                     ],
                   ),
+                  if (session.canManageAdminSettings)
+                    HrNavItem(
+                      icon: Icons.manage_search_outlined,
+                      label: 'Audit Trail',
+                      active: activeSection == HrSection.auditTrail,
+                      onTap: () => onSelectSection(HrSection.auditTrail),
+                    ),
                 ],
               ),
             ),
@@ -2922,6 +2969,7 @@ enum HrSection {
   badges,
   rewardsReports,
   eventsAndActivities,
+  auditTrail,
 }
 
 class HrTopBar extends StatelessWidget {

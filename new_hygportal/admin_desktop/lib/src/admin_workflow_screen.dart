@@ -1670,6 +1670,31 @@ class _StoreRouteRow extends StatelessWidget {
               .toSet()
               .toList()
             ..sort();
+      if (names.isNotEmpty) {
+        return names;
+      }
+
+      // If no Store Manager is assigned to this store, fall back to Assistant Store Manager for the meantime
+      if (level == 2 || roleName.contains('store manager')) {
+        final asmNames =
+            candidates
+                .where(
+                  (candidate) =>
+                      candidate.positionName
+                          .trim()
+                          .toLowerCase()
+                          .contains('assistant store manager') &&
+                      candidate.storeName.trim().toLowerCase() == store,
+                )
+                .map((candidate) => '${candidate.fullName} (ASM)')
+                .toSet()
+                .toList()
+              ..sort();
+        if (asmNames.isNotEmpty) {
+          return asmNames;
+        }
+      }
+
       return names;
     }
 
@@ -1685,6 +1710,30 @@ class _StoreRouteRow extends StatelessWidget {
             .toSet()
             .toList()
           ..sort();
+    if (names.isNotEmpty) {
+      return names;
+    }
+
+    if (level == 2) {
+      final asmNames =
+          candidates
+              .where(
+                (candidate) =>
+                    candidate.positionName
+                        .trim()
+                        .toLowerCase()
+                        .contains('assistant store manager') &&
+                    candidate.storeName.trim().toLowerCase() == store,
+              )
+              .map((candidate) => '${candidate.fullName} (ASM)')
+              .toSet()
+              .toList()
+            ..sort();
+      if (asmNames.isNotEmpty) {
+        return asmNames;
+      }
+    }
+
     return names;
   }
 }

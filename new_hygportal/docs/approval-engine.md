@@ -52,16 +52,25 @@ Level 8 -> same company or group
 
 ## Missing Approver Escalation
 
-If a required approver is missing, the system escalates to the next available higher approver.
+If a required approver is missing, the system escalates according to the following rules:
+
+### Store Manager Interim Fallback (Operations)
+If no Store Manager (Level 2) has been assigned to a specific store (or none is currently active), the **Assistant Store Manager (ASM)** assigned to that store is assigned as the interim approver for Level 2 (Step 1).
+
+If neither a Store Manager nor an Assistant Store Manager exists for that store, the system escalates upward to the next available higher approver (Level 4 Cluster Manager).
 
 Example:
 
 ```text
 Crew files overtime.
-Required: Level 2, then Level 4.
+Required: Level 2 Store Manager, then Level 4 Cluster Manager.
 
-No Level 2 Store Manager exists.
+Case A: Store has Assistant Store Manager, but no Store Manager assigned:
+Resolved:
+Step 1: Level 2 Assistant Store Manager
+Step 2: Level 4 Cluster Manager
 
+Case B: Store has neither Store Manager nor Assistant Store Manager:
 Resolved:
 Step 1: Level 4 Cluster Manager
 Step 2: Level 5 Area Manager

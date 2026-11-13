@@ -796,41 +796,32 @@ class _AdminNotificationsPopoverState extends State<AdminNotificationsPopover> {
           ],
           const Spacer(),
           if (unreadTotal > 0)
-            Tooltip(
-              message: 'Mark all as read',
-              child: IconButton(
-                icon: const Icon(Icons.done_all_rounded, size: 19),
-                color: const Color(0xFF64748B),
-                onPressed: () => AdminNotificationsService.markAllAsRead(),
-                splashRadius: 18,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                padding: EdgeInsets.zero,
-              ),
-            ),
-          Tooltip(
-            message: 'Refresh',
-            child: IconButton(
-              icon: const Icon(Icons.refresh_rounded, size: 19),
+            IconButton(
+              icon: const Icon(Icons.done_all_rounded, size: 19),
               color: const Color(0xFF64748B),
-              onPressed: _refresh,
+              onPressed: () => AdminNotificationsService.markAllAsRead(),
               splashRadius: 18,
               constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               padding: EdgeInsets.zero,
             ),
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded, size: 19),
+            color: const Color(0xFF64748B),
+            onPressed: _refresh,
+            splashRadius: 18,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            padding: EdgeInsets.zero,
           ),
-          Tooltip(
-            message: 'Open Activity Center (Full Screen)',
-            child: IconButton(
-              icon: const Icon(Icons.open_in_new_rounded, size: 18),
-              color: const Color(0xFF64748B),
-              onPressed: () {
-                widget.onClose();
-                widget.onOpenFullScreen();
-              },
-              splashRadius: 18,
-              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-              padding: EdgeInsets.zero,
-            ),
+          IconButton(
+            icon: const Icon(Icons.open_in_new_rounded, size: 18),
+            color: const Color(0xFF64748B),
+            onPressed: () {
+              widget.onClose();
+              widget.onOpenFullScreen();
+            },
+            splashRadius: 18,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            padding: EdgeInsets.zero,
           ),
           IconButton(
             icon: const Icon(Icons.close_rounded, size: 19),

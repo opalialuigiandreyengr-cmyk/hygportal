@@ -841,6 +841,23 @@ class AdminRequestItem {
     return null;
   }
 
+  /// Official Travel Order reference number formatted as TO-YYYY-MMDD.
+  /// YYYY is the year and MMDD is the month and day the request was submitted.
+  String get travelOrderNo {
+    DateTime? dt = submittedDateTime;
+    if (dt != null) {
+      if (dt.isUtc) {
+        dt = dt.toLocal();
+      }
+    } else {
+      dt = DateTime.now();
+    }
+    final year = dt.year.toString().padLeft(4, '0');
+    final mm = dt.month.toString().padLeft(2, '0');
+    final dd = dt.day.toString().padLeft(2, '0');
+    return 'TO-$year-$mm$dd';
+  }
+
   bool get isAutoApprovedBirthdayGrant {
     final cat = (leaveCategory ?? '').trim().toLowerCase();
     final r = (reason ?? '').trim().toLowerCase();
@@ -2330,6 +2347,181 @@ class PortalEventActivityItem {
       createdBy: createdBy ?? this.createdBy,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+}
+
+class AuditLogRecord {
+  const AuditLogRecord({
+    required this.id,
+    required this.createdAt,
+    required this.action,
+    required this.actionLabel,
+    required this.entityType,
+    this.entityId,
+    this.actorUserProfileId,
+    required this.actorUsername,
+    required this.actorFullName,
+    required this.actorRole,
+    required this.targetName,
+    required this.targetIdentifier,
+    required this.description,
+    required this.metadata,
+  });
+
+  final String id;
+  final DateTime createdAt;
+  final String action;
+  final String actionLabel;
+  final String entityType;
+  final String? entityId;
+  final String? actorUserProfileId;
+  final String actorUsername;
+  final String actorFullName;
+  final String actorRole;
+  final String targetName;
+  final String targetIdentifier;
+  final String description;
+  final Map<String, dynamic> metadata;
+
+  factory AuditLogRecord.fromMap(Map<String, dynamic> map) {
+    DateTime parsedDate;
+    try {
+      final rawDate = map['created_at'];
+      if (rawDate is DateTime) {
+        parsedDate = rawDate;
+      } else if (rawDate != null) {
+        parsedDate = DateTime.parse(rawDate.toString()).toLocal();
+      } else {
+        parsedDate = DateTime.now();
+      }
+    } catch (_) {
+      parsedDate = DateTime.now();
+    }
+
+    Map<String, dynamic> meta = {};
+    if (map['metadata'] is Map) {
+      meta = Map<String, dynamic>.from(map['metadata'] as Map);
+    }
+
+    return AuditLogRecord(
+      id: map['id']?.toString() ?? '',
+      createdAt: parsedDate,
+      action: map['action']?.toString() ?? '',
+      actionLabel: _formatActionLabel(map['action_label']?.toString(), map['action']?.toString()),
+      entityType: map['entity_type']?.toString() ?? '',
+      entityId: map['entity_id']?.toString(),
+      actorUserProfileId: map['actor_user_profile_id']?.toString(),
+      actorUsername: map['actor_username']?.toString() ?? 'System',
+      actorFullName: map['actor_full_name']?.toString() ?? 'System',
+      actorRole: map['actor_role']?.toString() ?? 'system',
+      targetName: map['target_name']?.toString() ?? 'N/A',
+      targetIdentifier: map['target_identifier']?.toString() ?? '',
+      description: map['description']?.toString() ?? '',
+      metadata: meta,
+    );
+  }
+
+  static String _formatActionLabel(String? rawLabel, String? rawAction) {
+    if (rawLabel != null &&
+        rawLabel.isNotEmpty &&
+        !rawLabel.contains('_') &&
+        rawLabel != rawAction) {
+      return rawLabel;
+    }
+    final action = (rawAction ?? rawLabel ?? '').trim().toLowerCase();
+    switch (action) {
+      case 'password_reset':
+        return 'Password Reset';
+      case 'admin_validate_esarf_request':
+      case 'validate_esarf_request':
+        return 'ESARF Request Validated';
+      case 'admin_revalidate_esarf_request':
+      case 'revalidate_esarf_request':
+        return 'ESARF Request Re-validated';
+      case 'admin_validate_leave_request':
+      case 'validate_leave_request':
+        return 'Leave Request Validated';
+      case 'admin_reassign_request_approver':
+      case 'reassign_request_approver':
+        return 'Approver Reassigned';
+      case 'hr_admin_set_authority_assignment':
+      case 'admin_set_authority_assignment':
+        return 'Set Authority Assignment';
+      case 'hr_admin_set_position_authority_level':
+      case 'position_authority_level':
+        return 'Position Authority Level';
+      case 'admin_deduct_employee_offset_balance':
+        return 'Deduct Offset Balance';
+      case 'admin_set_employee_offset_balance':
+        return 'Set Offset Balance';
+      case 'admin_reimburse_employee_offset_balance':
+        return 'Reimburse Offset Balance';
+      case 'admin_set_employee_leave_credits':
+        return 'Set Leave Credits';
+      case 'admin_deduct_employee_leave_credits':
+        return 'Deduct Leave Credits';
+      case 'admin_reimburse_employee_leave_credits':
+        return 'Reimburse Leave Credits';
+      case 'hr_admin_set_department_approval_ladder':
+      case 'department_approval_ladders':
+        return 'Department Approval Ladder';
+      case 'department_position_catalog':
+        return 'Position Catalog Update';
+      case 'admin_approval_routes':
+        return 'Approval Route Update';
+      case 'update_employee_information':
+      case 'update_employee_profile':
+        return 'Employee Info Updated';
+      case 'update_employee_details':
+        return 'Employee Details Updated';
+      case 'update_employee_assignment':
+        return 'Job Assignment Updated';
+      case 'update_user_information':
+        return 'User Info Updated';
+      case 'user_role_change':
+        return 'User Role Changed';
+      case 'user_banned':
+        return 'User Banned';
+      case 'user_unbanned':
+        return 'User Unbanned';
+      case 'create_user':
+      case 'admin_create_user':
+        return 'User Created';
+      case 'admin_delete_user':
+        return 'User Deleted';
+      case 'hr_delete_employee':
+        return 'Employee Deleted';
+      default:
+        return action
+            .replaceAll('_', ' ')
+            .split(' ')
+            .where((w) => w.isNotEmpty)
+            .map((w) => '${w[0].toUpperCase()}${w.substring(1)}')
+            .join(' ');
+    }
+  }
+}
+
+class AuditStats {
+  const AuditStats({
+    required this.totalLogs,
+    required this.passwordResets,
+    required this.userUpdates,
+    required this.todayActions,
+  });
+
+  final int totalLogs;
+  final int passwordResets;
+  final int userUpdates;
+  final int todayActions;
+
+  factory AuditStats.fromMap(Map<String, dynamic> map) {
+    return AuditStats(
+      totalLogs: (map['total_logs'] as num?)?.toInt() ?? 0,
+      passwordResets: (map['password_resets'] as num?)?.toInt() ?? 0,
+      userUpdates: (map['user_updates'] as num?)?.toInt() ?? 0,
+      todayActions: (map['today_actions'] as num?)?.toInt() ?? 0,
     );
   }
 }

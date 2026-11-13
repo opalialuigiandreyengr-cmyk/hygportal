@@ -6575,3 +6575,153 @@ class PortalEventActivityService {
   }
 }
 
+// =============================================================================
+// AUDIT TRAIL & SYSTEM ACTIVITY LOG SERVICE
+// =============================================================================
+
+class AuditTrailService {
+  static final _client = Supabase.instance.client;
+
+  static Future<({List<AuditLogRecord> records, int totalCount})> fetchAuditLogs({
+    String? search,
+    String? action,
+    String? entityType,
+    DateTime? startDate,
+    DateTime? endDate,
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    try {
+      final params = <String, dynamic>{
+        'p_limit': limit,
+        'p_offset': offset,
+      };
+      if (search != null && search.trim().isNotEmpty) {
+        params['p_search'] = search.trim();
+      }
+      if (action != null && action.isNotEmpty && action != 'all') {
+        params['p_action'] = action;
+      }
+      if (entityType != null && entityType.isNotEmpty && entityType != 'all') {
+        params['p_entity_type'] = entityType;
+      }
+      if (startDate != null) {
+        params['p_start_date'] = startDate.toUtc().toIso8601String();
+      }
+      if (endDate != null) {
+        params['p_end_date'] = endDate.toUtc().toIso8601String();
+      }
+
+      final response = await _client.rpc(
+        'admin_get_audit_logs',
+        params: params,
+      );
+
+      final List list = response is List ? response : [];
+      final records = <AuditLogRecord>[];
+      int totalCount = 0;
+
+      for (final item in list) {
+        if (item is Map) {
+          final map = Map<String, dynamic>.from(item);
+          records.add(AuditLogRecord.fromMap(map));
+          if (totalCount == 0 && map.containsKey('total_count')) {
+            totalCount = (map['total_count'] as num?)?.toInt() ?? 0;
+          }
+        }
+      }
+
+      if (totalCount == 0 && records.isNotEmpty) {
+        totalCount = records.length;
+      }
+
+      return (records: records, totalCount: totalCount);
+    } catch (e) {
+      debugPrint('AuditTrailService.fetchAuditLogs rpc error: $e, falling back to direct query');
+      return _fetchAuditLogsFallback(
+        search: search,
+        action: action,
+        entityType: entityType,
+        startDate: startDate,
+        endDate: endDate,
+        limit: limit,
+        offset: offset,
+      );
+    }
+  }
+
+  static Future<({List<AuditLogRecord> records, int totalCount})> _fetchAuditLogsFallback({
+    String? search,
+    String? action,
+    String? entityType,
+    DateTime? startDate,
+    DateTime? endDate,
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    try {
+      var query = _client.from('audit_logs').select('*');
+
+      if (action != null && action.isNotEmpty && action != 'all') {
+        query = query.eq('action', action);
+      }
+      if (entityType != null && entityType.isNotEmpty && entityType != 'all') {
+        query = query.eq('entity_type', entityType);
+      }
+      if (startDate != null) {
+        query = query.gte('created_at', startDate.toUtc().toIso8601String());
+      }
+      if (endDate != null) {
+        query = query.lte('created_at', endDate.toUtc().toIso8601String());
+      }
+
+      final response = await query
+          .order('created_at', ascending: false)
+          .range(offset, offset + limit - 1);
+      final List list = response is List ? response : [];
+      final records = <AuditLogRecord>[];
+
+      for (final item in list) {
+        if (item is Map) {
+          records.add(AuditLogRecord.fromMap(Map<String, dynamic>.from(item)));
+        }
+      }
+
+      return (records: records, totalCount: records.length);
+    } catch (e) {
+      debugPrint('AuditTrailService._fetchAuditLogsFallback error: $e');
+      return (records: <AuditLogRecord>[], totalCount: 0);
+    }
+  }
+
+  static Future<AuditStats> fetchAuditStats() async {
+    try {
+      final response = await _client.rpc('admin_get_audit_stats');
+      if (response is Map) {
+        return AuditStats.fromMap(Map<String, dynamic>.from(response));
+      }
+    } catch (e) {
+      debugPrint('AuditTrailService.fetchAuditStats rpc error: $e');
+    }
+
+    try {
+      final res = await _client.from('audit_logs').select('id');
+      final count = (res as List).length;
+      return AuditStats(
+        totalLogs: count,
+        passwordResets: 0,
+        userUpdates: 0,
+        todayActions: 0,
+      );
+    } catch (_) {
+      return const AuditStats(
+        totalLogs: 0,
+        passwordResets: 0,
+        userUpdates: 0,
+        todayActions: 0,
+      );
+    }
+  }
+}
+
+

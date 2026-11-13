@@ -5,12 +5,16 @@ class EmployeesHeader extends StatelessWidget {
     required this.onAddEmployee,
     this.onRefresh,
     this.isRefreshing = false,
+    this.onExportEmployees,
+    this.isExporting = false,
     super.key,
   });
 
   final VoidCallback onAddEmployee;
   final VoidCallback? onRefresh;
   final bool isRefreshing;
+  final VoidCallback? onExportEmployees;
+  final bool isExporting;
 
   @override
   Widget build(BuildContext context) {
@@ -80,9 +84,15 @@ class EmployeesHeader extends StatelessWidget {
                 borderRadius: BorderRadius.circular(10),
               ),
             ),
-            onPressed: () {},
-            icon: const Icon(Icons.cloud_upload, size: 17),
-            label: const Text('Import Employees'),
+            onPressed: isExporting ? null : onExportEmployees,
+            icon: isExporting
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.file_download_outlined, size: 18),
+            label: Text(isExporting ? 'Exporting...' : 'Export Employees'),
           ),
           const SizedBox(width: 12),
           FilledButton.icon(
@@ -101,6 +111,243 @@ class EmployeesHeader extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class EmployeeExportService {
+  static String _dateTag(DateTime value) {
+    return '${value.year}${value.month.toString().padLeft(2, '0')}${value.day.toString().padLeft(2, '0')}';
+  }
+
+  static List<int> _postProcessExcelBytes(List<int> encodedBytes) {
+    try {
+      final archive = ZipDecoder().decodeBytes(encodedBytes);
+      final outArchive = Archive();
+
+      for (final file in archive.files) {
+        if (file.name == '[Content_Types].xml') {
+          final contentBytes = file.content as List<int>;
+          final xmlContent = utf8.decode(contentBytes);
+          final fixedXml = xmlContent.replaceAll(
+            RegExp(r'<Override[^>]*drawing1\.xml[^>]*/>'),
+            '',
+          );
+          final fixedBytes = utf8.encode(fixedXml);
+          outArchive.addFile(
+            ArchiveFile(file.name, fixedBytes.length, fixedBytes),
+          );
+        } else if (file.name.startsWith('xl/worksheets/_rels/') ||
+            file.name.startsWith('xl/drawings/')) {
+          continue;
+        } else {
+          outArchive.addFile(file);
+        }
+      }
+
+      final fixed = ZipEncoder().encode(outArchive);
+      return fixed ?? encodedBytes;
+    } catch (_) {
+      return encodedBytes;
+    }
+  }
+
+  static Future<void> exportToExcel({
+    required BuildContext context,
+    required List<EmployeePreview> employees,
+  }) async {
+    if (employees.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No employees found to export.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    final excel = Excel.createExcel();
+    final defaultSheet = excel.getDefaultSheet()!;
+    const sheetName = 'Employees';
+    excel.rename(defaultSheet, sheetName);
+    final sheet = excel.sheets[sheetName]!;
+
+    final headerStyle = CellStyle(
+      bold: true,
+      fontColorHex: ExcelColor.white,
+      backgroundColorHex: ExcelColor.fromHexString('#071426'),
+      fontFamily: 'Segoe UI',
+      fontSize: 11,
+      horizontalAlign: HorizontalAlign.Center,
+      verticalAlign: VerticalAlign.Center,
+    );
+    final dataStyle = CellStyle(
+      fontFamily: 'Segoe UI',
+      fontSize: 10,
+      fontColorHex: ExcelColor.fromHexString('#1E293B'),
+      horizontalAlign: HorizontalAlign.Left,
+      verticalAlign: VerticalAlign.Center,
+    );
+    final dataStyleStripe = CellStyle(
+      fontFamily: 'Segoe UI',
+      fontSize: 10,
+      fontColorHex: ExcelColor.fromHexString('#1E293B'),
+      backgroundColorHex: ExcelColor.fromHexString('#F8FAFC'),
+      horizontalAlign: HorizontalAlign.Left,
+      verticalAlign: VerticalAlign.Center,
+    );
+    final centerStyle = CellStyle(
+      fontFamily: 'Segoe UI',
+      fontSize: 10,
+      fontColorHex: ExcelColor.fromHexString('#1E293B'),
+      horizontalAlign: HorizontalAlign.Center,
+      verticalAlign: VerticalAlign.Center,
+    );
+    final centerStyleStripe = CellStyle(
+      fontFamily: 'Segoe UI',
+      fontSize: 10,
+      fontColorHex: ExcelColor.fromHexString('#1E293B'),
+      backgroundColorHex: ExcelColor.fromHexString('#F8FAFC'),
+      horizontalAlign: HorizontalAlign.Center,
+      verticalAlign: VerticalAlign.Center,
+    );
+
+    const headers = [
+      'Employee No',
+      'Full Name',
+      'First Name',
+      'Middle Name',
+      'Last Name',
+      'Suffix',
+      'Company',
+      'Department',
+      'Position',
+      'Employment Status',
+      'Email',
+      'Contact Number',
+      'Date Hired',
+      'Birth Date',
+    ];
+
+    final minColWidths = <double>[16, 26, 18, 18, 18, 10, 24, 22, 24, 18, 28, 18, 16, 16];
+    final maxColLengths = List<int>.generate(headers.length, (c) => headers[c].length + 4);
+
+    for (var c = 0; c < headers.length; c++) {
+      excel.updateCell(
+        sheetName,
+        CellIndex.indexByColumnRow(columnIndex: c, rowIndex: 0),
+        TextCellValue(headers[c]),
+        cellStyle: headerStyle,
+      );
+    }
+    sheet.setRowHeight(0, 26);
+
+    for (var r = 0; r < employees.length; r++) {
+      final emp = employees[r];
+      final isStripe = r.isOdd;
+      final statusDisplay = emp.status.trim().isEmpty ? 'ACTIVE' : emp.status.trim().toUpperCase();
+      final hiredDisplay = emp.rawHiredDate?.trim().isNotEmpty == true
+          ? emp.rawHiredDate!.trim()
+          : (emp.hired.trim().isNotEmpty ? emp.hired.trim() : '-');
+      final birthDisplay = emp.rawBirthDate?.trim().isNotEmpty == true
+          ? emp.rawBirthDate!.trim()
+          : '-';
+
+      final values = [
+        emp.idNumber == 'None' ? '' : emp.idNumber,
+        emp.name,
+        emp.firstName ?? '',
+        emp.middleName ?? '',
+        emp.lastName ?? '',
+        emp.suffix ?? '',
+        emp.companyName.isEmpty ? emp.company : emp.companyName,
+        emp.departmentName,
+        emp.positionName,
+        statusDisplay,
+        emp.email ?? '',
+        emp.phone ?? '',
+        hiredDisplay,
+        birthDisplay,
+      ];
+
+      for (var c = 0; c < values.length; c++) {
+        final val = values[c];
+        if (val.length + 4 > maxColLengths[c]) {
+          maxColLengths[c] = val.length + 4;
+        }
+
+        final isCentered = c == 0 || c == 5 || c == 9 || c == 11 || c == 12 || c == 13;
+        excel.updateCell(
+          sheetName,
+          CellIndex.indexByColumnRow(columnIndex: c, rowIndex: r + 1),
+          TextCellValue(val),
+          cellStyle: isCentered
+              ? (isStripe ? centerStyleStripe : centerStyle)
+              : (isStripe ? dataStyleStripe : dataStyle),
+        );
+      }
+      sheet.setRowHeight(r + 1, 21);
+    }
+
+    for (var c = 0; c < headers.length; c++) {
+      double width = maxColLengths[c].toDouble();
+      if (width < minColWidths[c]) width = minColWidths[c];
+      if (width > 45.0) width = 45.0;
+      sheet.setColumnWidth(c, width);
+    }
+
+    final encodedBytes = excel.encode();
+    if (encodedBytes == null) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to generate Excel file.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    final fileBytes = Uint8List.fromList(_postProcessExcelBytes(encodedBytes));
+    final defaultFileName = 'Employees_${_dateTag(DateTime.now())}.xlsx';
+    final savePath = await FilePicker.saveFile(
+      dialogTitle: 'Save Employees Excel file',
+      fileName: defaultFileName,
+      type: FileType.custom,
+      allowedExtensions: ['xlsx'],
+      bytes: fileBytes,
+    );
+
+    if (!context.mounted || savePath == null) return;
+
+    try {
+      if (!await File(savePath).exists()) {
+        await File(savePath).writeAsBytes(fileBytes);
+      }
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Exported ${employees.length} employees to: $savePath'),
+          backgroundColor: const Color(0xFF166534),
+          duration: const Duration(seconds: 8),
+          action: SnackBarAction(
+            label: 'Open folder',
+            textColor: Colors.white,
+            onPressed: () {
+              Process.run('explorer', ['/select,', savePath]);
+            },
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to save file: $e'),
+          backgroundColor: const Color(0xFFB91C1C),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
   }
 }
 
@@ -2166,7 +2413,7 @@ class _AddEmployeeProfileModalState extends State<AddEmployeeProfileModal> {
           ),
           const SizedBox(height: 6),
           const Text(
-            'Assign this Store Manager to 2 or more stores. They will automatically be the approver for requests from these stores and reflect in Approval Routes.',
+            'Assign this Store Manager or Assistant Store Manager to 2 or more stores. They will automatically be the approver for requests from these stores and reflect in Approval Routes.',
             style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
           ),
           const SizedBox(height: 10),
@@ -2777,24 +3024,27 @@ class _ModalMultiSelectFieldState extends State<ModalMultiSelectField> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: widget.options.map((option) {
-                    return CheckboxListTile(
-                      title: Text(option, style: HygTypography.body),
-                      value: selected.contains(option),
-                      activeColor: HygColors.goldStrong,
-                      checkColor: HygColors.ink,
-                      controlAffinity: ListTileControlAffinity.leading,
-                      contentPadding: EdgeInsets.zero,
-                      onChanged: (bool? checked) {
-                        setStateDialog(() {
-                          if (checked == true) {
-                            if (!selected.contains(option)) {
-                              selected.add(option);
+                    return Material(
+                      color: Colors.transparent,
+                      child: CheckboxListTile(
+                        title: Text(option, style: HygTypography.body),
+                        value: selected.contains(option),
+                        activeColor: HygColors.goldStrong,
+                        checkColor: HygColors.ink,
+                        controlAffinity: ListTileControlAffinity.leading,
+                        contentPadding: EdgeInsets.zero,
+                        onChanged: (bool? checked) {
+                          setStateDialog(() {
+                            if (checked == true) {
+                              if (!selected.contains(option)) {
+                                selected.add(option);
+                              }
+                            } else {
+                              selected.remove(option);
                             }
-                          } else {
-                            selected.remove(option);
-                          }
-                        });
-                      },
+                          });
+                        },
+                      ),
                     );
                   }).toList(),
                 ),
@@ -3607,18 +3857,24 @@ class _EmployeeDeleteDialogState extends State<EmployeeDeleteDialog> {
               onChanged: (value) => setState(() => _mode = value!),
               child: const Column(
                 children: [
-                  RadioListTile<EmployeeDeleteMode>(
-                    value: EmployeeDeleteMode.soft,
-                    title: Text('Soft delete'),
-                    subtitle: Text(
-                      'Set the employee to inactive and disable portal access. Records remain available for HR history.',
+                  Material(
+                    color: Colors.transparent,
+                    child: RadioListTile<EmployeeDeleteMode>(
+                      value: EmployeeDeleteMode.soft,
+                      title: Text('Soft delete'),
+                      subtitle: Text(
+                        'Set the employee to inactive and disable portal access. Records remain available for HR history.',
+                      ),
                     ),
                   ),
-                  RadioListTile<EmployeeDeleteMode>(
-                    value: EmployeeDeleteMode.hard,
-                    title: Text('Hard delete'),
-                    subtitle: Text(
-                      'Permanently delete the login, profile, ESARF, leave, discount, and related employee data.',
+                  Material(
+                    color: Colors.transparent,
+                    child: RadioListTile<EmployeeDeleteMode>(
+                      value: EmployeeDeleteMode.hard,
+                      title: Text('Hard delete'),
+                      subtitle: Text(
+                        'Permanently delete the login, profile, ESARF, leave, discount, and related employee data.',
+                      ),
                     ),
                   ),
                 ],

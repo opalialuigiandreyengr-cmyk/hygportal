@@ -14,6 +14,18 @@ class HygPhotoProofsScreen extends StatefulWidget {
 
 class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _pageScrollController = ScrollController();
+
+  // Tier 1 In-Memory Metadata Cache (Stale-While-Revalidate)
+  static List<_PhotoProofRecord>? _cachedProofs;
+  static List<EmployeePreview>? _cachedEmployees;
+  static List<DepartmentPreview>? _cachedDepartments;
+  static List<StorePreview>? _cachedStores;
+  static Map<String, String>? _cachedEmployeeAssignedStore;
+  static Map<String, String>? _cachedEmployeeNameAssignedStore;
+  static DateTime? _lastCacheTime;
+  static bool _isBackgroundRefreshing = false;
+
   List<_PhotoProofRecord> _allProofs = [];
   List<EmployeePreview> _allEmployees = [];
   List<DepartmentPreview> _allDepartments = [];
@@ -65,16 +77,45 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
   @override
   void initState() {
     super.initState();
-    _loadData();
+    if (_cachedProofs != null && _cachedProofs!.isNotEmpty) {
+      // Instant load from memory cache (0ms delay)
+      _allProofs = _cachedProofs!;
+      _allEmployees = _cachedEmployees ?? [];
+      _allDepartments = _cachedDepartments ?? [];
+      _allStores = _cachedStores ?? [];
+      _employeeAssignedStore = _cachedEmployeeAssignedStore ?? {};
+      _employeeNameAssignedStore = _cachedEmployeeNameAssignedStore ?? {};
+      _isLoading = false;
+
+      // Revalidate in background if older than 5 minutes
+      final shouldRevalidate = _lastCacheTime == null ||
+          DateTime.now().difference(_lastCacheTime!) > const Duration(minutes: 5);
+      if (shouldRevalidate) {
+        unawaited(_revalidateDataInBackground());
+      }
+    } else {
+      _loadData();
+    }
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _pageScrollController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadData() async {
+  void _scrollToTop() {
+    if (_pageScrollController.hasClients) {
+      _pageScrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+  Future<void> _loadData({bool isRefresh = false}) async {
     setState(() {
       _isLoading = true;
       _error = null;
@@ -83,14 +124,30 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
     try {
       final client = Supabase.instance.client;
 
-      // 1. Load photo proofs (500 most recent submissions)
-      final response = await client
-          .from('photo_proofs')
-          .select('*')
-          .order('timestamp', ascending: false)
-          .limit(500);
+      // 1. Load photo proofs for current and previous month (e.g., Nov and Oct)
+      final nowPh = _phNow();
+      // First day of previous month at 00:00:00 PH time (UTC+8)
+      final startOfPrevMonthPh = DateTime.utc(nowPh.year, nowPh.month - 1, 1);
+      final startUtc = startOfPrevMonthPh.subtract(const Duration(hours: 8));
 
-      final List<dynamic> rows = response as List<dynamic>;
+      final List<dynamic> rows = [];
+      const int pageSize = 1000;
+      int offset = 0;
+      while (true) {
+        final batch = await client
+            .from('photo_proofs')
+            .select('*')
+            .gte('timestamp', startUtc.toIso8601String())
+            .order('timestamp', ascending: false)
+            .range(offset, offset + pageSize - 1);
+        final list = batch as List<dynamic>;
+        rows.addAll(list);
+        if (list.length < pageSize) {
+          break;
+        }
+        offset += pageSize;
+      }
+
       final proofItems = rows
           .map((row) => _PhotoProofRecord.fromMap(row as Map<String, dynamic>))
           .toList(growable: false);
@@ -236,6 +293,15 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
         }
       }
 
+      // Update Tier 1 Memory Cache
+      _cachedProofs = scopedProofs;
+      _cachedEmployees = emps;
+      _cachedDepartments = depts;
+      _cachedStores = stores;
+      _cachedEmployeeAssignedStore = empStoreMap;
+      _cachedEmployeeNameAssignedStore = empNameStoreMap;
+      _lastCacheTime = DateTime.now();
+
       if (mounted) {
         setState(() {
           _allProofs = scopedProofs;
@@ -254,6 +320,98 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
           _isLoading = false;
         });
       }
+    }
+  }
+
+  Future<void> _revalidateDataInBackground() async {
+    if (_isBackgroundRefreshing) return;
+    _isBackgroundRefreshing = true;
+
+    try {
+      final client = Supabase.instance.client;
+      final nowPh = _phNow();
+      final startOfPrevMonthPh = DateTime.utc(nowPh.year, nowPh.month - 1, 1);
+      final startUtc = startOfPrevMonthPh.subtract(const Duration(hours: 8));
+
+      final List<dynamic> rows = [];
+      const int pageSize = 1000;
+      int offset = 0;
+      while (true) {
+        final batch = await client
+            .from('photo_proofs')
+            .select('*')
+            .gte('timestamp', startUtc.toIso8601String())
+            .order('timestamp', ascending: false)
+            .range(offset, offset + pageSize - 1);
+        final list = batch as List<dynamic>;
+        rows.addAll(list);
+        if (list.length < pageSize) break;
+        offset += pageSize;
+      }
+
+      final proofItems = rows
+          .map((row) => _PhotoProofRecord.fromMap(row as Map<String, dynamic>))
+          .toList(growable: false);
+
+      List<EmployeePreview> emps = [];
+      try {
+        emps = await EmployeeDirectoryService.loadEmployees();
+      } catch (_) {}
+
+      List<DepartmentPreview> depts = [];
+      try {
+        depts = await DepartmentDirectoryService.loadDepartments();
+      } catch (_) {}
+
+      List<StorePreview> stores = [];
+      try {
+        stores = await StoreDirectoryService.loadStores();
+      } catch (_) {}
+
+      List<_PhotoProofRecord> scopedProofs = proofItems;
+      if (stores.isNotEmpty || emps.isNotEmpty) {
+        final allowedStoreNames = stores
+            .map((s) => s.name.trim().toLowerCase())
+            .where((s) => s.isNotEmpty)
+            .toSet();
+        final allowedEmpIds = emps
+            .map((e) => e.id.trim())
+            .where((id) => id.isNotEmpty)
+            .toSet();
+        final allowedEmpNames = emps
+            .map((e) => _normalizeName(e.name))
+            .where((n) => n.isNotEmpty)
+            .toSet();
+
+        scopedProofs = proofItems.where((proof) {
+          final pStore = proof.storeName.trim().toLowerCase();
+          if (pStore.isNotEmpty && allowedStoreNames.contains(pStore)) return true;
+          final pEmpId = proof.employeeId.trim();
+          if (pEmpId.isNotEmpty && allowedEmpIds.contains(pEmpId)) return true;
+          final pEmpName = _normalizeName(proof.employeeName);
+          if (pEmpName.isNotEmpty && allowedEmpNames.contains(pEmpName)) return true;
+          return false;
+        }).toList();
+      }
+
+      _cachedProofs = scopedProofs;
+      if (emps.isNotEmpty) _cachedEmployees = emps;
+      if (depts.isNotEmpty) _cachedDepartments = depts;
+      if (stores.isNotEmpty) _cachedStores = stores;
+      _lastCacheTime = DateTime.now();
+
+      if (mounted) {
+        setState(() {
+          _allProofs = scopedProofs;
+          if (emps.isNotEmpty) _allEmployees = emps;
+          if (depts.isNotEmpty) _allDepartments = depts;
+          if (stores.isNotEmpty) _allStores = stores;
+        });
+      }
+    } catch (e) {
+      debugPrint('Photo Proofs background revalidation error: $e');
+    } finally {
+      _isBackgroundRefreshing = false;
     }
   }
 
@@ -316,6 +474,46 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
         _recentlyCapturedCurrentPage = 0;
         _employeeProofsCurrentPage = 0;
       });
+
+      // If the picked date is before the loaded 2-month window, fetch records for that specific date
+      final startOfPrevMonthPh = DateTime.utc(now.year, now.month - 1, 1);
+      final pickedPh = DateTime.utc(picked.year, picked.month, picked.day);
+      if (pickedPh.isBefore(startOfPrevMonthPh)) {
+        await _fetchProofsForSpecificDate(picked);
+      }
+    }
+  }
+
+  Future<void> _fetchProofsForSpecificDate(DateTime date) async {
+    try {
+      final client = Supabase.instance.client;
+      final startOfDayPh = DateTime.utc(date.year, date.month, date.day);
+      final endOfDayPh = DateTime.utc(date.year, date.month, date.day, 23, 59, 59, 999);
+      final startUtc = startOfDayPh.subtract(const Duration(hours: 8));
+      final endUtc = endOfDayPh.subtract(const Duration(hours: 8));
+
+      final response = await client
+          .from('photo_proofs')
+          .select('*')
+          .gte('timestamp', startUtc.toIso8601String())
+          .lte('timestamp', endUtc.toIso8601String())
+          .order('timestamp', ascending: false);
+
+      final List<dynamic> rows = response as List<dynamic>;
+      if (rows.isNotEmpty) {
+        final existingIds = _allProofs.map((p) => p.id).toSet();
+        final newProofs = rows
+            .map((row) => _PhotoProofRecord.fromMap(row as Map<String, dynamic>))
+            .where((p) => !existingIds.contains(p.id))
+            .toList();
+        if (newProofs.isNotEmpty && mounted) {
+          setState(() {
+            _allProofs = [..._allProofs, ...newProofs];
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching custom date proofs: $e');
     }
   }
 
@@ -896,7 +1094,8 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
     return Scaffold(
       backgroundColor: HygColors.background,
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
+          controller: _pageScrollController,
           padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -922,17 +1121,19 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
               const SizedBox(height: 14),
 
               // 5. Dynamic Tab View Content
-              Expanded(
-                child: _isLoading
-                    ? const Center(
-                        child: CircularProgressIndicator(color: Color(0xFF0284C7)),
-                      )
-                    : _error != null
-                        ? _buildErrorView()
-                        : _activeTab == _PhotoProofTab.recentlyCaptured
-                            ? _buildRecentlyCapturedTab()
-                            : _buildDepartmentsTab(),
-              ),
+              if (_isLoading)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 80),
+                  child: Center(
+                    child: CircularProgressIndicator(color: Color(0xFF0284C7)),
+                  ),
+                )
+              else if (_error != null)
+                _buildErrorView()
+              else if (_activeTab == _PhotoProofTab.recentlyCaptured)
+                _buildRecentlyCapturedTab()
+              else
+                _buildDepartmentsTab(),
             ],
           ),
         ),
@@ -1001,7 +1202,7 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.refresh, color: Color(0xFF0F172A), size: 20),
-            onPressed: _loadData,
+            onPressed: () => _loadData(isRefresh: true),
             tooltip: 'Refresh Photo Proofs',
           ),
           const SizedBox(width: 8),
@@ -1653,23 +1854,23 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
           ],
         ),
         const SizedBox(height: 12),
-        Expanded(
-          child: _isGridView
-              ? GridView.builder(
-                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                    maxCrossAxisExtent: 280,
-                    mainAxisExtent: 330,
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 16,
-                  ),
-                  itemCount: pageProofs.length,
-                  itemBuilder: (context, index) {
-                    final proof = pageProofs[index];
-                    return _buildProofCard(proof);
-                  },
-                )
-              : _buildProofsTableView(pageProofs),
-        ),
+        _isGridView
+            ? GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 280,
+                  mainAxisExtent: 330,
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
+                ),
+                itemCount: pageProofs.length,
+                itemBuilder: (context, index) {
+                  final proof = pageProofs[index];
+                  return _buildProofCard(proof);
+                },
+              )
+            : _buildProofsTableView(pageProofs),
         if (pageCount > 1)
           _buildPaginationBar(
             currentPage: safePage,
@@ -1678,7 +1879,10 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
             startIndex: startIndex,
             endIndex: endIndex,
             itemLabel: 'submissions',
-            onPageSelected: (p) => setState(() => _recentlyCapturedCurrentPage = p),
+            onPageSelected: (p) {
+              setState(() => _recentlyCapturedCurrentPage = p);
+              _scrollToTop();
+            },
           ),
       ],
     );
@@ -1696,9 +1900,7 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
         const SizedBox(height: 12),
 
         // Dynamic Hierarchy Level
-        Expanded(
-          child: _buildCurrentDepartmentLevel(),
-        ),
+        _buildCurrentDepartmentLevel(),
       ],
     );
   }
@@ -1896,6 +2098,8 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
 
     if (_isGridView) {
       return GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 3,
           mainAxisExtent: 78,
@@ -1918,6 +2122,7 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
                 _selectedEmployeeName = null;
                 _selectedEmployeeId = null;
               });
+              _scrollToTop();
             },
           );
         },
@@ -1925,13 +2130,16 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
     } else {
       return Container(
         decoration: BoxDecoration(
-          color: Colors.white,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: const Color(0xFFE2E8F0)),
         ),
-        child: ClipRRect(
+        child: Material(
+          color: Colors.white,
           borderRadius: BorderRadius.circular(12),
+          clipBehavior: Clip.antiAlias,
           child: ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
             itemCount: depts.length,
             separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFE2E8F0)),
             itemBuilder: (context, index) {
@@ -1940,25 +2148,29 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
               final empCount = _allEmployees.where((e) => _canonicalDepartmentName(e.departmentName).toLowerCase() == canon).length;
               final proofCount = _allProofs.where((p) => _canonicalDepartmentName(p.storeName).toLowerCase() == canon).length;
 
-              return ListTile(
-                leading: const Icon(Icons.folder, color: Color(0xFF94A3B8), size: 30),
-                title: Text(
-                  dept,
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+              return Material(
+                color: Colors.transparent,
+                child: ListTile(
+                  leading: const Icon(Icons.folder, color: Color(0xFF94A3B8), size: 30),
+                  title: Text(
+                    dept,
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                  ),
+                  subtitle: Text(
+                    '$empCount employees • $proofCount submissions',
+                    style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                  ),
+                  trailing: const Icon(Icons.chevron_right, color: Color(0xFF64748B)),
+                  onTap: () {
+                    setState(() {
+                      _selectedDepartment = dept;
+                      _selectedStoreInOperations = null;
+                      _selectedEmployeeName = null;
+                      _selectedEmployeeId = null;
+                    });
+                    _scrollToTop();
+                  },
                 ),
-                subtitle: Text(
-                  '$empCount employees • $proofCount submissions',
-                  style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                ),
-                trailing: const Icon(Icons.chevron_right, color: Color(0xFF64748B)),
-                onTap: () {
-                  setState(() {
-                    _selectedDepartment = dept;
-                    _selectedStoreInOperations = null;
-                    _selectedEmployeeName = null;
-                    _selectedEmployeeId = null;
-                  });
-                },
               );
             },
           ),
@@ -1984,6 +2196,8 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
 
     if (_isGridView) {
       return GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 3,
           mainAxisExtent: 88,
@@ -2007,6 +2221,7 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
                 _selectedEmployeeName = null;
                 _selectedEmployeeId = null;
               });
+              _scrollToTop();
             },
           );
         },
@@ -2014,13 +2229,16 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
     } else {
       return Container(
         decoration: BoxDecoration(
-          color: Colors.white,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: HygColors.border),
         ),
-        child: ClipRRect(
+        child: Material(
+          color: Colors.white,
           borderRadius: BorderRadius.circular(12),
+          clipBehavior: Clip.antiAlias,
           child: ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
             itemCount: stores.length,
             separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFE2E8F0)),
             itemBuilder: (context, index) {
@@ -2029,57 +2247,61 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
               final assignedEmps = _getEmployeesForStoreInOperations(store);
               final proofCount = _allProofs.where((p) => p.storeName.trim().toLowerCase() == store.trim().toLowerCase()).length;
 
-              return ListTile(
-                leading: const Icon(Icons.folder, color: Color(0xFF94A3B8), size: 30),
-                title: Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        store,
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (companyName.isNotEmpty) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFE0F2FE),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: const Color(0xFFBAE6FD)),
+              return Material(
+                color: Colors.transparent,
+                child: ListTile(
+                  leading: const Icon(Icons.folder, color: Color(0xFF94A3B8), size: 30),
+                  title: Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          store,
+                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.business_outlined, size: 12, color: Color(0xFF0284C7)),
-                            const SizedBox(width: 4),
-                            Text(
-                              companyName,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF0284C7),
+                      ),
+                      if (companyName.isNotEmpty) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE0F2FE),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: const Color(0xFFBAE6FD)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.business_outlined, size: 12, color: Color(0xFF0284C7)),
+                              const SizedBox(width: 4),
+                              Text(
+                                companyName,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF0284C7),
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
+                      ],
                     ],
-                  ],
+                  ),
+                  subtitle: Text(
+                    '${companyName.isNotEmpty ? "$companyName • " : ""}${assignedEmps.length} assigned employee${assignedEmps.length == 1 ? '' : 's'} • $proofCount photo proof${proofCount == 1 ? '' : 's'}',
+                    style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                  ),
+                  trailing: const Icon(Icons.chevron_right, color: Color(0xFF64748B)),
+                  onTap: () {
+                    setState(() {
+                      _selectedStoreInOperations = store;
+                      _selectedEmployeeName = null;
+                      _selectedEmployeeId = null;
+                    });
+                    _scrollToTop();
+                  },
                 ),
-                subtitle: Text(
-                  '${companyName.isNotEmpty ? "$companyName • " : ""}${assignedEmps.length} assigned employee${assignedEmps.length == 1 ? '' : 's'} • $proofCount photo proof${proofCount == 1 ? '' : 's'}',
-                  style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                ),
-                trailing: const Icon(Icons.chevron_right, color: Color(0xFF64748B)),
-                onTap: () {
-                  setState(() {
-                    _selectedStoreInOperations = store;
-                    _selectedEmployeeName = null;
-                    _selectedEmployeeId = null;
-                  });
-                },
               );
             },
           ),
@@ -2103,6 +2325,8 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
 
     if (_isGridView) {
       return GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 3,
           mainAxisExtent: 78,
@@ -2128,6 +2352,7 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
                 _selectedEmployeeName = emp.name;
                 _selectedEmployeeId = emp.id;
               });
+              _scrollToTop();
             },
           );
         },
@@ -2135,13 +2360,16 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
     } else {
       return Container(
         decoration: BoxDecoration(
-          color: Colors.white,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: const Color(0xFFE2E8F0)),
         ),
-        child: ClipRRect(
+        child: Material(
+          color: Colors.white,
           borderRadius: BorderRadius.circular(12),
+          clipBehavior: Clip.antiAlias,
           child: ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
             itemCount: employees.length,
             separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFE2E8F0)),
             itemBuilder: (context, index) {
@@ -2154,23 +2382,27 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
                               _selectedStoreInOperations!.trim().toLowerCase()))
                   .length;
 
-              return ListTile(
-                leading: const Icon(Icons.folder, color: Color(0xFF94A3B8), size: 30),
-                title: Text(
-                  emp.name,
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+              return Material(
+                color: Colors.transparent,
+                child: ListTile(
+                  leading: const Icon(Icons.folder, color: Color(0xFF94A3B8), size: 30),
+                  title: Text(
+                    emp.name,
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                  ),
+                  subtitle: Text(
+                    '${emp.positionName.isNotEmpty ? emp.positionName : "Store Staff"} • $proofsCount proof${proofsCount == 1 ? '' : 's'}',
+                    style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                  ),
+                  trailing: const Icon(Icons.chevron_right, color: Color(0xFF64748B)),
+                  onTap: () {
+                    setState(() {
+                      _selectedEmployeeName = emp.name;
+                      _selectedEmployeeId = emp.id;
+                    });
+                    _scrollToTop();
+                  },
                 ),
-                subtitle: Text(
-                  '${emp.positionName.isNotEmpty ? emp.positionName : "Store Staff"} • $proofsCount proof${proofsCount == 1 ? '' : 's'}',
-                  style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                ),
-                trailing: const Icon(Icons.chevron_right, color: Color(0xFF64748B)),
-                onTap: () {
-                  setState(() {
-                    _selectedEmployeeName = emp.name;
-                    _selectedEmployeeId = emp.id;
-                  });
-                },
               );
             },
           ),
@@ -2194,6 +2426,8 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
 
     if (_isGridView) {
       return GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 3,
           mainAxisExtent: 78,
@@ -2213,6 +2447,7 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
                 _selectedEmployeeName = emp.name;
                 _selectedEmployeeId = emp.id;
               });
+              _scrollToTop();
             },
           );
         },
@@ -2220,36 +2455,43 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
     } else {
       return Container(
         decoration: BoxDecoration(
-          color: Colors.white,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: const Color(0xFFE2E8F0)),
         ),
-        child: ClipRRect(
+        child: Material(
+          color: Colors.white,
           borderRadius: BorderRadius.circular(12),
+          clipBehavior: Clip.antiAlias,
           child: ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
             itemCount: employees.length,
             separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFE2E8F0)),
             itemBuilder: (context, index) {
               final emp = employees[index];
               final proofsCount = _allProofs.where((p) => _matchesEmployeeName(emp.name, p.employeeName)).length;
 
-              return ListTile(
-                leading: const Icon(Icons.folder, color: Color(0xFF94A3B8), size: 30),
-                title: Text(
-                  emp.name,
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+              return Material(
+                color: Colors.transparent,
+                child: ListTile(
+                  leading: const Icon(Icons.folder, color: Color(0xFF94A3B8), size: 30),
+                  title: Text(
+                    emp.name,
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                  ),
+                  subtitle: Text(
+                    '${emp.positionName.isNotEmpty ? emp.positionName : "Team Member"} • $proofsCount proof${proofsCount == 1 ? '' : 's'}',
+                    style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                  ),
+                  trailing: const Icon(Icons.chevron_right, color: Color(0xFF64748B)),
+                  onTap: () {
+                    setState(() {
+                      _selectedEmployeeName = emp.name;
+                      _selectedEmployeeId = emp.id;
+                    });
+                    _scrollToTop();
+                  },
                 ),
-                subtitle: Text(
-                  '${emp.positionName.isNotEmpty ? emp.positionName : "Team Member"} • $proofsCount proof${proofsCount == 1 ? '' : 's'}',
-                  style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                ),
-                trailing: const Icon(Icons.chevron_right, color: Color(0xFF64748B)),
-                onTap: () {
-                  setState(() {
-                    _selectedEmployeeName = emp.name;
-                    _selectedEmployeeId = emp.id;
-                  });
-                },
               );
             },
           ),
@@ -2281,23 +2523,23 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(
-          child: _isGridView
-              ? GridView.builder(
-                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                    maxCrossAxisExtent: 280,
-                    mainAxisExtent: 330,
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 16,
-                  ),
-                  itemCount: pageProofs.length,
-                  itemBuilder: (context, index) {
-                    final proof = pageProofs[index];
-                    return _buildProofCard(proof);
-                  },
-                )
-              : _buildProofsTableView(pageProofs),
-        ),
+        _isGridView
+            ? GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 280,
+                  mainAxisExtent: 330,
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
+                ),
+                itemCount: pageProofs.length,
+                itemBuilder: (context, index) {
+                  final proof = pageProofs[index];
+                  return _buildProofCard(proof);
+                },
+              )
+            : _buildProofsTableView(pageProofs),
         if (pageCount > 1)
           _buildPaginationBar(
             currentPage: safePage,
@@ -2306,7 +2548,10 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
             startIndex: startIndex,
             endIndex: endIndex,
             itemLabel: 'submissions',
-            onPageSelected: (p) => setState(() => _employeeProofsCurrentPage = p),
+            onPageSelected: (p) {
+              setState(() => _employeeProofsCurrentPage = p);
+              _scrollToTop();
+            },
           ),
       ],
     );
@@ -2816,94 +3061,239 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
   }
 
   // ---------------------------------------------------------------------------
-  // PROOFS DATA TABLE VIEW (List view)
+  // PROOFS DATA TABLE VIEW (Responsive full-width List view)
   // ---------------------------------------------------------------------------
   Widget _buildProofsTableView(List<_PhotoProofRecord> proofs) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: HygColors.border),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: SingleChildScrollView(
-          child: DataTable(
-            headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
-            horizontalMargin: 16,
-            columnSpacing: 20,
-            columns: const [
-              DataColumn(label: Text('Photo', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('Employee', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('Department / Store', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('Date & Time', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('Location', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('Action', style: TextStyle(fontWeight: FontWeight.bold))),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final tableWidth = math.max(constraints.maxWidth, 880.0);
+
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: HygColors.border),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.02),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
             ],
-            rows: proofs.map((item) {
-              return DataRow(
-                cells: [
-                  DataCell(
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
-                        child: SizedBox(
-                          width: 44,
-                          height: 44,
-                          child: _buildThumbnailWidget(item),
-                        ),
-                      ),
-                    ),
-                  ),
-                  DataCell(
-                    Text(
-                      item.employeeName.isNotEmpty ? item.employeeName : '—',
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                  DataCell(
-                    Text(
-                      item.storeName.isNotEmpty ? item.storeName : (_selectedDepartment ?? 'General'),
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                  ),
-                  DataCell(
-                    Text(
-                      item.formattedTimeLabel,
-                      style: const TextStyle(fontSize: 12, color: Color(0xFF475569)),
-                    ),
-                  ),
-                  DataCell(
-                    SizedBox(
-                      width: 220,
-                      child: Text(
-                        item.locationText.isNotEmpty ? item.locationText : '—',
-                        style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ),
-                  DataCell(
-                    ElevatedButton(
-                      onPressed: () => _showProofDetailModal(item),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFEFF6FF),
-                        foregroundColor: const Color(0xFF1D4ED8),
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                      ),
-                      child: const Text('View', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                    ),
-                  ),
-                ],
-              );
-            }).toList(),
           ),
-        ),
-      ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: tableWidth,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Header Row
+                    Container(
+                      color: const Color(0xFFF8FAFC),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      child: const Row(
+                        children: [
+                          SizedBox(
+                            width: 60,
+                            child: Text(
+                              'Photo',
+                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF334155)),
+                            ),
+                          ),
+                          SizedBox(width: 12),
+                          Expanded(
+                            flex: 3,
+                            child: Text(
+                              'Employee',
+                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF334155)),
+                            ),
+                          ),
+                          SizedBox(width: 12),
+                          Expanded(
+                            flex: 3,
+                            child: Text(
+                              'Department / Store',
+                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF334155)),
+                            ),
+                          ),
+                          SizedBox(width: 12),
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              'Date & Time',
+                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF334155)),
+                            ),
+                          ),
+                          SizedBox(width: 12),
+                          Expanded(
+                            flex: 4,
+                            child: Text(
+                              'Location',
+                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF334155)),
+                            ),
+                          ),
+                          SizedBox(width: 12),
+                          SizedBox(
+                            width: 80,
+                            child: Align(
+                              alignment: Alignment.center,
+                              child: Text(
+                                'Action',
+                                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF334155)),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1, thickness: 1, color: Color(0xFFE2E8F0)),
+
+                    // Data Rows
+                    ...proofs.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final item = entry.value;
+                      final isLast = index == proofs.length - 1;
+
+                      final dept = _resolveEmployeeDepartment(item);
+                      final deptOrStore = item.storeName.isNotEmpty
+                          ? item.storeName
+                          : (dept.isNotEmpty ? dept : (_selectedDepartment ?? 'General'));
+
+                      return Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () => _showProofDetailModal(item),
+                              hoverColor: const Color(0xFFF8FAFC),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                child: Row(
+                                  children: [
+                                    // 1. Photo
+                                    SizedBox(
+                                      width: 60,
+                                      child: Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(6),
+                                          child: SizedBox(
+                                            width: 44,
+                                            height: 44,
+                                            child: _buildThumbnailWidget(item),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+
+                                    // 2. Employee
+                                    Expanded(
+                                      flex: 3,
+                                      child: Text(
+                                        item.employeeName.isNotEmpty ? item.employeeName : '—',
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF0F172A),
+                                        ),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+
+                                    // 3. Department / Store
+                                    Expanded(
+                                      flex: 3,
+                                      child: Text(
+                                        deptOrStore,
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Color(0xFF475569),
+                                        ),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+
+                                    // 4. Date & Time
+                                    Expanded(
+                                      flex: 2,
+                                      child: Text(
+                                        item.formattedTimeLabel,
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Color(0xFF475569),
+                                        ),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+
+                                    // 5. Location (Takes advantage of wide space)
+                                    Expanded(
+                                      flex: 4,
+                                      child: Text(
+                                        item.displayLocationText.isNotEmpty ? item.displayLocationText : '—',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: item.displayLocationText.isNotEmpty
+                                              ? const Color(0xFF64748B)
+                                              : const Color(0xFF94A3B8),
+                                        ),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+
+                                    // 6. Action
+                                    SizedBox(
+                                      width: 80,
+                                      child: Align(
+                                        alignment: Alignment.center,
+                                        child: ElevatedButton(
+                                          onPressed: () => _showProofDetailModal(item),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: const Color(0xFFEFF6FF),
+                                            foregroundColor: const Color(0xFF1D4ED8),
+                                            elevation: 0,
+                                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(6),
+                                            ),
+                                          ),
+                                          child: const Text(
+                                            'View',
+                                            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          if (!isLast)
+                            const Divider(height: 1, thickness: 1, color: Color(0xFFF1F5F9)),
+                        ],
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -2913,12 +3303,7 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
   Widget _buildThumbnailWidget(_PhotoProofRecord proof) {
     final photoUri = proof.resolvedPhotoUrl;
     if (photoUri.isEmpty) {
-      return Container(
-        color: const Color(0xFF0F172A),
-        child: const Center(
-          child: Icon(Icons.photo_outlined, size: 32, color: Colors.white38),
-        ),
-      );
+      return _buildFallbackThumbnail();
     }
 
     if (photoUri.startsWith('data:image')) {
@@ -2936,23 +3321,26 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
       }
     }
 
-    return Image.network(
-      photoUri,
+    final cacheKey = proof.driveFileId.isNotEmpty
+        ? 'drive_${proof.driveFileId}'
+        : (proof.id.isNotEmpty ? 'proof_${proof.id}' : photoUri);
+
+    return _DiskCachedImage(
+      url: photoUri,
+      cacheKey: cacheKey,
+      driveFileId: proof.driveFileId,
       fit: BoxFit.cover,
-      loadingBuilder: (context, child, loadingProgress) {
-        if (loadingProgress == null) return child;
-        return Container(
-          color: const Color(0xFFF1F5F9),
-          child: const Center(
-            child: SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF94A3B8)),
-            ),
+      placeholder: (_) => Container(
+        color: const Color(0xFFF1F5F9),
+        child: const Center(
+          child: SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF94A3B8)),
           ),
-        );
-      },
-      errorBuilder: (_, __, ___) => _buildFallbackThumbnail(),
+        ),
+      ),
+      errorWidget: (_) => _buildFallbackThumbnail(),
     );
   }
 
@@ -3175,21 +3563,7 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
     Widget _buildFullPhotoWidget(_PhotoProofRecord proof, {BoxFit fit = BoxFit.contain}) {
     final photoUri = proof.resolvedPhotoUrl;
     if (photoUri.isEmpty) {
-      return Container(
-        width: 460,
-        height: 320,
-        color: const Color(0xFF0F172A),
-        child: const Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.broken_image_outlined, size: 48, color: Colors.white38),
-              SizedBox(height: 10),
-              Text('No image available', style: TextStyle(color: Colors.white70, fontSize: 13)),
-            ],
-          ),
-        ),
-      );
+      return _buildImageErrorWidget();
     }
 
     if (photoUri.startsWith('data:image')) {
@@ -3207,25 +3581,28 @@ class _HygPhotoProofsScreenState extends State<HygPhotoProofsScreen> {
       }
     }
 
-    return Image.network(
-      photoUri,
+    final cacheKey = proof.driveFileId.isNotEmpty
+        ? 'drive_${proof.driveFileId}'
+        : (proof.id.isNotEmpty ? 'proof_${proof.id}' : photoUri);
+
+    return _DiskCachedImage(
+      url: photoUri,
+      cacheKey: cacheKey,
+      driveFileId: proof.driveFileId,
       fit: fit,
-      loadingBuilder: (context, child, loadingProgress) {
-        if (loadingProgress == null) return child;
-        return Container(
-          width: 460,
-          height: 320,
-          color: const Color(0xFF0F172A),
-          child: const Center(
-            child: SizedBox(
-              width: 32,
-              height: 32,
-              child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
-            ),
+      placeholder: (_) => Container(
+        width: 460,
+        height: 320,
+        color: const Color(0xFF0F172A),
+        child: const Center(
+          child: SizedBox(
+            width: 32,
+            height: 32,
+            child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
           ),
-        );
-      },
-      errorBuilder: (_, __, ___) => _buildImageErrorWidget(),
+        ),
+      ),
+      errorWidget: (_) => _buildImageErrorWidget(),
     );
   }
 
@@ -3354,8 +3731,15 @@ class _ProofModalViewerState extends State<_ProofModalViewer> {
     final photoUri = widget.proof.resolvedPhotoUrl;
     if (photoUri.isEmpty) return;
 
+    final cacheKey = widget.proof.driveFileId.isNotEmpty
+        ? 'drive_${widget.proof.driveFileId}'
+        : (widget.proof.id.isNotEmpty ? 'proof_${widget.proof.id}' : photoUri);
+    final cached = _PhotoProofDiskCache.getCachedFileIfPresent(cacheKey);
+
     ImageProvider provider;
-    if (photoUri.startsWith('data:image')) {
+    if (cached != null) {
+      provider = FileImage(cached);
+    } else if (photoUri.startsWith('data:image')) {
       try {
         final commaIndex = photoUri.indexOf(',');
         final base64String = commaIndex != -1 ? photoUri.substring(commaIndex + 1) : photoUri;
@@ -3707,5 +4091,231 @@ class _PhotoProofRecord {
       return '${latitude!.toStringAsFixed(4)}, ${longitude!.toStringAsFixed(4)}';
     }
     return '';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// TIER 2: LOCAL DISK IMAGE CACHE FOR PHOTO PROOFS (Windows LocalAppData)
+// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// DISK-CACHED IMAGE WIDGET
+// ---------------------------------------------------------------------------
+class _DiskCachedImage extends StatefulWidget {
+  final String url;
+  final String cacheKey;
+  final String? driveFileId;
+  final BoxFit fit;
+  final Widget Function(BuildContext) placeholder;
+  final Widget Function(BuildContext) errorWidget;
+
+  const _DiskCachedImage({
+    super.key,
+    required this.url,
+    required this.cacheKey,
+    this.driveFileId,
+    this.fit = BoxFit.cover,
+    required this.placeholder,
+    required this.errorWidget,
+  });
+
+  @override
+  State<_DiskCachedImage> createState() => _DiskCachedImageState();
+}
+
+class _DiskCachedImageState extends State<_DiskCachedImage> {
+  File? _file;
+  bool _isLoading = true;
+  bool _hasError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFile();
+  }
+
+  @override
+  void didUpdateWidget(covariant _DiskCachedImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.cacheKey != widget.cacheKey || oldWidget.url != widget.url) {
+      _loadFile();
+    }
+  }
+
+  void _loadFile() {
+    final cached = _PhotoProofDiskCache.getCachedFileIfPresent(widget.cacheKey);
+    if (cached != null) {
+      _file = cached;
+      _isLoading = false;
+      _hasError = false;
+      return;
+    }
+
+    _isLoading = true;
+    _hasError = false;
+
+    _PhotoProofDiskCache.fetchAndCache(
+      widget.url,
+      widget.cacheKey,
+      driveFileId: widget.driveFileId,
+    ).then((file) {
+      if (!mounted) return;
+      setState(() {
+        _file = file;
+        _isLoading = false;
+        _hasError = file == null;
+      });
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_file != null) {
+      return Image.file(
+        _file!,
+        fit: widget.fit,
+        errorBuilder: (ctx, err, stack) => widget.errorWidget(ctx),
+      );
+    }
+    if (_hasError) {
+      return widget.errorWidget(context);
+    }
+    return widget.placeholder(context);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// TIER 2 LOCAL DISK CACHE (Rate-limited async queue with Google Drive fallback)
+// ---------------------------------------------------------------------------
+class _PhotoProofDiskCache {
+  static Directory? _cacheDir;
+  static final Map<String, Completer<File?>> _inFlightCompleters = {};
+  static final List<Future<void> Function()> _downloadQueue = [];
+  static int _activeDownloads = 0;
+  static const int _maxConcurrent = 4;
+
+  static Future<Directory> _getCacheDirectory() async {
+    if (_cacheDir != null) return _cacheDir!;
+    final localAppData = Platform.environment['LOCALAPPDATA'];
+    final baseDir = localAppData == null || localAppData.trim().isEmpty
+        ? Directory.current.path
+        : p.join(localAppData, 'HYG Admin Desktop');
+    final dir = Directory(p.join(baseDir, 'cache', 'photo_proofs'));
+    if (!dir.existsSync()) {
+      dir.createSync(recursive: true);
+    }
+    _cacheDir = dir;
+    return dir;
+  }
+
+  static String _fileName(String key) {
+    final clean = key.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+    if (clean.length > 50) {
+      return '${clean.substring(0, 30)}_${key.hashCode.abs()}.jpg';
+    }
+    return '$clean.jpg';
+  }
+
+  static File? getCachedFileIfPresent(String key) {
+    try {
+      final localAppData = Platform.environment['LOCALAPPDATA'];
+      final baseDir = localAppData == null || localAppData.trim().isEmpty
+          ? Directory.current.path
+          : p.join(localAppData, 'HYG Admin Desktop');
+      final file = File(p.join(baseDir, 'cache', 'photo_proofs', _fileName(key)));
+      if (file.existsSync() && file.lengthSync() > 0) {
+        return file;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  static Future<File?> fetchAndCache(String url, String key, {String? driveFileId}) async {
+    if (url.isEmpty) return null;
+
+    final existing = getCachedFileIfPresent(key);
+    if (existing != null) return existing;
+
+    if (_inFlightCompleters.containsKey(key)) {
+      return _inFlightCompleters[key]!.future;
+    }
+
+    final completer = Completer<File?>();
+    _inFlightCompleters[key] = completer;
+
+    _downloadQueue.add(() async {
+      File? result;
+      try {
+        result = await _performDownload(url, key);
+        if (result == null && driveFileId != null && driveFileId.isNotEmpty) {
+          final fallbackUrl = 'https://drive.google.com/thumbnail?id=$driveFileId&sz=w1000';
+          result = await _performDownload(fallbackUrl, key);
+        }
+      } catch (_) {
+        result = null;
+      } finally {
+        _inFlightCompleters.remove(key);
+        completer.complete(result);
+      }
+    });
+
+    _processNextInQueue();
+    return completer.future;
+  }
+
+  static void _processNextInQueue() {
+    while (_activeDownloads < _maxConcurrent && _downloadQueue.isNotEmpty) {
+      final nextTask = _downloadQueue.removeAt(0);
+      _activeDownloads++;
+      unawaited(() async {
+        try {
+          await nextTask();
+        } catch (_) {
+        } finally {
+          _activeDownloads--;
+          _processNextInQueue();
+        }
+      }());
+    }
+  }
+
+  static Future<File?> _performDownload(String url, String key) async {
+    HttpClient? client;
+    try {
+      final uri = Uri.tryParse(url);
+      if (uri == null) return null;
+
+      client = HttpClient();
+      client.connectionTimeout = const Duration(seconds: 12);
+      final request = await client.getUrl(uri);
+      request.headers.set('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) HYGAdminDesktop/1.0');
+      final response = await request.close().timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        final builder = BytesBuilder(copy: false);
+        await for (final chunk in response) {
+          builder.add(chunk);
+        }
+        final bytes = builder.takeBytes();
+        if (bytes.isNotEmpty) {
+          final dir = await _getCacheDirectory();
+          final file = File(p.join(dir.path, _fileName(key)));
+          await file.writeAsBytes(bytes);
+          return file;
+        }
+      }
+    } catch (_) {
+      // Silently catch socket timeout / OS error 121 / DNS error
+    } finally {
+      client?.close(force: true);
+    }
+    return null;
+  }
+
+  static Future<void> saveBytes(String key, Uint8List bytes) async {
+    try {
+      final dir = await _getCacheDirectory();
+      final file = File(p.join(dir.path, _fileName(key)));
+      await file.writeAsBytes(bytes);
+    } catch (_) {}
   }
 }

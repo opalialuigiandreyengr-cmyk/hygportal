@@ -378,6 +378,22 @@ bool _matchesDepartment(AdminRequestItem item, String filter) {
   return itemCanon == filterCanon;
 }
 
+/// Helper to match an AdminRequestItem against a store filter string.
+bool _matchesStore(AdminRequestItem item, String filter) {
+  if (filter == 'all') return true;
+  final itemStore = (item.storeName ?? '').trim().toLowerCase();
+  final filterStore = filter.trim().toLowerCase();
+  if (itemStore == filterStore) return true;
+  if (itemStore.contains(',') || itemStore.contains('/')) {
+    final parts = itemStore
+        .split(RegExp(r'[,/]'))
+        .map((s) => s.trim().toLowerCase())
+        .where((s) => s.isNotEmpty);
+    if (parts.contains(filterStore)) return true;
+  }
+  return false;
+}
+
 /// Helper to match an ESARF AdminRequestItem against a transaction type filter
 /// (e.g. 'OT', 'UT', 'Offset', 'Use Offset', 'FIO', 'OB').
 /// Strictly checks the transaction type(s) of the request, without checking total hours.
@@ -438,12 +454,14 @@ class RequestsHeader extends StatelessWidget {
   const RequestsHeader({
     this.onRefresh,
     this.requests = const [],
+    this.stores,
     this.onOpenValidatedRequests,
     super.key,
   });
 
   final VoidCallback? onRefresh;
   final List<AdminRequestItem> requests;
+  final List<StorePreview>? stores;
   final VoidCallback? onOpenValidatedRequests;
 
   void _handleOpenValidated(BuildContext context) {
@@ -456,6 +474,7 @@ class RequestsHeader extends StatelessWidget {
         builder: (ctx) => _ValidatedRequestsScreen(
           initialCategory: AdminRequestCategory.esarf,
           allRequests: requests,
+          stores: stores,
           onRefreshParent: onRefresh ?? () {},
         ),
       ),
@@ -575,6 +594,7 @@ class RequestsPanel extends StatefulWidget {
     required this.isLoading,
     required this.error,
     required this.onRefresh,
+    this.stores,
     this.onDeleteRequest,
     this.showDeleteAction = true,
     this.initialTabIndex = 0,
@@ -582,6 +602,7 @@ class RequestsPanel extends StatefulWidget {
   });
 
   final List<AdminRequestItem> requests;
+  final List<StorePreview>? stores;
   final bool isLoading;
   final String? error;
   final VoidCallback onRefresh;
@@ -599,9 +620,11 @@ class _RequestsPanelState extends State<RequestsPanel>
   String _searchQuery = '';
   String _statusFilter = 'all';
   String _departmentFilter = 'all';
+  String _storeFilter = 'all';
   String _txTypeFilter = 'all';
   String _leaveCategoryFilter = 'all';
   List<String> _loadedDepartments = [];
+  List<StorePreview> _loadedStores = [];
   DateTime? _dateFrom;
   DateTime? _dateTo;
   bool _isRefreshingApprovers = false;
@@ -621,6 +644,7 @@ class _RequestsPanelState extends State<RequestsPanel>
       _currentPage = 1;
     }));
     _loadDepartments();
+    _loadStores();
   }
 
   Future<void> _loadDepartments() async {
@@ -632,6 +656,21 @@ class _RequestsPanelState extends State<RequestsPanel>
               .map((d) => d.name.trim())
               .where((n) => n.isNotEmpty)
               .toList();
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _loadStores() async {
+    if (widget.stores != null && widget.stores!.isNotEmpty) {
+      _loadedStores = widget.stores!;
+      return;
+    }
+    try {
+      final list = await StoreDirectoryService.loadStores();
+      if (mounted) {
+        setState(() {
+          _loadedStores = list;
         });
       }
     } catch (_) {}
@@ -652,6 +691,25 @@ class _RequestsPanelState extends State<RequestsPanel>
         if (canon.isNotEmpty && canon != '-' && canon != '—') {
           map.putIfAbsent(canon.toLowerCase(), () => canon);
         }
+      }
+    }
+    final sorted = map.values.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return sorted;
+  }
+
+  List<String> get _storeOptions {
+    final map = <String, String>{};
+    for (final s in _loadedStores) {
+      final name = s.name.trim();
+      if (name.isNotEmpty && name != '-' && name != '—' && name.toLowerCase() != 'n/a') {
+        map.putIfAbsent(name.toLowerCase(), () => name);
+      }
+    }
+    for (final r in widget.requests) {
+      final s = r.storeName?.trim();
+      if (s != null && s.isNotEmpty && s != '-' && s != '—' && s.toLowerCase() != 'n/a') {
+        map.putIfAbsent(s.toLowerCase(), () => s);
       }
     }
     final sorted = map.values.toList()
@@ -683,6 +741,9 @@ class _RequestsPanelState extends State<RequestsPanel>
   @override
   void didUpdateWidget(RequestsPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.stores != oldWidget.stores && widget.stores != null && widget.stores!.isNotEmpty) {
+      _loadedStores = widget.stores!;
+    }
     if (widget.initialTabIndex != oldWidget.initialTabIndex &&
         widget.initialTabIndex >= 0 &&
         widget.initialTabIndex < _tabs.length &&
@@ -745,6 +806,11 @@ class _RequestsPanelState extends State<RequestsPanel>
       items = items.where((r) => _matchesDepartment(r, _departmentFilter)).toList();
     }
 
+    // Store filter applies to all tabs (ESARF / Time, Leave, Travel Order, Perks)
+    if (_storeFilter != 'all') {
+      items = items.where((r) => _matchesStore(r, _storeFilter)).toList();
+    }
+
     // ESARF / Time tab specific filter: Transaction Type
     if (tabIndex == 0) {
       if (_txTypeFilter != 'all') {
@@ -759,11 +825,15 @@ class _RequestsPanelState extends State<RequestsPanel>
       }
     }
 
-    // Limit search to Employee name only on all tabs
+    // Search by Employee name, Employee No, or Travel Order No (on Travel tab)
     if (_searchQuery.trim().isNotEmpty) {
       final q = _searchQuery.trim().toLowerCase();
       items = items.where((r) {
-        return (r.employeeName ?? '').toLowerCase().contains(q);
+        final matchesName = (r.employeeName ?? '').toLowerCase().contains(q);
+        final matchesEmpNo = (r.employeeNo ?? '').toLowerCase().contains(q);
+        final matchesToNo = r.category == AdminRequestCategory.travelOrder &&
+            r.travelOrderNo.toLowerCase().contains(q);
+        return matchesName || matchesEmpNo || matchesToNo;
       }).toList();
     }
 
@@ -1448,7 +1518,7 @@ class _RequestsPanelState extends State<RequestsPanel>
         break;
       case 2: // Travel Order
         headers = [
-          'Employee No', 'Employee Name', 'Department', 'Store',
+          'Travel Order No', 'Employee No', 'Employee Name', 'Department', 'Store',
           'Departure Date', 'Departure Time', 'Return Date', 'Return Time',
           'Purpose / Itinerary', 'Status', 'Submitted',
         ];
@@ -1669,6 +1739,7 @@ class _RequestsPanelState extends State<RequestsPanel>
           final retDate = _formatDateString(item.dateTo ?? item.endDate);
           final retTime = _format12HourTime(item.timeTo);
           return [
+            TextCellValue(item.travelOrderNo),
             item.employeeNo != null ? TextCellValue(item.employeeNo!) : null,
             item.employeeName != null ? TextCellValue(item.employeeName!) : null,
             item.departmentName != null ? TextCellValue(item.departmentName!) : null,
@@ -1699,7 +1770,7 @@ class _RequestsPanelState extends State<RequestsPanel>
       }
     }
 
-    final centerCols = {'Employee No', 'Status', 'Date', 'Time', 'Departure Date', 'Departure Time', 'Return Date', 'Return Time', 'Submitted'};
+    final centerCols = {'Travel Order No', 'Employee No', 'Status', 'Date', 'Time', 'Departure Date', 'Departure Time', 'Return Date', 'Return Time', 'Submitted'};
     final currencyCols = {'Amount', 'Discount', 'Final Amount'};
     final decimalCols = {'Total Hours', 'Total Days', 'Paid Days', 'Unpaid Days', 'Leave Credits'};
     final integerCols = {'Quantity'};
@@ -2048,7 +2119,7 @@ class _RequestsPanelState extends State<RequestsPanel>
                             orElse: () => 'all',
                           ));
                     return SizedBox(
-                      width: 180,
+                      width: 170,
                       height: 38,
                       child: DropdownButtonFormField<String>(
                         key: ValueKey('req_dept_$effectiveDept'),
@@ -2083,6 +2154,60 @@ class _RequestsPanelState extends State<RequestsPanel>
                             (dept) => DropdownMenuItem(
                               value: dept,
                               child: Text(dept, overflow: TextOverflow.ellipsis),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(width: 10),
+                // Store Dropdown
+                Builder(
+                  builder: (context) {
+                    final storeOptions = _storeOptions;
+                    final effectiveStore = _storeFilter == 'all'
+                        ? 'all'
+                        : (storeOptions.firstWhere(
+                            (s) => s.toLowerCase() == _storeFilter.toLowerCase(),
+                            orElse: () => 'all',
+                          ));
+                    return SizedBox(
+                      width: 170,
+                      height: 38,
+                      child: DropdownButtonFormField<String>(
+                        key: ValueKey('req_store_$effectiveStore'),
+                        initialValue: effectiveStore,
+                        isExpanded: true,
+                        onChanged: (v) => setState(() {
+                          _storeFilter = v ?? 'all';
+                          _currentPage = 1;
+                        }),
+                        style: HygTypography.tableBody,
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor: HygColors.background,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(9),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(9),
+                            borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                          ),
+                        ),
+                        items: [
+                          const DropdownMenuItem(
+                            value: 'all',
+                            child: Text('All Stores', overflow: TextOverflow.ellipsis),
+                          ),
+                          ...storeOptions.map(
+                            (store) => DropdownMenuItem(
+                              value: store,
+                              child: Text(store, overflow: TextOverflow.ellipsis),
                             ),
                           ),
                         ],
@@ -2353,12 +2478,14 @@ class _RequestsPanelState extends State<RequestsPanel>
                   ),
                 ],
                 if (_departmentFilter != 'all' ||
+                    _storeFilter != 'all' ||
                     (_tabController.index == 0 && _txTypeFilter != 'all') ||
                     (_tabController.index == 1 && _leaveCategoryFilter != 'all')) ...[
                   const SizedBox(width: 8),
                   GestureDetector(
                     onTap: () => setState(() {
                       _departmentFilter = 'all';
+                      _storeFilter = 'all';
                       _txTypeFilter = 'all';
                       _leaveCategoryFilter = 'all';
                       _currentPage = 1;
@@ -2456,6 +2583,7 @@ class _RequestsPanelState extends State<RequestsPanel>
                 message: _searchQuery.isNotEmpty ||
                         _statusFilter != 'all' ||
                         _departmentFilter != 'all' ||
+                        _storeFilter != 'all' ||
                         _txTypeFilter != 'all' ||
                         _leaveCategoryFilter != 'all' ||
                         _dateFrom != null ||
@@ -2917,6 +3045,7 @@ class _RequestsTableState extends State<_RequestsTable> {
         ];
       case AdminRequestCategory.travelOrder:
         return [
+          const _RequestColDef(title: 'Travel Order No', width: 145),
           const _RequestColDef(title: 'Employee', width: 190),
           const _RequestColDef(title: 'Department', width: 130),
           const _RequestColDef(title: 'Store', width: 110),
@@ -3445,6 +3574,42 @@ class _RequestCardRowState extends State<_RequestCardRow> {
     );
   }
 
+  Widget _buildTravelOrderNoCell(AdminRequestItem item) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Tooltip(
+        message: 'Travel Order No: ${item.travelOrderNo}',
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: const Color(0xFFEFF6FF),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: const Color(0xFFBFDBFE), width: 0.8),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.assignment_outlined, size: 13, color: Color(0xFF1D4ED8)),
+              const SizedBox(width: 5),
+              Flexible(
+                child: Text(
+                  item.travelOrderNo,
+                  style: const TextStyle(
+                    color: Color(0xFF1D4ED8),
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.3,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildEmployeeCell(AdminRequestItem item) {
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -3965,6 +4130,7 @@ class _RequestCardRowState extends State<_RequestCardRow> {
         final purpose = item.reason != null && item.reason!.isNotEmpty ? item.reason! : 'Official Travel Order';
 
         return [
+          _buildTravelOrderNoCell(item),
           _buildEmployeeCell(item),
           Text(
             item.departmentName ?? '—',
@@ -5704,6 +5870,61 @@ class _RequestDetailModalState extends State<_RequestDetailModal> {
           const Divider(height: 1, color: Color(0xFFF1F5F9)),
           const SizedBox(height: 12),
 
+          // Travel Order No & Submitted Date Banner
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Travel Order No: ',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF64748B),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEFF6FF),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: const Color(0xFFBFDBFE), width: 0.8),
+                      ),
+                      child: Text(
+                        item.travelOrderNo,
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF1E40AF),
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (item.submittedAt != null)
+                  Text(
+                    'Submitted: ${_formatDateMDY(item.submittedAt)}',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF64748B),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+
           // Destination Stores
           const Text(
             'Destination Store(s)',
@@ -6231,6 +6452,26 @@ class _RequestDetailModalState extends State<_RequestDetailModal> {
                         const SizedBox(height: 2),
                         Row(
                           children: [
+                            if (item.category == AdminRequestCategory.travelOrder) ...[
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1.5),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFEFF6FF),
+                                  border: Border.all(color: const Color(0xFFBFDBFE)),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  item.travelOrderNo,
+                                  style: const TextStyle(
+                                    color: Color(0xFF1D4ED8),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                            ],
                             if (item.employeeNo != null) ...[
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
@@ -7659,11 +7900,13 @@ class _ValidatedRequestsScreen extends StatefulWidget {
     required this.initialCategory,
     required this.allRequests,
     required this.onRefreshParent,
+    this.stores,
   });
 
   final AdminRequestCategory initialCategory;
   final List<AdminRequestItem> allRequests;
   final VoidCallback onRefreshParent;
+  final List<StorePreview>? stores;
 
   @override
   State<_ValidatedRequestsScreen> createState() => _ValidatedRequestsScreenState();
@@ -7680,9 +7923,11 @@ class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
 
   String _searchQuery = '';
   String _departmentFilter = 'all';
+  String _storeFilter = 'all';
   String _txTypeFilter = 'all';
   String _leaveCategoryFilter = 'all';
   List<String> _loadedDepartments = [];
+  List<StorePreview> _loadedStores = [];
   DateTime? _dateFrom;
   DateTime? _dateTo;
 
@@ -7710,6 +7955,7 @@ class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
     });
     _requests = List<AdminRequestItem>.from(widget.allRequests);
     _loadDepartments();
+    _loadStores();
     _fetchRequests();
   }
 
@@ -7722,6 +7968,21 @@ class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
               .map((d) => d.name.trim())
               .where((n) => n.isNotEmpty)
               .toList();
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _loadStores() async {
+    if (widget.stores != null && widget.stores!.isNotEmpty) {
+      _loadedStores = widget.stores!;
+      return;
+    }
+    try {
+      final list = await StoreDirectoryService.loadStores();
+      if (mounted) {
+        setState(() {
+          _loadedStores = list;
         });
       }
     } catch (_) {}
@@ -7742,6 +8003,25 @@ class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
         if (canon.isNotEmpty && canon != '-' && canon != '—') {
           map.putIfAbsent(canon.toLowerCase(), () => canon);
         }
+      }
+    }
+    final sorted = map.values.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return sorted;
+  }
+
+  List<String> get _storeOptions {
+    final map = <String, String>{};
+    for (final s in _loadedStores) {
+      final name = s.name.trim();
+      if (name.isNotEmpty && name != '-' && name != '—' && name.toLowerCase() != 'n/a') {
+        map.putIfAbsent(name.toLowerCase(), () => name);
+      }
+    }
+    for (final r in _requests) {
+      final s = r.storeName?.trim();
+      if (s != null && s.isNotEmpty && s != '-' && s != '—' && s.toLowerCase() != 'n/a') {
+        map.putIfAbsent(s.toLowerCase(), () => s);
       }
     }
     final sorted = map.values.toList()
@@ -7829,6 +8109,11 @@ class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
       items = items.where((r) => _matchesDepartment(r, _departmentFilter)).toList();
     }
 
+    // Store filter applies to all tabs (ESARF / Time, Leave, Travel Order, Perks)
+    if (_storeFilter != 'all') {
+      items = items.where((r) => _matchesStore(r, _storeFilter)).toList();
+    }
+
     // ESARF / Time tab specific filter: Transaction Type
     if (tabIndex == 0) {
       if (_txTypeFilter != 'all') {
@@ -7843,11 +8128,15 @@ class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
       }
     }
 
-    // Limit search to Employee name only on all tabs
+    // Search by Employee name, Employee No, or Travel Order No (on Travel tab)
     if (_searchQuery.trim().isNotEmpty) {
       final q = _searchQuery.trim().toLowerCase();
       items = items.where((r) {
-        return (r.employeeName ?? '').toLowerCase().contains(q);
+        final matchesName = (r.employeeName ?? '').toLowerCase().contains(q);
+        final matchesEmpNo = (r.employeeNo ?? '').toLowerCase().contains(q);
+        final matchesToNo = r.category == AdminRequestCategory.travelOrder &&
+            r.travelOrderNo.toLowerCase().contains(q);
+        return matchesName || matchesEmpNo || matchesToNo;
       }).toList();
     }
 
@@ -8175,7 +8464,7 @@ class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
                                       orElse: () => 'all',
                                     ));
                               return SizedBox(
-                                width: 180,
+                                width: 170,
                                 height: 38,
                                 child: DropdownButtonFormField<String>(
                                   key: ValueKey('val_dept_$effectiveDept'),
@@ -8210,6 +8499,60 @@ class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
                                       (dept) => DropdownMenuItem(
                                         value: dept,
                                         child: Text(dept, overflow: TextOverflow.ellipsis),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                          const SizedBox(width: 10),
+                          // Store dropdown
+                          Builder(
+                            builder: (context) {
+                              final storeOptions = _storeOptions;
+                              final effectiveStore = _storeFilter == 'all'
+                                  ? 'all'
+                                  : (storeOptions.firstWhere(
+                                      (s) => s.toLowerCase() == _storeFilter.toLowerCase(),
+                                      orElse: () => 'all',
+                                    ));
+                              return SizedBox(
+                                width: 170,
+                                height: 38,
+                                child: DropdownButtonFormField<String>(
+                                  key: ValueKey('val_store_$effectiveStore'),
+                                  initialValue: effectiveStore,
+                                  isExpanded: true,
+                                  onChanged: (v) => setState(() {
+                                    _storeFilter = v ?? 'all';
+                                    _currentPage = 1;
+                                  }),
+                                  style: HygTypography.tableBody,
+                                  decoration: InputDecoration(
+                                    filled: true,
+                                    fillColor: HygColors.background,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 8,
+                                    ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(9),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(9),
+                                      borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                                    ),
+                                  ),
+                                  items: [
+                                    const DropdownMenuItem(
+                                      value: 'all',
+                                      child: Text('All Stores', overflow: TextOverflow.ellipsis),
+                                    ),
+                                    ...storeOptions.map(
+                                      (store) => DropdownMenuItem(
+                                        value: store,
+                                        child: Text(store, overflow: TextOverflow.ellipsis),
                                       ),
                                     ),
                                   ],
@@ -8424,12 +8767,14 @@ class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
                             ),
                           ],
                           if (_departmentFilter != 'all' ||
+                              _storeFilter != 'all' ||
                               (_tabController.index == 0 && _txTypeFilter != 'all') ||
                               (_tabController.index == 1 && _leaveCategoryFilter != 'all')) ...[
                             const SizedBox(width: 8),
                             GestureDetector(
                               onTap: () => setState(() {
                                 _departmentFilter = 'all';
+                                _storeFilter = 'all';
                                 _txTypeFilter = 'all';
                                 _leaveCategoryFilter = 'all';
                                 _currentPage = 1;
@@ -8501,6 +8846,7 @@ class _ValidatedRequestsScreenState extends State<_ValidatedRequestsScreen>
                           title: 'No validated requests found',
                           message: _searchQuery.isNotEmpty ||
                                   _departmentFilter != 'all' ||
+                                  _storeFilter != 'all' ||
                                   _txTypeFilter != 'all' ||
                                   _leaveCategoryFilter != 'all' ||
                                   _dateFrom != null ||

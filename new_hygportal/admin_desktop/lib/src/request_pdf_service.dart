@@ -515,7 +515,7 @@ class RequestPdfService {
       final empNamePart = _sanitizeFileName(item.employeeName ?? 'Employee');
       final reqIdPart = _sanitizeFileName(item.requestId);
       final defaultFileName = isTravel
-          ? 'Travel_Order_${empNamePart}_$reqIdPart.pdf'
+          ? 'Travel_Order_${_sanitizeFileName(item.travelOrderNo)}_${empNamePart}.pdf'
           : '${isEsarf ? "ESARF" : "Leave"}_Request_${empNamePart}_$reqIdPart.pdf';
 
       final savePath = await FilePicker.saveFile(
@@ -1504,10 +1504,7 @@ class RequestPdfService {
     final white = pdf_core.PdfColors.white;
 
     String formatDocCode(AdminRequestItem it) {
-      final sub = it.submittedAt ?? it.dateFrom ?? it.startDate;
-      final year = sub != null ? DateTime.tryParse(sub)?.year ?? DateTime.now().year : DateTime.now().year;
-      final codePart = it.requestId.length >= 8 ? it.requestId.substring(0, 8).toUpperCase() : it.requestId.toUpperCase();
-      return 'TO-$year-$codePart';
+      return it.travelOrderNo;
     }
 
     String formatMDY(String? dateStr) {

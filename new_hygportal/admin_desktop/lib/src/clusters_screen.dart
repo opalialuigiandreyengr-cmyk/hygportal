@@ -795,62 +795,69 @@ class _StoreChecklistField extends StatelessWidget {
         Container(
           constraints: const BoxConstraints(maxHeight: 260),
           decoration: BoxDecoration(
-            color: Colors.white,
             border: Border.all(color: HygColors.border),
             borderRadius: BorderRadius.circular(12),
           ),
-          child: stores.isEmpty
-              ? const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: BodyCell('No stores available'),
-                )
-              : ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: stores.length,
-                  separatorBuilder: (context, index) =>
-                      const Divider(height: 1, color: HygColors.border),
-                  itemBuilder: (context, index) {
-                    final store = stores[index];
-                    final selected = selectedStoreIds.contains(store.id);
-                    final storeCluster = store.clusterName.trim().toLowerCase();
-                    final currentCluster = currentClusterName
-                        ?.trim()
-                        .toLowerCase();
-                    final canSelect =
-                        selected ||
-                        storeCluster == 'unassigned' ||
-                        storeCluster == currentCluster;
-                    return CheckboxListTile(
-                      dense: true,
-                      value: selected,
-                      enabled: canSelect,
-                      controlAffinity: ListTileControlAffinity.leading,
-                      activeColor: HygColors.goldStrong,
-                      title: Text(
-                        store.name,
-                        style: HygTypography.body.copyWith(
-                          color: canSelect
-                              ? HygColors.ink
-                              : const Color(0xFF94A3B8),
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      subtitle: store.clusterName == 'Unassigned'
-                          ? null
-                          : Text(
-                              store.clusterName,
-                              overflow: TextOverflow.ellipsis,
-                              style: HygTypography.body.copyWith(
-                                fontSize: 11,
-                                color: const Color(0xFF64748B),
-                              ),
+          child: Material(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            clipBehavior: Clip.antiAlias,
+            child: stores.isEmpty
+                ? const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: BodyCell('No stores available'),
+                  )
+                : ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: stores.length,
+                    separatorBuilder: (context, index) =>
+                        const Divider(height: 1, color: HygColors.border),
+                    itemBuilder: (context, index) {
+                      final store = stores[index];
+                      final selected = selectedStoreIds.contains(store.id);
+                      final storeCluster = store.clusterName.trim().toLowerCase();
+                      final currentCluster = currentClusterName
+                          ?.trim()
+                          .toLowerCase();
+                      final canSelect =
+                          selected ||
+                          storeCluster == 'unassigned' ||
+                          storeCluster == currentCluster;
+                      return Material(
+                        color: Colors.transparent,
+                        child: CheckboxListTile(
+                          dense: true,
+                          value: selected,
+                          enabled: canSelect,
+                          controlAffinity: ListTileControlAffinity.leading,
+                          activeColor: HygColors.goldStrong,
+                          title: Text(
+                            store.name,
+                            style: HygTypography.body.copyWith(
+                              color: canSelect
+                                  ? HygColors.ink
+                                  : const Color(0xFF94A3B8),
+                              fontWeight: FontWeight.w700,
                             ),
-                      onChanged: canSelect
-                          ? (value) => onChanged(store.id, value ?? false)
-                          : null,
-                    );
-                  },
-                ),
+                          ),
+                          subtitle: store.clusterName == 'Unassigned'
+                              ? null
+                              : Text(
+                                  store.clusterName,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: HygTypography.body.copyWith(
+                                    fontSize: 11,
+                                    color: const Color(0xFF64748B),
+                                  ),
+                                ),
+                          onChanged: canSelect
+                              ? (value) => onChanged(store.id, value ?? false)
+                              : null,
+                        ),
+                      );
+                    },
+                  ),
+          ),
         ),
       ],
     );
@@ -878,48 +885,55 @@ class _ClusterChecklistField extends StatelessWidget {
         Container(
           constraints: const BoxConstraints(maxHeight: 260),
           decoration: BoxDecoration(
-            color: Colors.white,
             border: Border.all(color: HygColors.border),
             borderRadius: BorderRadius.circular(12),
           ),
-          child: clusters.isEmpty
-              ? const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: BodyCell('No clusters available'),
-                )
-              : ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: clusters.length,
-                  separatorBuilder: (context, index) =>
-                      const Divider(height: 1, color: HygColors.border),
-                  itemBuilder: (context, index) {
-                    final cluster = clusters[index];
-                    final selected = selectedClusterIds.contains(cluster.id);
-                    return CheckboxListTile(
-                      dense: true,
-                      value: selected,
-                      controlAffinity: ListTileControlAffinity.leading,
-                      activeColor: HygColors.goldStrong,
-                      title: Text(
-                        cluster.name,
-                        style: HygTypography.body.copyWith(
-                          color: HygColors.ink,
-                          fontWeight: FontWeight.w700,
+          child: Material(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            clipBehavior: Clip.antiAlias,
+            child: clusters.isEmpty
+                ? const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: BodyCell('No clusters available'),
+                  )
+                : ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: clusters.length,
+                    separatorBuilder: (context, index) =>
+                        const Divider(height: 1, color: HygColors.border),
+                    itemBuilder: (context, index) {
+                      final cluster = clusters[index];
+                      final selected = selectedClusterIds.contains(cluster.id);
+                      return Material(
+                        color: Colors.transparent,
+                        child: CheckboxListTile(
+                          dense: true,
+                          value: selected,
+                          controlAffinity: ListTileControlAffinity.leading,
+                          activeColor: HygColors.goldStrong,
+                          title: Text(
+                            cluster.name,
+                            style: HygTypography.body.copyWith(
+                              color: HygColors.ink,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          subtitle: Text(
+                            cluster.storeNames,
+                            overflow: TextOverflow.ellipsis,
+                            style: HygTypography.body.copyWith(
+                              fontSize: 11,
+                              color: const Color(0xFF64748B),
+                            ),
+                          ),
+                          onChanged: (value) =>
+                              onChanged(cluster.id, value ?? false),
                         ),
-                      ),
-                      subtitle: Text(
-                        cluster.storeNames,
-                        overflow: TextOverflow.ellipsis,
-                        style: HygTypography.body.copyWith(
-                          fontSize: 11,
-                          color: const Color(0xFF64748B),
-                        ),
-                      ),
-                      onChanged: (value) =>
-                          onChanged(cluster.id, value ?? false),
-                    );
-                  },
-                ),
+                      );
+                    },
+                  ),
+          ),
         ),
       ],
     );

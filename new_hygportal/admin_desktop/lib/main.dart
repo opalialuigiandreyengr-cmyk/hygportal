@@ -40,6 +40,7 @@ part 'src/rewards_screen.dart';
 part 'src/points_management_screen.dart';
 part 'src/redemption_requests_screen.dart';
 part 'src/badges_screen.dart';
+part 'src/trainings_screen.dart';
 part 'src/rewards_reports_screen.dart';
 part 'src/audit_trail_screen.dart';
 part 'src/shared_widgets.dart';

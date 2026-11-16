@@ -148,6 +148,7 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
       case HrSection.pointsManagement:
       case HrSection.redemptionRequests:
       case HrSection.badges:
+      case HrSection.trainings:
       case HrSection.rewardsReports:
       case HrSection.eventsAndActivities:
       case HrSection.auditTrail:
@@ -2377,6 +2378,8 @@ class _AdminShellState extends State<AdminShell> with WidgetsBindingObserver {
                           RedemptionRequestsScreen(employees: _employees),
                         ] else if (_activeSection == HrSection.badges) ...[
                           BadgesScreen(employees: _employees),
+                        ] else if (_activeSection == HrSection.trainings) ...[
+                          TrainingsScreen(employees: _employees),
                         ] else if (_activeSection == HrSection.rewardsReports) ...[
                           const RewardsReportsScreen(),
                         ] else if (_activeSection == HrSection.eventsAndActivities) ...[
@@ -2555,6 +2558,7 @@ class HrSidebar extends StatelessWidget {
                       HrSection.pointsManagement,
                       HrSection.redemptionRequests,
                       HrSection.badges,
+                      HrSection.trainings,
                       HrSection.rewardsReports,
                     }.contains(activeSection),
                     items: [
@@ -2581,6 +2585,12 @@ class HrSidebar extends StatelessWidget {
                         label: 'Badges',
                         active: activeSection == HrSection.badges,
                         onTap: () => onSelectSection(HrSection.badges),
+                      ),
+                      HrDropdownItem(
+                        icon: Icons.school_outlined,
+                        label: 'Trainings',
+                        active: activeSection == HrSection.trainings,
+                        onTap: () => onSelectSection(HrSection.trainings),
                       ),
                       HrDropdownItem(
                         icon: Icons.bar_chart_outlined,
@@ -2967,6 +2977,7 @@ enum HrSection {
   pointsManagement,
   redemptionRequests,
   badges,
+  trainings,
   rewardsReports,
   eventsAndActivities,
   auditTrail,

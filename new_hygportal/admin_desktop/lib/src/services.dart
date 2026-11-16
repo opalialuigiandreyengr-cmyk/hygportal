@@ -6724,4 +6724,245 @@ class AuditTrailService {
   }
 }
 
+// ==========================================
+// TRAININGS DATABASE SERVICE (SUPABASE & IN-MEMORY CACHE)
+// ==========================================
+class TrainingsDatabaseService {
+  static final _client = Supabase.instance.client;
+
+  static List<TrainingItem>? _cachedTrainings;
+  static DateTime? _trainingsLastFetched;
+  static const Duration _dedupingInterval = Duration(minutes: 3);
+
+  static void invalidateCache() {
+    _cachedTrainings = null;
+    _trainingsLastFetched = null;
+  }
+
+  // Load trainings with fallback to local state if Supabase table is not yet initialized
+  static Future<List<TrainingItem>> loadTrainings({bool forceRefresh = false}) async {
+    if (!forceRefresh &&
+        _cachedTrainings != null &&
+        _trainingsLastFetched != null &&
+        DateTime.now().difference(_trainingsLastFetched!) < _dedupingInterval) {
+      return List<TrainingItem>.from(_cachedTrainings!);
+    }
+
+    try {
+      final List<dynamic> response = await _client
+          .from('trainings')
+          .select()
+          .order('training_date', ascending: true);
+
+      final list = response.map((map) {
+        return TrainingItem.fromMap(map as Map<String, dynamic>);
+      }).toList();
+
+      _cachedTrainings = List<TrainingItem>.from(list);
+      _trainingsLastFetched = DateTime.now();
+      return list;
+    } catch (e) {
+      debugPrint('Error loading trainings from Supabase (using memory fallback): $e');
+      if (_cachedTrainings != null) {
+        return List<TrainingItem>.from(_cachedTrainings!);
+      }
+      _cachedTrainings = _getInitialTrainings();
+      _trainingsLastFetched = DateTime.now();
+      return List<TrainingItem>.from(_cachedTrainings!);
+    }
+  }
+
+  // Save or update training
+  static Future<void> saveTraining(TrainingItem item) async {
+    invalidateCache();
+    _cachedTrainings ??= [];
+    final idx = _cachedTrainings!.indexWhere((t) => t.id == item.id);
+    if (idx >= 0) {
+      _cachedTrainings![idx] = item;
+    } else {
+      _cachedTrainings!.insert(0, item);
+    }
+
+    try {
+      await _client.from('trainings').upsert(item.toMap());
+    } catch (e) {
+      debugPrint('Error upserting training into Supabase: $e');
+    }
+  }
+
+  // Delete training
+  static Future<void> deleteTraining(String id) async {
+    invalidateCache();
+    _cachedTrainings?.removeWhere((t) => t.id == id);
+    try {
+      await _client.from('trainings').delete().eq('id', id);
+    } catch (e) {
+      debugPrint('Error deleting training from Supabase: $e');
+    }
+  }
+
+  // Conclude training and optionally award badges
+  static Future<void> concludeTraining(TrainingItem item, {bool awardBadges = true}) async {
+    final updated = item.copyWith(status: 'Concluded');
+    if (awardBadges && item.hasBadge && !item.isBadgesAwarded && item.attendees.isNotEmpty) {
+      final now = DateTime.now();
+      for (final attendee in item.attendees) {
+        final record = AwardedBadgeRecord(
+          id: 'awd_${now.millisecondsSinceEpoch}_${attendee.id.hashCode}_${item.badgeId.hashCode}',
+          badgeId: item.badgeId ?? '',
+          badgeTitle: item.badgeTitle ?? 'Training Certification',
+          badgeDescription: 'Completed training: ${item.title}',
+          badgeIcon: item.badgeIcon ?? Icons.verified,
+          customImagePath: null,
+          badgeIconBgColor: item.badgeIconBgColor ?? const Color(0xFFFEF3C7),
+          badgeIconColor: item.badgeIconColor ?? const Color(0xFFD97706),
+          employeeId: attendee.id,
+          employeeName: attendee.name,
+          employeeDepartment: attendee.department,
+          employeeAvatarColor: attendee.avatarColor,
+          employeePhotoUrl: attendee.photoUrl,
+          awardedBy: 'Training System',
+          awardedAt: now,
+          note: 'Completed "${item.title}" training on ${item.formattedDate}',
+          pointsAwarded: item.badgePoints,
+        );
+        await BadgesDatabaseService.saveAwardedRecord(record);
+      }
+      if (item.badgeId != null && item.badgeId!.isNotEmpty) {
+        try {
+          await _client.rpc('increment_badge_awarded_count', params: {'p_badge_id': item.badgeId!});
+        } catch (_) {}
+      }
+      await saveTraining(updated.copyWith(isBadgesAwarded: true));
+    } else {
+      await saveTraining(updated);
+    }
+  }
+
+  // Reopen training back to Upcoming
+  static Future<void> reopenTraining(TrainingItem item) async {
+    final updated = item.copyWith(status: 'Upcoming');
+    await saveTraining(updated);
+  }
+
+  static List<TrainingItem> _getInitialTrainings() {
+    final now = DateTime.now();
+    return [
+      TrainingItem(
+        id: 'trn_demo_1',
+        title: 'Customer Service & Hospitality Excellence',
+        description: 'Comprehensive service standards training covering guest interaction, conflict resolution, and hospitality etiquette.',
+        trainingDate: now.add(const Duration(days: 4)),
+        startTime: '09:00 AM',
+        endTime: '12:00 PM',
+        location: 'HQ Training Room 2 & Online Stream',
+        trainer: 'Maria Garcia (Training Lead)',
+        badgeId: 'bdg_customer_excellence',
+        badgeTitle: 'Customer Delight Champion',
+        badgeIcon: Icons.star,
+        badgeIconBgColor: const Color(0xFFFEF3C7),
+        badgeIconColor: const Color(0xFFD97706),
+        badgePoints: 150,
+        status: 'Upcoming',
+        isBadgesAwarded: false,
+        createdBy: 'Super Admin',
+        attendees: [
+          TrainingAttendee(
+            id: 'emp_1',
+            name: 'Juan Dela Cruz',
+            department: 'Operations',
+            position: 'Service Crew',
+            avatarColor: const Color(0xFF2563EB),
+          ),
+          TrainingAttendee(
+            id: 'emp_2',
+            name: 'Maria Santos',
+            department: 'Retail',
+            position: 'Cashier',
+            avatarColor: const Color(0xFF059669),
+          ),
+          TrainingAttendee(
+            id: 'emp_3',
+            name: 'Angelo Reyes',
+            department: 'Customer Support',
+            position: 'Associate',
+            avatarColor: const Color(0xFF7C3AED),
+          ),
+        ],
+      ),
+      TrainingItem(
+        id: 'trn_demo_2',
+        title: 'Food Safety, Sanitation & HACCP Standards',
+        description: 'Mandatory quarterly food hygiene compliance, temperature logs, sanitation checklists, and handling procedures.',
+        trainingDate: now.add(const Duration(days: 9)),
+        startTime: '01:30 PM',
+        endTime: '04:30 PM',
+        location: 'Central Commissary Auditorium',
+        trainer: 'Chef Roberto Gomez',
+        badgeId: 'bdg_safety_first',
+        badgeTitle: 'Food Safety Pro',
+        badgeIcon: Icons.verified,
+        badgeIconBgColor: const Color(0xFFDCFCE7),
+        badgeIconColor: const Color(0xFF16A34A),
+        badgePoints: 120,
+        status: 'Upcoming',
+        isBadgesAwarded: false,
+        createdBy: 'Super Admin',
+        attendees: [
+          TrainingAttendee(
+            id: 'emp_4',
+            name: 'Carlos Mendoza',
+            department: 'Kitchen',
+            position: 'Line Cook',
+            avatarColor: const Color(0xFFEA580C),
+          ),
+          TrainingAttendee(
+            id: 'emp_5',
+            name: 'Patricia Lim',
+            department: 'Kitchen',
+            position: 'Kitchen Supervisor',
+            avatarColor: const Color(0xFFDB2777),
+          ),
+        ],
+      ),
+      TrainingItem(
+        id: 'trn_demo_3',
+        title: 'New Store Opening Readiness & POS Operations',
+        description: 'Point-of-Sale terminal checkout drills, cash handling reconciliations, and store launch protocols.',
+        trainingDate: now.subtract(const Duration(days: 5)),
+        startTime: '10:00 AM',
+        endTime: '01:00 PM',
+        location: 'Branch Store - BGC',
+        trainer: 'Karen Diaz (Ops Manager)',
+        badgeId: 'bdg_pos_master',
+        badgeTitle: 'Point-of-Sale Master',
+        badgeIcon: Icons.workspace_premium,
+        badgeIconBgColor: const Color(0xFFEDE9FE),
+        badgeIconColor: const Color(0xFF7C3AED),
+        badgePoints: 200,
+        status: 'Concluded',
+        isBadgesAwarded: true,
+        createdBy: 'Super Admin',
+        attendees: [
+          TrainingAttendee(
+            id: 'emp_1',
+            name: 'Juan Dela Cruz',
+            department: 'Operations',
+            position: 'Service Crew',
+            avatarColor: const Color(0xFF2563EB),
+          ),
+          TrainingAttendee(
+            id: 'emp_6',
+            name: 'Elena Ramos',
+            department: 'Retail',
+            position: 'Store Supervisor',
+            avatarColor: const Color(0xFF0D9488),
+          ),
+        ],
+      ),
+    ];
+  }
+}
+
+
 

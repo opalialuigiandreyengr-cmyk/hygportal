@@ -3032,7 +3032,7 @@ class _RequestsTableState extends State<_RequestsTable> {
           const _RequestColDef(title: 'Start', width: 100),
           const _RequestColDef(title: 'End', width: 100),
           const _RequestColDef(title: 'Days', width: 70),
-          const _RequestColDef(title: 'Type', width: 140),
+          const _RequestColDef(title: 'Leave Type', width: 140),
           const _RequestColDef(title: 'Reason', width: 180),
           const _RequestColDef(title: 'Approver', width: 240),
           const _RequestColDef(title: 'Status', width: 120),
@@ -7518,12 +7518,18 @@ class _RequestDetailModalState extends State<_RequestDetailModal> {
       ),
       child: _buildDetailGrid(isLeave
           ? [
-              ('Leave Category', item.leaveCategory ?? '—'),
+              ('Payroll Class', (item.payrollClass != null && item.payrollClass!.trim().isNotEmpty) ? item.payrollClass! : 'N/A'),
+              ('Time Schedule', (item.timeSchedule != null && item.timeSchedule!.trim().isNotEmpty) ? item.timeSchedule! : 'N/A'),
+              ('Day Off', (item.dayOff != null && item.dayOff!.trim().isNotEmpty) ? item.dayOff! : 'N/A'),
               ('Leave Type', item.leaveType ?? '—'),
-              ('Available Credits', item.leaveCredits != null ? '${item.leaveCredits}' : '—'),
+              ('Leave Category', item.leaveCategory ?? '—'),
+              ('Paid / Unpaid', (item.paidDays != null && item.unpaidDays != null)
+                  ? '${_formatDaysNum(item.paidDays)} / ${_formatDaysNum(item.unpaidDays)}'
+                  : '—'),
               ('Start Date', item.startDate ?? '—'),
               ('End Date', item.endDate ?? '—'),
-              ('Total Days', item.totalDays != null ? '${item.totalDays}' : '—'),
+              ('Total Days', item.totalDays != null ? _formatDaysNum(item.totalDays) : '—'),
+              ('Available Credits', item.leaveCredits != null ? _formatDaysNum(item.leaveCredits) : '—'),
             ]
           : [
               ('Type', item.requestTypeCode.toLowerCase().contains('discount')

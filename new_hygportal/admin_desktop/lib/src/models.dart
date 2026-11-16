@@ -1479,11 +1479,7 @@ class RequestProofItem {
     final text = rawReason ?? '';
 
     if (text.isNotEmpty) {
-      final proofRegex = RegExp(r'\[Proof:\s*([^Suggested\]]+)\]', caseSensitive: false);
-      final matches = proofRegex.allMatches(text).toList();
-      final allProofMatches = matches.isNotEmpty
-          ? matches
-          : RegExp(r'\[Proof:\s*([^\]]+)\]', caseSensitive: false).allMatches(text).toList();
+      final allProofMatches = RegExp(r'\[Proof:\s*([^\]]+)\]', caseSensitive: false).allMatches(text).toList();
 
       for (int i = 0; i < allProofMatches.length; i++) {
         final currentMatch = allProofMatches[i];

@@ -5768,6 +5768,7 @@ class _RequestDetailModal extends StatefulWidget {
 
 class _RequestDetailModalState extends State<_RequestDetailModal> {
   AdminRequestItem get item => widget.item;
+  final List<RequestProofItem> _adminAttachedProofs = [];
 
   _TravelOrderDetails? _travelDetails;
 
@@ -6495,6 +6496,24 @@ class _RequestDetailModalState extends State<_RequestDetailModal> {
                       ],
                     ),
                   ),
+                  if (item.category == AdminRequestCategory.esarf) ...[
+                    OutlinedButton.icon(
+                      onPressed: () => _showAttachPhotoProofDialog(
+                        context,
+                        item,
+                        onSaved: (proof) => setState(() => _adminAttachedProofs.add(proof)),
+                      ),
+                      icon: const Icon(Icons.add_a_photo_outlined, size: 15),
+                      label: const Text('Attach photo proof'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF0369A1),
+                        side: const BorderSide(color: Color(0xFFBAE6FD)),
+                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+                        textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                  ],
                   IconButton(
                     icon: const Icon(Icons.close, color: Color(0xFF64748B), size: 20),
                     onPressed: () => Navigator.of(context).pop(),
@@ -6513,6 +6532,10 @@ class _RequestDetailModalState extends State<_RequestDetailModal> {
                     // ESARF Layout
                     if (isEsarf) ...[
                       _buildEsarfEntriesTable(context, item, entries),
+                      if (_adminAttachedProofs.isNotEmpty) ...[
+                        const SizedBox(height: 14),
+                        _buildReasonCard(context, item, 'Photo proof attached by admin', _adminAttachedProofs, photoTitlePrefix: 'Admin attached proof'),
+                      ],
                     ] else if (item.category == AdminRequestCategory.travelOrder) ...[
                       // Travel Order Layout (3 Distinct Cards)
                       if (item.status.trim().toLowerCase() == 'rejected' && item.rejectedReason != null && item.rejectedReason!.trim().isNotEmpty) ...[
@@ -9244,6 +9267,173 @@ class _RequestProofCardItemState extends State<_RequestProofCardItem> {
           ),
         ),
       ),
+    );
+  }
+}
+
+Future<void> _persistAdminProofOnRequest(
+  AdminRequestItem item,
+  String proofUrl,
+  String? proofTime,
+  String? proofLocation,
+  String? proofId,
+) async {
+  final currentReason = item.reason ?? item.remarks ?? '';
+  final tags = StringBuffer(' [Proof: $proofUrl]');
+  if (proofTime != null && proofTime.trim().isNotEmpty) tags.write(' [ProofTime: ${proofTime.trim()}]');
+  if (proofLocation != null && proofLocation.trim().isNotEmpty) {
+    tags.write(' [ProofLoc: ${proofLocation.trim().replaceAll(RegExp(r'[\[\]]'), '')}]');
+  }
+  if (proofId != null && proofId.trim().isNotEmpty) tags.write(' [ProofId: ${proofId.trim()}]');
+
+  final result = await AdminRequestsService.updateRequestData(
+    requestId: item.requestId,
+    isPerk: false,
+    reason: '${currentReason.trim()}$tags'.trim(),
+  );
+  if (result.toLowerCase().startsWith('failed')) throw Exception(result);
+}
+
+void _showAttachPhotoProofDialog(BuildContext context, AdminRequestItem item, {required ValueChanged<RequestProofItem> onSaved}) {
+  showDialog(
+    context: context,
+    builder: (_) => _AttachPhotoProofDialog(item: item, onSaved: onSaved),
+  );
+}
+
+class _AttachPhotoProofDialog extends StatefulWidget {
+  const _AttachPhotoProofDialog({required this.item, required this.onSaved});
+  final AdminRequestItem item;
+  final ValueChanged<RequestProofItem> onSaved;
+
+  @override
+  State<_AttachPhotoProofDialog> createState() => _AttachPhotoProofDialogState();
+}
+
+class _AttachPhotoProofDialogState extends State<_AttachPhotoProofDialog> {
+  late final Future<List<_PhotoProofRecord>> _systemProofs;
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _systemProofs = _loadSystemProofs();
+  }
+
+  String _norm(String value) => value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), ' ').trim();
+
+  Future<List<_PhotoProofRecord>> _loadSystemProofs() async {
+    final response = await Supabase.instance.client.from('photo_proofs').select('*').order('timestamp', ascending: false).limit(500);
+    final id = (widget.item.employeeId ?? '').trim();
+    final name = _norm(widget.item.employeeName ?? '');
+    return (response as List<dynamic>)
+        .whereType<Map<String, dynamic>>()
+        .map(_PhotoProofRecord.fromMap)
+        .where((p) => (id.isNotEmpty && p.employeeId.trim() == id) || (name.isNotEmpty && _norm(p.employeeName) == name))
+        .toList(growable: false);
+  }
+
+  Future<void> _saveSystemProof(_PhotoProofRecord proof) async {
+    final url = proof.resolvedPhotoUrl;
+    if (url.isEmpty) return;
+    setState(() { _saving = true; _error = null; });
+    try {
+      await _persistAdminProofOnRequest(widget.item, url, proof.timestamp, proof.locationText, proof.id);
+      widget.onSaved(RequestProofItem(proofUrl: url, proofTime: proof.timestamp, proofLocation: proof.locationText, proofId: proof.id));
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      if (mounted) setState(() { _saving = false; _error = e.toString().replaceFirst('Exception: ', ''); });
+    }
+  }
+
+  Future<void> _saveCustomFile() async {
+    setState(() { _saving = true; _error = null; });
+    try {
+      final result = await FilePicker.pickFiles(type: FileType.image, withData: true);
+      if (result == null || result.files.isEmpty) { if (mounted) setState(() => _saving = false); return; }
+      final file = result.files.single;
+      final bytes = file.bytes ?? (file.path != null ? await File(file.path!).readAsBytes() : null);
+      if (bytes == null || bytes.isEmpty) throw Exception('The selected image could not be read.');
+      final now = DateTime.now();
+      final timestamp = now.toUtc().toIso8601String();
+      final ext = p.extension(file.name).replaceFirst('.', '').toLowerCase();
+      final safeName = (widget.item.employeeName ?? 'employee').replaceAll(RegExp(r'[^a-zA-Z0-9_-]+'), '_');
+      final path = 'admin/$safeName/${DateTime.now().millisecondsSinceEpoch}.${ext.isEmpty ? 'jpg' : ext}';
+      final storage = Supabase.instance.client.storage.from('photo-proof-attachments');
+      await storage.uploadBinary(path, bytes, fileOptions: FileOptions(upsert: true, contentType: ext == 'png' ? 'image/png' : 'image/jpeg', cacheControl: '3600'));
+      final url = storage.getPublicUrl(path);
+      await Supabase.instance.client.from('photo_proofs').insert({
+        'employee_id': null,
+        'employee_name': widget.item.employeeName ?? 'Employee',
+        'store_name': widget.item.storeName,
+        'timestamp': timestamp,
+        'time_digits': '${now.hour == 0 ? 12 : (now.hour > 12 ? now.hour - 12 : now.hour)}:${now.minute.toString().padLeft(2, '0')}',
+        'time_period': now.hour >= 12 ? 'PM' : 'AM',
+        'date_formatted': '${const ['Jan.', 'Feb.', 'Mar.', 'Apr.', 'May', 'Jun.', 'Jul.', 'Aug.', 'Sept.', 'Oct.', 'Nov.', 'Dec.'][now.month - 1]} ${now.day.toString().padLeft(2, '0')}, ${now.year}',
+        'day_formatted': const ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][now.weekday % 7],
+        'location_text': 'Attached by admin',
+        'photo_url': url,
+      });
+      await _persistAdminProofOnRequest(widget.item, url, timestamp, 'Attached by admin', null);
+      widget.onSaved(RequestProofItem(proofUrl: url, proofTime: timestamp, proofLocation: 'Attached by admin'));
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      if (mounted) setState(() { _saving = false; _error = e.toString().replaceFirst('Exception: ', ''); });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Attach photo proof'),
+      content: SizedBox(
+        width: 700,
+        height: 470,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Select a system photo proof for ${widget.item.employeeName ?? 'this employee'}, or choose a custom image file.', style: const TextStyle(fontSize: 13, color: Color(0xFF475569))),
+            const SizedBox(height: 12),
+            const Text('Photo proofs in the system', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: HygColors.ink)),
+            const SizedBox(height: 8),
+            Expanded(
+              child: FutureBuilder<List<_PhotoProofRecord>>(
+                future: _systemProofs,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+                  if (snapshot.hasError) return const Center(child: Text('Unable to load system photo proofs.'));
+                  final proofs = snapshot.data ?? const <_PhotoProofRecord>[];
+                  if (proofs.isEmpty) return const Center(child: Text('No existing photo proofs found for this employee.'));
+                  return GridView.builder(
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 4, crossAxisSpacing: 10, mainAxisSpacing: 10, childAspectRatio: .82),
+                    itemCount: proofs.length,
+                    itemBuilder: (context, index) {
+                      final proof = proofs[index];
+                      return InkWell(
+                        onTap: _saving ? null : () => _saveSystemProof(proof),
+                        child: Container(
+                          decoration: BoxDecoration(color: const Color(0xFFF8FAFC), borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0xFFE2E8F0))),
+                          clipBehavior: Clip.antiAlias,
+                          child: Column(children: [
+                            Expanded(child: Image.network(_RequestDetailModal._getDirectProofImageUrl(proof.resolvedPhotoUrl), fit: BoxFit.cover, width: double.infinity, errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_outlined, color: Color(0xFF94A3B8)))),
+                            Padding(padding: const EdgeInsets.all(7), child: Text(proof.formattedTimeLabel, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: HygColors.ink))),
+                          ]),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+            if (_error != null) Text(_error!, style: const TextStyle(fontSize: 12, color: Color(0xFFB91C1C))),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: _saving ? null : () => Navigator.of(context).pop(), child: const Text('Cancel')),
+        FilledButton.icon(onPressed: _saving ? null : _saveCustomFile, icon: const Icon(Icons.upload_file_outlined, size: 16), label: Text(_saving ? 'Saving...' : 'Custom file')),
+      ],
     );
   }
 }

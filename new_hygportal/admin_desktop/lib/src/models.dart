@@ -2521,3 +2521,242 @@ class AuditStats {
     );
   }
 }
+
+// ==========================================
+// TRAINING & CERTIFICATION MODELS
+// ==========================================
+class TrainingAttendee {
+  TrainingAttendee({
+    required this.id,
+    required this.name,
+    required this.department,
+    this.position = '',
+    this.avatarColor = const Color(0xFF2563EB),
+    this.photoUrl,
+    this.status = 'Enrolled',
+  });
+
+  final String id;
+  final String name;
+  final String department;
+  final String position;
+  final Color avatarColor;
+  final String? photoUrl;
+  final String status;
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'name': name,
+      'department': department,
+      'position': position,
+      'avatar_color': BadgesDatabaseService.colorToHex(avatarColor),
+      if (photoUrl != null) 'photo_url': photoUrl,
+      'status': status,
+    };
+  }
+
+  factory TrainingAttendee.fromMap(Map<String, dynamic> map) {
+    return TrainingAttendee(
+      id: map['id']?.toString() ?? '',
+      name: map['name']?.toString() ?? '',
+      department: map['department']?.toString() ?? 'General',
+      position: map['position']?.toString() ?? '',
+      avatarColor: BadgesDatabaseService.parseColor(
+        map['avatar_color']?.toString() ?? '',
+        const Color(0xFF2563EB),
+      ),
+      photoUrl: map['photo_url']?.toString(),
+      status: map['status']?.toString() ?? 'Enrolled',
+    );
+  }
+}
+
+class TrainingItem {
+  TrainingItem({
+    required this.id,
+    required this.title,
+    this.description = '',
+    required this.trainingDate,
+    this.startTime = '09:00 AM',
+    this.endTime = '12:00 PM',
+    this.location = '',
+    this.trainer = '',
+    this.badgeId,
+    this.badgeTitle,
+    this.badgeIcon,
+    this.badgeIconBgColor,
+    this.badgeIconColor,
+    this.badgePoints = 0,
+    this.attendees = const [],
+    this.status = 'Upcoming',
+    this.isBadgesAwarded = false,
+    this.createdBy = 'Super Admin',
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  })  : createdAt = createdAt ?? DateTime.now(),
+        updatedAt = updatedAt ?? DateTime.now();
+
+  final String id;
+  String title;
+  String description;
+  DateTime trainingDate;
+  String startTime;
+  String endTime;
+  String location;
+  String trainer;
+  String? badgeId;
+  String? badgeTitle;
+  IconData? badgeIcon;
+  Color? badgeIconBgColor;
+  Color? badgeIconColor;
+  int badgePoints;
+  List<TrainingAttendee> attendees;
+  String status; // 'Upcoming', 'Concluded', 'Cancelled'
+  bool isBadgesAwarded;
+  String createdBy;
+  final DateTime createdAt;
+  DateTime updatedAt;
+
+  bool get hasBadge => badgeTitle != null && badgeTitle!.trim().isNotEmpty;
+  bool get isUpcoming => status == 'Upcoming';
+  bool get isConcluded => status == 'Concluded';
+
+  String get formattedDate {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final m = months[trainingDate.month - 1];
+    return '$m ${trainingDate.day}, ${trainingDate.year}';
+  }
+
+  String get timeDisplay {
+    if (startTime.isNotEmpty && endTime.isNotEmpty) {
+      return '$startTime - $endTime';
+    }
+    if (startTime.isNotEmpty) return startTime;
+    return 'TBD';
+  }
+
+  TrainingItem copyWith({
+    String? id,
+    String? title,
+    String? description,
+    DateTime? trainingDate,
+    String? startTime,
+    String? endTime,
+    String? location,
+    String? trainer,
+    String? badgeId,
+    String? badgeTitle,
+    IconData? badgeIcon,
+    Color? badgeIconBgColor,
+    Color? badgeIconColor,
+    int? badgePoints,
+    List<TrainingAttendee>? attendees,
+    String? status,
+    bool? isBadgesAwarded,
+    String? createdBy,
+  }) {
+    return TrainingItem(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      description: description ?? this.description,
+      trainingDate: trainingDate ?? this.trainingDate,
+      startTime: startTime ?? this.startTime,
+      endTime: endTime ?? this.endTime,
+      location: location ?? this.location,
+      trainer: trainer ?? this.trainer,
+      badgeId: badgeId ?? this.badgeId,
+      badgeTitle: badgeTitle ?? this.badgeTitle,
+      badgeIcon: badgeIcon ?? this.badgeIcon,
+      badgeIconBgColor: badgeIconBgColor ?? this.badgeIconBgColor,
+      badgeIconColor: badgeIconColor ?? this.badgeIconColor,
+      badgePoints: badgePoints ?? this.badgePoints,
+      attendees: attendees ?? this.attendees,
+      status: status ?? this.status,
+      isBadgesAwarded: isBadgesAwarded ?? this.isBadgesAwarded,
+      createdBy: createdBy ?? this.createdBy,
+      createdAt: createdAt,
+      updatedAt: DateTime.now(),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'title': title,
+      'description': description,
+      'training_date': trainingDate.toIso8601String().split('T').first,
+      'start_time': startTime,
+      'end_time': endTime,
+      'location': location,
+      'trainer': trainer,
+      'badge_id': badgeId,
+      'badge_title': badgeTitle,
+      'badge_icon': badgeIcon != null ? BadgesDatabaseService.iconToString(badgeIcon!) : 'star',
+      'badge_icon_bg_color': badgeIconBgColor != null ? BadgesDatabaseService.colorToHex(badgeIconBgColor!) : '#FEF3C7',
+      'badge_icon_color': badgeIconColor != null ? BadgesDatabaseService.colorToHex(badgeIconColor!) : '#D97706',
+      'badge_points': badgePoints,
+      'attendees': attendees.map((a) => a.toMap()).toList(),
+      'status': status,
+      'is_badges_awarded': isBadgesAwarded,
+      'created_by': createdBy,
+      'created_at': createdAt.toIso8601String(),
+      'updated_at': updatedAt.toIso8601String(),
+    };
+  }
+
+  factory TrainingItem.fromMap(Map<String, dynamic> map) {
+    List<TrainingAttendee> attList = [];
+    if (map['attendees'] != null) {
+      final rawAtt = map['attendees'];
+      if (rawAtt is List) {
+        attList = rawAtt.map((x) => TrainingAttendee.fromMap(Map<String, dynamic>.from(x as Map))).toList();
+      } else if (rawAtt is String) {
+        try {
+          final decoded = jsonDecode(rawAtt);
+          if (decoded is List) {
+            attList = decoded.map((x) => TrainingAttendee.fromMap(Map<String, dynamic>.from(x as Map))).toList();
+          }
+        } catch (_) {}
+      }
+    }
+
+    DateTime parsedDate = DateTime.now();
+    if (map['training_date'] != null) {
+      final p = DateTime.tryParse(map['training_date'].toString());
+      if (p != null) parsedDate = p;
+    }
+
+    return TrainingItem(
+      id: map['id']?.toString() ?? '',
+      title: map['title']?.toString() ?? '',
+      description: map['description']?.toString() ?? '',
+      trainingDate: parsedDate,
+      startTime: map['start_time']?.toString() ?? '09:00 AM',
+      endTime: map['end_time']?.toString() ?? '12:00 PM',
+      location: map['location']?.toString() ?? '',
+      trainer: map['trainer']?.toString() ?? '',
+      badgeId: map['badge_id']?.toString(),
+      badgeTitle: map['badge_title']?.toString(),
+      badgeIcon: map['badge_icon'] != null
+          ? BadgesDatabaseService.parseIcon(map['badge_icon'].toString())
+          : Icons.star,
+      badgeIconBgColor: BadgesDatabaseService.parseColor(
+        map['badge_icon_bg_color']?.toString() ?? '',
+        const Color(0xFFFEF3C7),
+      ),
+      badgeIconColor: BadgesDatabaseService.parseColor(
+        map['badge_icon_color']?.toString() ?? '',
+        const Color(0xFFD97706),
+      ),
+      badgePoints: (map['badge_points'] as num?)?.toInt() ?? 0,
+      attendees: attList,
+      status: map['status']?.toString() ?? 'Upcoming',
+      isBadgesAwarded: map['is_badges_awarded'] == true,
+      createdBy: map['created_by']?.toString() ?? 'Super Admin',
+      createdAt: map['created_at'] != null ? DateTime.tryParse(map['created_at'].toString()) : null,
+      updatedAt: map['updated_at'] != null ? DateTime.tryParse(map['updated_at'].toString()) : null,
+    );
+  }
+}
+

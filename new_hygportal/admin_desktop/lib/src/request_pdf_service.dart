@@ -971,6 +971,24 @@ class RequestPdfService {
                       ),
                     ],
                   ),
+                  if ((item.timeSchedule != null && item.timeSchedule!.trim().isNotEmpty) ||
+                      (item.dayOff != null && item.dayOff!.trim().isNotEmpty) ||
+                      (item.payrollClass != null && item.payrollClass!.trim().isNotEmpty)) ...[
+                    pw.SizedBox(height: 6),
+                    pw.Row(
+                      children: [
+                        pw.Expanded(
+                          child: _buildInfoRow('Schedule:', (item.timeSchedule != null && item.timeSchedule!.trim().isNotEmpty) ? item.timeSchedule! : 'N/A'),
+                        ),
+                        pw.Expanded(
+                          child: _buildInfoRow('Day Off:', (item.dayOff != null && item.dayOff!.trim().isNotEmpty) ? item.dayOff! : 'N/A'),
+                        ),
+                        pw.Expanded(
+                          child: _buildInfoRow('Payroll Class:', (item.payrollClass != null && item.payrollClass!.trim().isNotEmpty) ? item.payrollClass! : 'N/A'),
+                        ),
+                      ],
+                    ),
+                  ],
                   pw.SizedBox(height: 6),
                   pw.Row(
                     children: [

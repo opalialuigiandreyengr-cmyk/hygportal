@@ -5421,6 +5421,28 @@ class AdminRequestsService {
     }
   }
 
+  /// Updates one approval step from the admin request detail modal.
+  static Future<String> updateApprovalStepStatus({
+    required String requestId,
+    required int stepOrder,
+    required String status,
+  }) async {
+    invalidateCache();
+    try {
+      final response = await _client.rpc(
+        'admin_update_approval_step_status',
+        params: {
+          'p_request_id': requestId,
+          'p_step_order': stepOrder,
+          'p_status': status,
+        },
+      );
+      return response?.toString() ?? 'Approval status updated successfully.';
+    } catch (e) {
+      return 'Failed to update approval status: $e';
+    }
+  }
+
   /// Refreshes assigned approvers for all pending/active requests based on current organizational hierarchy.
   static Future<String> refreshAssignedApprovers() async {
     invalidateCache();

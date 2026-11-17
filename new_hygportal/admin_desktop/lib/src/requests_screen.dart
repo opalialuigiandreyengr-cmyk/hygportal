@@ -5769,6 +5769,7 @@ class _RequestDetailModal extends StatefulWidget {
 class _RequestDetailModalState extends State<_RequestDetailModal> {
   AdminRequestItem get item => widget.item;
   final List<RequestProofItem> _adminAttachedProofs = [];
+  final Set<String> _removedProofUrls = <String>{};
 
   _TravelOrderDetails? _travelDetails;
 
@@ -5796,6 +5797,97 @@ class _RequestDetailModalState extends State<_RequestDetailModal> {
     } catch (e) {
       debugPrint('[TravelOrderDetails] Non-fatal error loading travel order details: $e');
     }
+  }
+
+  Future<void> _editApprovalStepStatus(
+    BuildContext context,
+    AdminRequestItem request,
+    Map<String, dynamic> raw,
+  ) async {
+    final stepOrder = int.tryParse(
+      (raw['step_order'] ?? raw['approval_step_order'] ?? '').toString(),
+    );
+    if (stepOrder == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This approval step has no editable step order.')),
+      );
+      return;
+    }
+
+    final currentStatus = (raw['status'] ?? 'pending').toString().toLowerCase();
+    final nextStatus = await showDialog<String>(
+      context: context,
+      builder: (_) => _ApprovalStatusDialog(
+        approverName: (raw['approver_name'] ?? raw['name'] ?? 'Approver').toString(),
+        initialStatus: currentStatus,
+      ),
+    );
+    if (nextStatus == null || nextStatus == currentStatus || !mounted) return;
+
+    final result = await AdminRequestsService.updateApprovalStepStatus(
+      requestId: request.requestId,
+      stepOrder: stepOrder,
+      status: nextStatus,
+    );
+    if (!mounted) return;
+
+    final failed = result.toLowerCase().startsWith('failed');
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result)));
+    if (failed) return;
+
+    setState(() {
+      raw['status'] = nextStatus;
+      raw['acted_at'] = nextStatus == 'pending' ? null : DateTime.now().toIso8601String();
+    });
+  }
+
+  Future<void> _removeAdminAttachedProof(
+    BuildContext context,
+    AdminRequestItem request,
+    RequestProofItem proof,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Remove photo proof?'),
+        content: const Text('This removes the photo proof from this request. The original system photo will not be deleted.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFB91C1C)),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final currentReason = (request.rawRow['reason'] ?? request.reason ?? request.remarks ?? '').toString();
+    final proofPattern = RegExp(
+      r'\s*\[Proof:\s*' + RegExp.escape(proof.proofUrl.trim()) +
+          r'\](?:\s*\[(?:ProofSource|ProofTime|ProofLoc|ProofId):[^\]]*\])*',
+      caseSensitive: false,
+    );
+    final updatedReason = currentReason.replaceAll(proofPattern, '').replaceAll(RegExp(r'[ \t]{2,}'), ' ').trim();
+    final result = await AdminRequestsService.updateRequestData(
+      requestId: request.requestId,
+      isPerk: false,
+      reason: updatedReason,
+    );
+    if (!mounted) return;
+
+    if (result.toLowerCase().startsWith('failed')) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result)));
+      return;
+    }
+    request.rawRow['reason'] = updatedReason;
+    request.rawRow['remarks'] = updatedReason;
+    setState(() {
+      _adminAttachedProofs.remove(proof);
+      _removedProofUrls.add(proof.proofUrl.trim());
+    });
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Photo proof removed.')));
   }
 
   String _formatDateMDY(String? dateStr) {
@@ -6501,7 +6593,10 @@ class _RequestDetailModalState extends State<_RequestDetailModal> {
                       onPressed: () => _showAttachPhotoProofDialog(
                         context,
                         item,
-                        onSaved: (proof) => setState(() => _adminAttachedProofs.add(proof)),
+                        onSaved: (proof) => setState(() {
+                          _removedProofUrls.remove(proof.proofUrl.trim());
+                          _adminAttachedProofs.add(proof);
+                        }),
                       ),
                       icon: const Icon(Icons.add_a_photo_outlined, size: 15),
                       label: const Text('Attach photo proof'),
@@ -6534,7 +6629,14 @@ class _RequestDetailModalState extends State<_RequestDetailModal> {
                       _buildEsarfEntriesTable(context, item, entries),
                       if (_adminAttachedProofs.isNotEmpty) ...[
                         const SizedBox(height: 14),
-                        _buildReasonCard(context, item, 'Photo proof attached by admin', _adminAttachedProofs, photoTitlePrefix: 'Admin attached proof'),
+                        _buildReasonCard(
+                          context,
+                          item,
+                          'Photo proof attached by admin',
+                          _adminAttachedProofs,
+                          photoTitlePrefix: 'Admin attached proof',
+                          onRemove: (proof) => _removeAdminAttachedProof(context, item, proof),
+                        ),
                       ],
                     ] else if (item.category == AdminRequestCategory.travelOrder) ...[
                       // Travel Order Layout (3 Distinct Cards)
@@ -6773,6 +6875,7 @@ class _RequestDetailModalState extends State<_RequestDetailModal> {
                       fallbackProofLocation: list[i].isGallery ? null : list[i].proofLocation,
                       fallbackProofId: list[i].isGallery ? null : list[i].proofId,
                       fallbackProofSource: list[i].proofSource,
+                      onRemove: (proof) => _removeAdminAttachedProof(context, item, proof),
                     ),
                   ],
                   if (item.approvalSummary.isNotEmpty) ...[
@@ -6838,6 +6941,7 @@ class _RequestDetailModalState extends State<_RequestDetailModal> {
             fallbackProofLocation: (entry.isGallery || item.isGallery) ? null : (entry.proofLocation ?? (entry.proofs.isNotEmpty ? null : item.proofLocation)),
             fallbackProofId: (entry.isGallery || item.isGallery) ? null : (entry.proofId ?? (entry.proofs.isNotEmpty ? null : item.proofId)),
             fallbackProofSource: entry.proofSource ?? item.proofSource,
+            onRemove: (proof) => _removeAdminAttachedProof(context, item, proof),
           ),
         ],
 
@@ -6974,6 +7078,7 @@ class _RequestDetailModalState extends State<_RequestDetailModal> {
     String? fallbackProofLocation,
     String? fallbackProofId,
     String? fallbackProofSource,
+    void Function(RequestProofItem proof)? onRemove,
   }) {
     final cleanedReasonText = reasonText
         .replaceAll(RegExp(r'\[Break:\s*[^\]]+\]', caseSensitive: false), '')
@@ -6982,9 +7087,14 @@ class _RequestDetailModalState extends State<_RequestDetailModal> {
     final hasReason = cleanedReasonText.isNotEmpty;
     final isFallbackGallery = fallbackProofSource == 'gallery' ||
         (fallbackProofTime == null && fallbackProofLocation == null && fallbackProofId == null && fallbackProofSource != 'camera' && fallbackProofSource != 'photo_proof');
-    final allProofs = proofs.isNotEmpty
-        ? proofs
-        : (fallbackProofUrl != null && fallbackProofUrl.isNotEmpty
+    final visibleProofs = proofs
+        .where((proof) => !_removedProofUrls.contains(proof.proofUrl.trim()))
+        .toList(growable: false);
+    final allProofs = visibleProofs.isNotEmpty
+        ? visibleProofs
+        : (fallbackProofUrl != null &&
+                fallbackProofUrl.isNotEmpty &&
+                !_removedProofUrls.contains(fallbackProofUrl.trim())
             ? [
                 RequestProofItem(
                   proofUrl: fallbackProofUrl,
@@ -7054,6 +7164,11 @@ class _RequestDetailModalState extends State<_RequestDetailModal> {
                 employeeId: item.employeeId,
                 storeName: item.storeName,
                 department: item.departmentName,
+                onRemove: onRemove != null
+                    ? () => onRemove(allProofs[pIdx])
+                    : (allProofs[pIdx].proofSource?.toLowerCase().trim() == 'admin_attached'
+                        ? () => _removeAdminAttachedProof(context, item, allProofs[pIdx])
+                        : null),
               ),
             ],
           ],
@@ -7512,6 +7627,7 @@ class _RequestDetailModalState extends State<_RequestDetailModal> {
     String? employeeId,
     String? storeName,
     String? department,
+    void Function()? onRemove,
   }) {
     return _RequestProofCardItem(
       proofUrl: proofUrl,
@@ -7527,6 +7643,7 @@ class _RequestDetailModalState extends State<_RequestDetailModal> {
       employeeId: employeeId,
       storeName: storeName,
       department: department,
+      onRemove: onRemove,
     );
   }
 
@@ -7769,6 +7886,13 @@ class _RequestDetailModalState extends State<_RequestDetailModal> {
                   style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color),
                 ),
               ),
+              IconButton(
+                tooltip: 'Edit approval status',
+                icon: const Icon(Icons.edit_outlined, size: 14, color: Color(0xFF64748B)),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                onPressed: () => _editApprovalStepStatus(context, item, raw),
+              ),
             ],
           ),
         );
@@ -7892,6 +8016,13 @@ class _RequestDetailModalState extends State<_RequestDetailModal> {
                 decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(4)),
                 child: Text(rawStatus.toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color)),
               ),
+              IconButton(
+                tooltip: 'Edit approval status',
+                icon: const Icon(Icons.edit_outlined, size: 14, color: Color(0xFF64748B)),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                onPressed: () => _editApprovalStepStatus(context, item, raw),
+              ),
             ],
           ),
         );
@@ -7917,6 +8048,76 @@ class _RequestDetailModalState extends State<_RequestDetailModal> {
 // ─────────────────────────────────────────────────────────────────────────────
 // Dedicated Validated Requests Screen
 // ─────────────────────────────────────────────────────────────────────────────
+
+class _ApprovalStatusDialog extends StatefulWidget {
+  const _ApprovalStatusDialog({
+    required this.approverName,
+    required this.initialStatus,
+  });
+
+  final String approverName;
+  final String initialStatus;
+
+  @override
+  State<_ApprovalStatusDialog> createState() => _ApprovalStatusDialogState();
+}
+
+class _ApprovalStatusDialogState extends State<_ApprovalStatusDialog> {
+  late String _status = widget.initialStatus;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Edit approval status'),
+      content: SizedBox(
+        width: 360,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.approverName,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 14),
+            DropdownButtonFormField<String>(
+              value: _status,
+              decoration: const InputDecoration(
+                labelText: 'Status',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              items: const [
+                DropdownMenuItem(value: 'pending', child: Text('Pending')),
+                DropdownMenuItem(value: 'approved', child: Text('Approved')),
+                DropdownMenuItem(value: 'rejected', child: Text('Rejected')),
+                DropdownMenuItem(value: 'cancelled', child: Text('Cancelled')),
+              ],
+              onChanged: (value) {
+                if (value != null) setState(() => _status = value);
+              },
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'Changing this step also recalculates the request status.',
+              style: TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(_status),
+          child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
 
 class _ValidatedRequestsScreen extends StatefulWidget {
   const _ValidatedRequestsScreen({
@@ -8933,6 +9134,7 @@ class _RequestProofCardItem extends StatefulWidget {
     this.employeeId,
     this.storeName,
     this.department,
+    this.onRemove,
   });
 
   final String proofUrl;
@@ -8948,6 +9150,7 @@ class _RequestProofCardItem extends StatefulWidget {
   final String? employeeId;
   final String? storeName;
   final String? department;
+  final void Function()? onRemove;
 
   @override
   State<_RequestProofCardItem> createState() => _RequestProofCardItemState();
@@ -9249,10 +9452,10 @@ class _RequestProofCardItemState extends State<_RequestProofCardItem> {
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
-                  children: const [
-                    Icon(Icons.visibility_outlined, size: 14, color: Color(0xFF0284C7)),
-                    SizedBox(width: 4),
-                    Text(
+                  children: [
+                    const Icon(Icons.visibility_outlined, size: 14, color: Color(0xFF0284C7)),
+                    const SizedBox(width: 4),
+                    const Text(
                       'View Proof',
                       style: TextStyle(
                         fontSize: 11,
@@ -9263,6 +9466,16 @@ class _RequestProofCardItemState extends State<_RequestProofCardItem> {
                   ],
                 ),
               ),
+              if (widget.onRemove != null) ...[
+                const SizedBox(width: 4),
+                IconButton(
+                  tooltip: 'Remove photo proof',
+                  onPressed: widget.onRemove,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                  icon: const Icon(Icons.close, size: 16, color: Color(0xFFB91C1C)),
+                ),
+              ],
             ],
           ),
         ),
@@ -9278,20 +9491,24 @@ Future<void> _persistAdminProofOnRequest(
   String? proofLocation,
   String? proofId,
 ) async {
-  final currentReason = item.reason ?? item.remarks ?? '';
-  final tags = StringBuffer(' [Proof: $proofUrl]');
+  final currentReason = (item.rawRow['reason'] ?? item.reason ?? item.remarks ?? '').toString();
+  final tags = StringBuffer(' [Proof: $proofUrl] [ProofSource: admin_attached]');
   if (proofTime != null && proofTime.trim().isNotEmpty) tags.write(' [ProofTime: ${proofTime.trim()}]');
   if (proofLocation != null && proofLocation.trim().isNotEmpty) {
     tags.write(' [ProofLoc: ${proofLocation.trim().replaceAll(RegExp(r'[\[\]]'), '')}]');
   }
+
   if (proofId != null && proofId.trim().isNotEmpty) tags.write(' [ProofId: ${proofId.trim()}]');
 
+  final updatedReason = '${currentReason.trim()}$tags'.trim();
   final result = await AdminRequestsService.updateRequestData(
     requestId: item.requestId,
     isPerk: false,
-    reason: '${currentReason.trim()}$tags'.trim(),
+    reason: updatedReason,
   );
   if (result.toLowerCase().startsWith('failed')) throw Exception(result);
+  item.rawRow['reason'] = updatedReason;
+  item.rawRow['remarks'] = updatedReason;
 }
 
 void _showAttachPhotoProofDialog(BuildContext context, AdminRequestItem item, {required ValueChanged<RequestProofItem> onSaved}) {
@@ -9340,7 +9557,13 @@ class _AttachPhotoProofDialogState extends State<_AttachPhotoProofDialog> {
     setState(() { _saving = true; _error = null; });
     try {
       await _persistAdminProofOnRequest(widget.item, url, proof.timestamp, proof.locationText, proof.id);
-      widget.onSaved(RequestProofItem(proofUrl: url, proofTime: proof.timestamp, proofLocation: proof.locationText, proofId: proof.id));
+      widget.onSaved(RequestProofItem(
+        proofUrl: url,
+        proofTime: proof.timestamp,
+        proofLocation: proof.locationText,
+        proofId: proof.id,
+        proofSource: 'admin_attached',
+      ));
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (mounted) setState(() { _saving = false; _error = e.toString().replaceFirst('Exception: ', ''); });
@@ -9376,7 +9599,12 @@ class _AttachPhotoProofDialogState extends State<_AttachPhotoProofDialog> {
         'photo_url': url,
       });
       await _persistAdminProofOnRequest(widget.item, url, timestamp, 'Attached by admin', null);
-      widget.onSaved(RequestProofItem(proofUrl: url, proofTime: timestamp, proofLocation: 'Attached by admin'));
+      widget.onSaved(RequestProofItem(
+        proofUrl: url,
+        proofTime: timestamp,
+        proofLocation: 'Attached by admin',
+        proofSource: 'admin_attached',
+      ));
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (mounted) setState(() { _saving = false; _error = e.toString().replaceFirst('Exception: ', ''); });

@@ -18,7 +18,7 @@ declare
   v_has_rejected boolean;
   v_has_unfinished boolean;
 begin
-  if v_status not in ('pending', 'approved', 'rejected', 'cancelled') then
+  if v_status not in ('pending', 'approved', 'rejected', 'cancelled', 'waiting') then
     raise exception 'Unsupported approval status: %', p_status;
   end if;
 

@@ -5708,6 +5708,14 @@ class _TravelOrderDetails {
   }
 }
 
+class _DetailGridItem {
+  final String label;
+  final String value;
+  final Widget? trailingBadge;
+
+  const _DetailGridItem(this.label, this.value, {this.trailingBadge});
+}
+
 class _RequestDetailModal extends StatefulWidget {
   const _RequestDetailModal({super.key, required this.item});
   final AdminRequestItem item;
@@ -6862,6 +6870,12 @@ class _RequestDetailModalState extends State<_RequestDetailModal> {
                   const Divider(height: 1, color: HygColors.border),
                   const SizedBox(height: 12),
                   _buildDetailGrid(_buildEsarfEntryGridItems(list[i]), cols: 3),
+                  if ((list[i].adjustmentReason ?? item.adjustmentReason) != null &&
+                      (list[i].adjustmentReason ?? item.adjustmentReason)!.trim().isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    _buildAdjustmentReasonCard(
+                        (list[i].adjustmentReason ?? item.adjustmentReason)!),
+                  ],
                   if (list[i].cleanReasonText.isNotEmpty || list[i].proofs.isNotEmpty || (list[i].proofUrl != null && list[i].proofUrl!.isNotEmpty)) ...[
                     const SizedBox(height: 12),
                     _buildReasonCard(
@@ -6902,6 +6916,7 @@ class _RequestDetailModalState extends State<_RequestDetailModal> {
     final singleProofUrl = (entry.proofUrl != null && entry.proofUrl!.isNotEmpty)
         ? entry.proofUrl
         : item.proofUrl;
+    final singleAdjReason = entry.adjustmentReason ?? item.adjustmentReason;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -6923,6 +6938,10 @@ class _RequestDetailModalState extends State<_RequestDetailModal> {
               const Divider(height: 1, color: HygColors.border),
               const SizedBox(height: 12),
               _buildDetailGrid(_buildEsarfEntryGridItems(entry), cols: 3),
+              if (singleAdjReason != null && singleAdjReason.trim().isNotEmpty) ...[
+                const SizedBox(height: 12),
+                _buildAdjustmentReasonCard(singleAdjReason),
+              ],
             ],
           ),
         ),
@@ -7040,7 +7059,16 @@ class _RequestDetailModalState extends State<_RequestDetailModal> {
     );
   }
 
-  List<(String, String)> _buildEsarfEntryGridItems(EsarfEntryItem entry) {
+  String _formatHoursDisplay(String raw) {
+    var v = raw.trim();
+    v = v.replaceAll(RegExp(r'^(?:orig(?:inal)?(?:hours)?|actual):\s*', caseSensitive: false), '').trim();
+    if (!v.toLowerCase().endsWith('hrs') && !v.toLowerCase().endsWith('hr')) {
+      v = '$v hrs';
+    }
+    return v;
+  }
+
+  List<_DetailGridItem> _buildEsarfEntryGridItems(EsarfEntryItem entry) {
     final formattedTime = _formatTimeRange(entry.timeFrom, entry.timeTo);
     final displayTime = formattedTime.isNotEmpty
         ? formattedTime
@@ -7054,15 +7082,61 @@ class _RequestDetailModalState extends State<_RequestDetailModal> {
 
     final payrollClassVal = (entry.payrollClass ?? item.payrollClass)?.trim();
 
-    final items = <(String, String)>[
-      ('Payroll Class', (payrollClassVal != null && payrollClassVal.isNotEmpty) ? payrollClassVal : '—'),
-      ('Schedule', entry.timeScheduleText.isNotEmpty ? entry.timeScheduleText : (item.timeSchedule ?? '—')),
-      ('Day Off', entry.dayOffText.isNotEmpty ? entry.dayOffText : (item.dayOff ?? '—')),
-      ('Date', entry.datesText.isNotEmpty ? entry.datesText : (item.dateFrom ?? '—')),
-      ('Time', displayTime != '—' ? displayTime : (_formatTimeRange(item.timeFrom, item.timeTo).isNotEmpty ? _formatTimeRange(item.timeFrom, item.timeTo) : '—')),
-      ('Total Hours', (entry.totalHours ?? item.totalHours) != null ? '${(entry.totalHours ?? item.totalHours)!.toStringAsFixed(1)} hrs' : '—'),
+    final origVal = entry.origHours ?? item.origHours;
+    final actualVal = entry.actualHours ?? item.actualHours;
+
+    Widget? hoursBadge;
+    if (origVal != null && origVal.trim().isNotEmpty) {
+      hoursBadge = Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: const Color(0xFFCBD5E1)),
+        ),
+        child: Text(
+          'Actual Hrs: ${_formatHoursDisplay(origVal)}',
+          style: const TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF475569),
+          ),
+        ),
+      );
+    } else if (actualVal != null && actualVal.trim().isNotEmpty) {
+      hoursBadge = Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: const Color(0xFFCBD5E1)),
+        ),
+        child: Text(
+          'Actual: ${_formatHoursDisplay(actualVal)}',
+          style: const TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF475569),
+          ),
+        ),
+      );
+    }
+
+    final items = <_DetailGridItem>[
+      _DetailGridItem('Payroll Class', (payrollClassVal != null && payrollClassVal.isNotEmpty) ? payrollClassVal : '—'),
+      _DetailGridItem('Schedule', entry.timeScheduleText.isNotEmpty ? entry.timeScheduleText : (item.timeSchedule ?? '—')),
+      _DetailGridItem('Day Off', entry.dayOffText.isNotEmpty ? entry.dayOffText : (item.dayOff ?? '—')),
+      _DetailGridItem('Date', entry.datesText.isNotEmpty ? entry.datesText : (item.dateFrom ?? '—')),
+      _DetailGridItem('Time', displayTime != '—' ? displayTime : (_formatTimeRange(item.timeFrom, item.timeTo).isNotEmpty ? _formatTimeRange(item.timeFrom, item.timeTo) : '—')),
+      _DetailGridItem(
+        'Total Hours',
+        (entry.totalHours ?? item.totalHours) != null
+            ? '${(entry.totalHours ?? item.totalHours)!.toStringAsFixed(1)} hrs'
+            : '—',
+        trailingBadge: hoursBadge,
+      ),
       if (breakTimeVal.isNotEmpty)
-        ('Break Time', breakTimeVal),
+        _DetailGridItem('Break Time', breakTimeVal),
     ];
     return items;
   }
@@ -7081,6 +7155,9 @@ class _RequestDetailModalState extends State<_RequestDetailModal> {
     void Function(RequestProofItem proof)? onRemove,
   }) {
     final cleanedReasonText = reasonText
+        .replaceAll(RegExp(r'\[Orig(?:inal)?(?:[_\s]*Hours)?:\s*[^\]]+\]', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\[Adjustment[_\s]*Reason:\s*[^\]]+\]', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\[Actual:\s*[\d.]+\s*hrs?\]', caseSensitive: false), '')
         .replaceAll(RegExp(r'\[Break:\s*[^\]]+\]', caseSensitive: false), '')
         .replaceAll(RegExp(r'[ \t]{2,}'), ' ')
         .trim();
@@ -7647,8 +7724,55 @@ class _RequestDetailModalState extends State<_RequestDetailModal> {
     );
   }
 
+  Widget _buildAdjustmentReasonCard(String adjustmentReason) {
+    final cleanReason = adjustmentReason
+        .replaceAll(RegExp(r'^\[Adjustment[_\s]*Reason:\s*', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\]$'), '')
+        .trim();
+    if (cleanReason.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: const [
+              Icon(Icons.edit_note_rounded, size: 16, color: Color(0xFF64748B)),
+              SizedBox(width: 6),
+              Text(
+                'Total Hours Adjustment Reason',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF64748B),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            cleanReason,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: HygColors.ink,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildNonEsarfDetails(BuildContext context, AdminRequestItem item) {
     final isLeave = item.category == AdminRequestCategory.leave;
+    final adjReason = item.adjustmentReason;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -7656,41 +7780,56 @@ class _RequestDetailModalState extends State<_RequestDetailModal> {
         border: Border.all(color: HygColors.border),
         borderRadius: BorderRadius.circular(10),
       ),
-      child: _buildDetailGrid(isLeave
-          ? [
-              ('Payroll Class', (item.payrollClass != null && item.payrollClass!.trim().isNotEmpty) ? item.payrollClass! : 'N/A'),
-              ('Time Schedule', (item.timeSchedule != null && item.timeSchedule!.trim().isNotEmpty) ? item.timeSchedule! : 'N/A'),
-              ('Day Off', (item.dayOff != null && item.dayOff!.trim().isNotEmpty) ? item.dayOff! : 'N/A'),
-              ('Leave Type', item.leaveType ?? '—'),
-              ('Leave Category', item.leaveCategory ?? '—'),
-              ('Paid / Unpaid', (item.paidDays != null && item.unpaidDays != null)
-                  ? '${_formatDaysNum(item.paidDays)} / ${_formatDaysNum(item.unpaidDays)}'
-                  : '—'),
-              ('Start Date', item.startDate ?? '—'),
-              ('End Date', item.endDate ?? '—'),
-              ('Total Days', item.totalDays != null ? _formatDaysNum(item.totalDays) : '—'),
-              ('Available Credits', item.leaveCredits != null ? _formatDaysNum(item.leaveCredits) : '—'),
-            ]
-          : [
-              ('Type', item.requestTypeCode.toLowerCase().contains('discount')
-                  ? 'Discount'
-                  : (item.requestTypeCode.toLowerCase().contains('charge')
-                      ? 'Charge'
-                      : (item.requestTypeName.isNotEmpty ? item.requestTypeName : 'Perk'))),
-              ('Product', item.perkProductName ?? '—'),
-              ('Quantity', '${item.perkQuantity ?? 0}'),
-              ('Amount', item.perkAmount != null ? '₱${item.perkAmount!.toStringAsFixed(2)}' : '—'),
-              ('Final Amount', item.perkFinalAmount != null ? '₱${item.perkFinalAmount!.toStringAsFixed(2)}' : '—'),
-              ('Transaction Date', item.dateFrom ?? '—'),
-            ]),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildDetailGrid(isLeave
+              ? [
+                  ('Payroll Class', (item.payrollClass != null && item.payrollClass!.trim().isNotEmpty) ? item.payrollClass! : 'N/A'),
+                  ('Time Schedule', (item.timeSchedule != null && item.timeSchedule!.trim().isNotEmpty) ? item.timeSchedule! : 'N/A'),
+                  ('Day Off', (item.dayOff != null && item.dayOff!.trim().isNotEmpty) ? item.dayOff! : 'N/A'),
+                  ('Leave Type', item.leaveType ?? '—'),
+                  ('Leave Category', item.leaveCategory ?? '—'),
+                  ('Paid / Unpaid', (item.paidDays != null && item.unpaidDays != null)
+                      ? '${_formatDaysNum(item.paidDays)} / ${_formatDaysNum(item.unpaidDays)}'
+                      : '—'),
+                  ('Start Date', item.startDate ?? '—'),
+                  ('End Date', item.endDate ?? '—'),
+                  ('Total Days', item.totalDays != null ? _formatDaysNum(item.totalDays) : '—'),
+                  ('Available Credits', item.leaveCredits != null ? _formatDaysNum(item.leaveCredits) : '—'),
+                ]
+              : [
+                  ('Type', item.requestTypeCode.toLowerCase().contains('discount')
+                      ? 'Discount'
+                      : (item.requestTypeCode.toLowerCase().contains('charge')
+                          ? 'Charge'
+                          : (item.requestTypeName.isNotEmpty ? item.requestTypeName : 'Perk'))),
+                  ('Product', item.perkProductName ?? '—'),
+                  ('Quantity', '${item.perkQuantity ?? 0}'),
+                  ('Amount', item.perkAmount != null ? '₱${item.perkAmount!.toStringAsFixed(2)}' : '—'),
+                  ('Final Amount', item.perkFinalAmount != null ? '₱${item.perkFinalAmount!.toStringAsFixed(2)}' : '—'),
+                  ('Transaction Date', item.dateFrom ?? '—'),
+                ]),
+          if (adjReason != null && adjReason.trim().isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _buildAdjustmentReasonCard(adjReason),
+          ],
+        ],
+      ),
     );
   }
 
-  Widget _buildDetailGrid(List<(String, String)> items, {int cols = 3}) {
+  Widget _buildDetailGrid(List<dynamic> items, {int cols = 3}) {
+    final gridItems = items.map((item) {
+      if (item is _DetailGridItem) return item;
+      if (item is (String, String)) return _DetailGridItem(item.$1, item.$2);
+      return _DetailGridItem(item.toString(), '');
+    }).toList();
+
     final rows = <Widget>[];
 
-    for (int i = 0; i < items.length; i += cols) {
-      final chunk = items.sublist(i, (i + cols > items.length) ? items.length : i + cols);
+    for (int i = 0; i < gridItems.length; i += cols) {
+      final chunk = gridItems.sublist(i, (i + cols > gridItems.length) ? gridItems.length : i + cols);
       rows.add(
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -7701,13 +7840,25 @@ class _RequestDetailModalState extends State<_RequestDetailModal> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      pair.$1,
+                      pair.label,
                       style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: HygColors.muted),
                     ),
                     const SizedBox(height: 3),
-                    Text(
-                      pair.$2,
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: HygColors.ink),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            pair.value,
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: HygColors.ink),
+                          ),
+                        ),
+                        if (pair.trailingBadge != null) ...[
+                          const SizedBox(width: 6),
+                          pair.trailingBadge!,
+                        ],
+                      ],
                     ),
                   ],
                 ),
@@ -7716,7 +7867,7 @@ class _RequestDetailModalState extends State<_RequestDetailModal> {
           ],
         ),
       );
-      if (i + cols < items.length) {
+      if (i + cols < gridItems.length) {
         rows.add(const SizedBox(height: 12));
       }
     }

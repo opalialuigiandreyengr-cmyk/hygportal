@@ -1036,9 +1036,9 @@ class AdminRequestItem {
       return false;
     }
 
-    // If photo proof has already been attached, it has moved past pre-approved
-    if (proofs.isNotEmpty || (proofUrl != null && proofUrl!.trim().isNotEmpty)) {
-      return false;
+    // If explicitly marked as pre_approved in database
+    if (s == 'pre_approved' || s == 'pre-approved') {
+      return true;
     }
 
     // If any approval step has already been rejected
@@ -1047,11 +1047,6 @@ class AdminRequestItem {
     );
     if (hasStepRejected) {
       return false;
-    }
-
-    // If explicitly marked as pre_approved in database
-    if (s == 'pre_approved' || s == 'pre-approved') {
-      return true;
     }
 
     // If request contains an Event or Activity (e.g. DYC, Caibiran Grand Opening)
@@ -1254,6 +1249,8 @@ class AdminRequestItem {
   String get cleanReasonText {
     final r = reason ?? remarks ?? '';
     String cleaned = r
+        .replaceAll(RegExp(r'\[Orig(?:inal)?(?:[_\s]*Hours)?:\s*[^\]]+\]', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\[Adjustment[_\s]*Reason:\s*[^\]]+\]', caseSensitive: false), '')
         .replaceAll(RegExp(r'\[Actual:\s*[\d.]+\s*hrs?\]', caseSensitive: false), '')
         .replaceAll(RegExp(r'\[Proof:\s*[^Suggested\]]+\]', caseSensitive: false), '')
         .replaceAll(RegExp(r'\[Proof:\s*([^\]]+)\]', caseSensitive: false), '')
@@ -1277,6 +1274,42 @@ class AdminRequestItem {
       }
     }
     return cleaned;
+  }
+
+  String? get origHours {
+    final direct = rawRow['orig_hours']?.toString() ?? rawRow['original_hours']?.toString();
+    if (direct != null && direct.trim().isNotEmpty) return direct.trim();
+    final r = reason ?? remarks ?? '';
+    final match = RegExp(r'\[Orig(?:inal)?(?:[_\s]*Hours)?:\s*([^\]]+)\]', caseSensitive: false).firstMatch(r);
+    if (match != null) return match.group(1)?.trim();
+    for (final e in entries) {
+      if (e.origHours != null && e.origHours!.isNotEmpty) return e.origHours;
+    }
+    return null;
+  }
+
+  String? get actualHours {
+    final direct = rawRow['actual_hours']?.toString();
+    if (direct != null && direct.trim().isNotEmpty) return direct.trim();
+    final r = reason ?? remarks ?? '';
+    final match = RegExp(r'\[Actual:\s*([\d.]+)\s*hrs?\]', caseSensitive: false).firstMatch(r);
+    if (match != null) return match.group(1)?.trim();
+    for (final e in entries) {
+      if (e.actualHours != null && e.actualHours!.isNotEmpty) return e.actualHours;
+    }
+    return null;
+  }
+
+  String? get adjustmentReason {
+    final direct = rawRow['adjustment_reason']?.toString();
+    if (direct != null && direct.trim().isNotEmpty) return direct.trim();
+    final r = reason ?? remarks ?? '';
+    final match = RegExp(r'\[Adjustment[_\s]*Reason:\s*([^\]]+)\]', caseSensitive: false).firstMatch(r);
+    if (match != null) return match.group(1)?.trim();
+    for (final e in entries) {
+      if (e.adjustmentReason != null && e.adjustmentReason!.isNotEmpty) return e.adjustmentReason;
+    }
+    return null;
   }
 
   String? get breakTime {
@@ -1571,11 +1604,14 @@ class EsarfEntryItem {
     this.proofId,
     this.proofSource,
     this.actualHours,
+    String? origHours,
+    String? adjustmentReason,
     this.breakTime,
     this.breakFrom,
     this.breakTo,
     this.proofs = const [],
-  });
+  }) : _origHours = origHours,
+       _adjustmentReason = adjustmentReason;
 
   final String? id;
   final String? requestId;
@@ -1596,6 +1632,21 @@ class EsarfEntryItem {
   final String? proofId;
   final String? proofSource;
   final String? actualHours;
+  final String? _origHours;
+  final String? _adjustmentReason;
+
+  String? get origHours {
+    if (_origHours != null && _origHours!.trim().isNotEmpty) return _origHours!.trim();
+    final r = reason ?? '';
+    return RegExp(r'\[Orig(?:inal)?(?:[_\s]*Hours)?:\s*([^\]]+)\]', caseSensitive: false).firstMatch(r)?.group(1)?.trim();
+  }
+
+  String? get adjustmentReason {
+    if (_adjustmentReason != null && _adjustmentReason!.trim().isNotEmpty) return _adjustmentReason!.trim();
+    final r = reason ?? '';
+    return RegExp(r'\[Adjustment[_\s]*Reason:\s*([^\]]+)\]', caseSensitive: false).firstMatch(r)?.group(1)?.trim();
+  }
+
   final String? breakTime;
   final String? breakFrom;
   final String? breakTo;
@@ -1654,6 +1705,8 @@ class EsarfEntryItem {
   String get cleanReasonText {
     final r = reason ?? '';
     String cleaned = r
+        .replaceAll(RegExp(r'\[Orig(?:inal)?(?:[_\s]*Hours)?:\s*[^\]]+\]', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\[Adjustment[_\s]*Reason:\s*[^\]]+\]', caseSensitive: false), '')
         .replaceAll(RegExp(r'\[Actual:\s*[\d.]+\s*hrs?\]', caseSensitive: false), '')
         .replaceAll(RegExp(r'\[Proof:\s*[^Suggested\]]+\]', caseSensitive: false), '')
         .replaceAll(RegExp(r'\[Proof:\s*([^\]]+)\]', caseSensitive: false), '')
@@ -1710,6 +1763,12 @@ class EsarfEntryItem {
         ? entryProofs.first.proofSource
         : (isFirstGallery ? 'gallery' : (row['proof_source']?.toString() ?? 'photo_proof'));
 
+    final origMatch = RegExp(r'\[Orig(?:inal)?(?:[_\s]*Hours)?:\s*([^\]]+)\]', caseSensitive: false).firstMatch(rawReason);
+    final origHours = origMatch?.group(1)?.trim() ?? row['orig_hours']?.toString() ?? row['original_hours']?.toString();
+
+    final adjMatch = RegExp(r'\[Adjustment[_\s]*Reason:\s*([^\]]+)\]', caseSensitive: false).firstMatch(rawReason);
+    final adjustmentReason = adjMatch?.group(1)?.trim() ?? row['adjustment_reason']?.toString();
+
     final actualMatch = RegExp(r'\[Actual:\s*([\d.]+)\s*hrs?\]', caseSensitive: false).firstMatch(rawReason);
     final actualHours = actualMatch?.group(1)?.trim();
 
@@ -1752,6 +1811,8 @@ class EsarfEntryItem {
     }
 
     final cleanReason = rawReason
+        .replaceAll(RegExp(r'\[Orig(?:inal)?(?:[_\s]*Hours)?:\s*[^\]]+\]', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\[Adjustment[_\s]*Reason:\s*[^\]]+\]', caseSensitive: false), '')
         .replaceAll(RegExp(r'\[Actual:\s*[\d.]+\s*hrs?\]', caseSensitive: false), '')
         .replaceAll(RegExp(r'\[Proof:\s*[^Suggested\]]+\]', caseSensitive: false), '')
         .replaceAll(RegExp(r'\[Proof:\s*([^\]]+)\]', caseSensitive: false), '')
@@ -1786,6 +1847,8 @@ class EsarfEntryItem {
       proofId: (proofId != null && proofId.isNotEmpty) ? proofId : null,
       proofSource: proofSource,
       actualHours: (actualHours != null && actualHours.isNotEmpty) ? actualHours : null,
+      origHours: (origHours != null && origHours.isNotEmpty) ? origHours : null,
+      adjustmentReason: (adjustmentReason != null && adjustmentReason.isNotEmpty) ? adjustmentReason : null,
       breakTime: rowBreakTime,
       breakFrom: rowBreakFrom,
       breakTo: rowBreakTo,
@@ -1869,6 +1932,12 @@ class EsarfEntryItem {
             ? effectiveProofs.first.proofSource
             : defaultEntry.proofSource;
 
+        final origMatch = RegExp(r'\[Orig(?:inal)?(?:[_\s]*Hours)?:\s*([^\]]+)\]', caseSensitive: false).firstMatch(reasonText);
+        final entryOrigHours = origMatch?.group(1)?.trim() ?? defaultEntry.origHours;
+
+        final adjMatch = RegExp(r'\[Adjustment[_\s]*Reason:\s*([^\]]+)\]', caseSensitive: false).firstMatch(reasonText);
+        final entryAdjReason = adjMatch?.group(1)?.trim() ?? defaultEntry.adjustmentReason;
+
         final actualMatch = RegExp(r'\[Actual:\s*([\d.]+)\s*hrs?\]', caseSensitive: false).firstMatch(reasonText);
         final entryActualHours = actualMatch?.group(1)?.trim() ?? defaultEntry.actualHours;
 
@@ -1897,6 +1966,8 @@ class EsarfEntryItem {
         final isEntryRejected = fullText.contains('[REJECTED]') || fullText.toLowerCase().contains('status: rejected');
         final isEntryApproved = fullText.contains('[APPROVED]');
         final cleanReasonText = reasonText
+            .replaceAll(RegExp(r'\[Orig(?:inal)?(?:[_\s]*Hours)?:\s*[^\]]+\]', caseSensitive: false), '')
+            .replaceAll(RegExp(r'\[Adjustment[_\s]*Reason:\s*[^\]]+\]', caseSensitive: false), '')
             .replaceAll(RegExp(r'\[Actual:\s*[\d.]+\s*hrs?\]', caseSensitive: false), '')
             .replaceAll(RegExp(r'\[Proof:\s*[^Suggested\]]+\]', caseSensitive: false), '')
             .replaceAll(RegExp(r'\[Proof:\s*([^\]]+)\]', caseSensitive: false), '')
@@ -1939,6 +2010,8 @@ class EsarfEntryItem {
             proofId: (entryProofId != null && entryProofId.isNotEmpty) ? entryProofId : null,
             proofSource: entryProofSource,
             actualHours: (entryActualHours != null && entryActualHours.isNotEmpty) ? entryActualHours : null,
+            origHours: (entryOrigHours != null && entryOrigHours.isNotEmpty) ? entryOrigHours : null,
+            adjustmentReason: (entryAdjReason != null && entryAdjReason.isNotEmpty) ? entryAdjReason : null,
             breakTime: entryBreakTime,
             breakFrom: entryBreakFrom,
             breakTo: entryBreakTo,
